@@ -1,0 +1,59 @@
+{
+  "checksum": "fixture-checksum",
+  "roots": {
+    "bookmark_bar": {
+      "children": [
+        {
+          "date_added": "13253760000000000",
+          "guid": "guid-example",
+          "id": "2",
+          "name": "Example",
+          "type": "url",
+          "url": "https://example.test/"
+        },
+        {
+          "children": [
+            {
+              "date_added": "13253760000000001",
+              "date_modified": "13253760000000002",
+              "id": "4",
+              "name": "Nested bookmark",
+              "type": "url",
+              "url": "https://example.test/path?q=one%20two"
+            }
+          ],
+          "date_added": "13253760000000003",
+          "date_modified": "13253760000000004",
+          "id": "3",
+          "name": "Research & notes",
+          "type": "folder"
+        }
+      ],
+      "guid": "bar-guid",
+      "id": "1",
+      "name": "Bookmarks bar",
+      "type": "folder"
+    },
+    "other": {
+      "children": [],
+      "id": "5",
+      "name": "Other bookmarks",
+      "type": "folder"
+    },
+    "synced": {
+      "children": [
+        {
+          "id": "6",
+          "name": "Caf\u00e9",
+          "type": "url",
+          "url": "https://example.test/cafe"
+        }
+      ],
+      "id": "6",
+      "name": "Mobile bookmarks",
+      "type": "folder"
+    }
+  },
+  "sync_transaction_version": "fixture-value",
+  "version": 1
+}
