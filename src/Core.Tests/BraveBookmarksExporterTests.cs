@@ -33,6 +33,22 @@ public class BraveBookmarksExporterTests
     }
 
     [Fact]
+    public void ExportJson_RoundTripsThroughCanonicalModel()
+    {
+        var originalJson = LoadFixture("Bookmarks.sample.json");
+        var model = BraveBookmarksExporter.ExportJson(originalJson);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(model);
+        var roundTripped = System.Text.Json.JsonSerializer.Deserialize<BackupModel>(serialized);
+
+        Assert.NotNull(roundTripped);
+        Assert.Equal(BraveBookmarksExporter.CurrentSchemaVersion, roundTripped!.SchemaVersion);
+        Assert.Equal(new[] { "Bookmarks bar", "Other bookmarks", "Mobile bookmarks" },
+            roundTripped.Bookmarks.Select(bookmark => bookmark.Name));
+        Assert.Equal("https://example.test/path?q=one%20two", roundTripped.Bookmarks[0].Children[1].Children[0].Url);
+        Assert.Equal("Café", roundTripped.Bookmarks[2].Children[0].Name);
+    }
+
+    [Fact]
     public void Export_DoesNotIncludeBraveSpecificIdentifiersOrTimestamps()
     {
         var model = BraveBookmarksExporter.Export(BraveBookmarksParser.Parse(LoadFixture("Bookmarks.sample.json")));
