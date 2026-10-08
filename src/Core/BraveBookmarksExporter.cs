@@ -1,8 +1,16 @@
+using System.IO;
+using System.Text.Json;
+
 namespace BraveBackup.Core;
 
 public static class BraveBookmarksExporter
 {
     public const int CurrentSchemaVersion = 1;
+
+    public static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true
+    };
 
     public static BackupModel Export(BraveBookmarksFile bookmarks)
     {
@@ -18,6 +26,36 @@ public static class BraveBookmarksExporter
     public static BackupModel ExportJson(string json)
     {
         return Export(BraveBookmarksParser.Parse(json));
+    }
+
+    public static void ExportToFile(BackupModel backupModel, string filePath)
+    {
+        ArgumentNullException.ThrowIfNull(backupModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var json = JsonSerializer.Serialize(backupModel, JsonOptions);
+        File.WriteAllText(filePath, json);
+    }
+
+    public static async Task ExportToFileAsync(BackupModel backupModel, string filePath, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(backupModel);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var json = JsonSerializer.Serialize(backupModel, JsonOptions);
+        await File.WriteAllTextAsync(filePath, json, cancellationToken);
     }
 
     private static BackupBookmark CreateFolder(string name, IReadOnlyList<BraveBookmark> children)

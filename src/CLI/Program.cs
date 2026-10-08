@@ -132,9 +132,9 @@ if (!BraveProfileFinder.HasBookmarks(selectedProfile))
     return;
 }
 
-// Step 5: Export bookmarks
+// Step 5: Read and list bookmarks, then export upon user confirmation
 Console.WriteLine();
-Console.WriteLine($"Exporting bookmarks from profile '{selectedProfile.ProfileName}'...");
+Console.WriteLine($"Reading bookmarks from profile '{selectedProfile.ProfileName}'...");
 Console.WriteLine();
 
 try
@@ -142,21 +142,52 @@ try
     var bookmarksJson = File.ReadAllText(selectedProfile.BookmarksPath);
     var backupModel = BraveBookmarksExporter.ExportJson(bookmarksJson);
 
-    Console.WriteLine("Export successful!");
-    Console.WriteLine();
     Console.WriteLine($"Schema version: {backupModel.SchemaVersion}");
     Console.WriteLine($"Top-level folders: {backupModel.Bookmarks.Count}");
-
-    // Print bookmark summary
     Console.WriteLine();
+
+    // Print bookmark summary first
     PrintBookmarkSummary(backupModel.Bookmarks, 0);
-
     Console.WriteLine();
-    Console.WriteLine("Done.");
+
+    // Export only if user chooses to proceed
+    if (ConfirmExport(out var targetPath))
+    {
+        ExportBookmarks(backupModel, selectedProfile.ProfileName, targetPath);
+    }
+    else
+    {
+        Console.WriteLine("Export skipped by user.");
+    }
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Error exporting bookmarks: {ex.Message}");
+    Console.WriteLine($"Error processing bookmarks: {ex.Message}");
+}
+
+static bool ConfirmExport(out string targetPath)
+{
+    targetPath = string.Empty;
+    Console.Write("Do you want to export bookmarks for this profile? (y/n): ");
+    var response = Console.ReadLine()?.Trim().ToLowerInvariant();
+    if (response is not ("y" or "yes"))
+    {
+        return false;
+    }
+
+    Console.Write("Enter destination file path (leave empty for default 'brave-bookmarks-backup.json'): ");
+    var destination = Console.ReadLine()?.Trim();
+    targetPath = string.IsNullOrWhiteSpace(destination) ? "brave-bookmarks-backup.json" : destination;
+    return true;
+}
+
+static void ExportBookmarks(BackupModel backupModel, string profileName, string targetPath)
+{
+    Console.WriteLine();
+    Console.WriteLine($"Exporting bookmarks from profile '{profileName}' to '{targetPath}'...");
+    BraveBookmarksExporter.ExportToFile(backupModel, targetPath);
+    Console.WriteLine("Export successful!");
+    Console.WriteLine("Done.");
 }
 
 static void PrintBookmarkSummary(IReadOnlyList<BackupBookmark> bookmarks, int depth)

@@ -65,6 +65,73 @@ public class BraveBookmarksExporterTests
         Assert.Throws<ArgumentNullException>(() => BraveBookmarksExporter.Export(null!));
     }
 
+    [Fact]
+    public void ExportToFile_SavesSerializedModelToSpecifiedPath()
+    {
+        var model = BraveBookmarksExporter.ExportJson(LoadFixture("Bookmarks.sample.json"));
+        var tempFile = Path.Combine(Path.GetTempPath(), "BraveExportTests_" + Guid.NewGuid().ToString("N"), "backup.json");
+
+        try
+        {
+            BraveBookmarksExporter.ExportToFile(model, tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            var readJson = File.ReadAllText(tempFile);
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<BackupModel>(readJson);
+
+            Assert.NotNull(deserialized);
+            Assert.Equal(model.SchemaVersion, deserialized!.SchemaVersion);
+            Assert.Equal(model.Bookmarks.Count, deserialized.Bookmarks.Count);
+        }
+        finally
+        {
+            var directory = Path.GetDirectoryName(tempFile);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ExportToFileAsync_SavesSerializedModelToSpecifiedPath()
+    {
+        var model = BraveBookmarksExporter.ExportJson(LoadFixture("Bookmarks.sample.json"));
+        var tempFile = Path.Combine(Path.GetTempPath(), "BraveExportTests_" + Guid.NewGuid().ToString("N"), "backup_async.json");
+
+        try
+        {
+            await BraveBookmarksExporter.ExportToFileAsync(model, tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            var readJson = await File.ReadAllTextAsync(tempFile);
+            var deserialized = System.Text.Json.JsonSerializer.Deserialize<BackupModel>(readJson);
+
+            Assert.NotNull(deserialized);
+            Assert.Equal(model.SchemaVersion, deserialized!.SchemaVersion);
+            Assert.Equal(model.Bookmarks.Count, deserialized.Bookmarks.Count);
+        }
+        finally
+        {
+            var directory = Path.GetDirectoryName(tempFile);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExportToFile_ThrowsOnNullOrEmptyArguments()
+    {
+        var model = new BackupModel(1, Array.Empty<BackupBookmark>());
+
+        Assert.Throws<ArgumentNullException>(() => BraveBookmarksExporter.ExportToFile(null!, "path.json"));
+        Assert.Throws<ArgumentException>(() => BraveBookmarksExporter.ExportToFile(model, ""));
+        Assert.Throws<ArgumentException>(() => BraveBookmarksExporter.ExportToFile(model, "   "));
+        Assert.Throws<ArgumentNullException>(() => BraveBookmarksExporter.ExportToFile(model, null!));
+    }
+
     private static string LoadFixture(string fileName)
     {
         var fixturePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName);
