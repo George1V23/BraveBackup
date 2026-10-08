@@ -3,6 +3,7 @@
     <Project Path="src\CLI\CLI.csproj" />
     <Project Path="src\Core\Core.csproj" />
     <Project Path="src\Infrastructure\Infrastructure.csproj" />
+    <Project Path="src\UI\UI.csproj" />
     <Project Path="src\Core.Tests\Core.Tests.csproj" />
   </Folder>
 </Solution>

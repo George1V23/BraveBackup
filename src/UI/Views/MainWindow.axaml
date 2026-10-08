@@ -1,0 +1,148 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:UI.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="650" d:DesignHeight="600"
+        Width="650" Height="620"
+        MinWidth="500" MinHeight="450"
+        WindowStartupLocation="CenterScreen"
+        x:Class="UI.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Brave Bookmarks Exporter">
+
+    <Design.DataContext>
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <Grid Margin="20" RowDefinitions="Auto,*,Auto,Auto">
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
+            <TextBlock Text="Brave Browser Bookmark Exporter"
+                       FontSize="20"
+                       FontWeight="Bold" />
+            <TextBlock Text="Export bookmarks from your Brave Browser profiles into a backup JSON file."
+                       Foreground="Gray" />
+        </StackPanel>
+
+        <!-- Main Form Content -->
+        <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="16">
+                <!-- Step 1: Select Application Channel -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="1. Select Brave Installation"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1"
+                                    Content="Refresh"
+                                    Command="{Binding RefreshCommand}"
+                                    Padding="10,4" />
+                        </Grid>
+
+                        <ComboBox ItemsSource="{Binding DetectedApps}"
+                                  SelectedItem="{Binding SelectedApp}"
+                                  HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate DataType="vm:AppChannelItem">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <StackPanel IsVisible="{Binding SelectedApp, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    Spacing="4"
+                                    Margin="4,0,0,0">
+                            <TextBlock Text="{Binding SelectedApp.AppInfo.UserDataDirectory, StringFormat='Data directory: {0}'}"
+                                       FontSize="11"
+                                       Foreground="Gray"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 2: Select Profile -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="2. Select Profile to Export"
+                                   FontWeight="SemiBold" />
+
+                        <ListBox ItemsSource="{Binding Profiles}"
+                                 SelectedItem="{Binding SelectedProfile}"
+                                 MinHeight="100"
+                                 MaxHeight="180">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="vm:ProfileItem">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="4,2">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontWeight="Medium" />
+                                            <TextBlock Text="{Binding ProfileInfo.ProfileDirectory}"
+                                                       FontSize="11"
+                                                       Foreground="Gray"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding StatusDescription}"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="12"
+                                                   Foreground="{Binding HasBookmarks, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 3: Destination File -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="3. Export Destination File"
+                                   FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding TargetFilePath}"
+                                     PlaceholderText="Enter destination file path (e.g. bookmarks.json)"
+                                     Margin="0,0,8,0" />
+                            <Button Grid.Column="1"
+                                    Content="Browse..."
+                                    Command="{Binding BrowseExportPathCommand}"
+                                    Padding="14,6" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Status Message -->
+        <TextBlock Grid.Row="2"
+                   Text="{Binding StatusMessage}"
+                   Margin="0,10,0,10"
+                   FontWeight="Medium"
+                   IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextWrapping="Wrap" />
+
+        <!-- Export Action Button -->
+        <Grid Grid.Row="3" Margin="0,6,0,0">
+            <Button Content="Export Bookmarks"
+                    Command="{Binding ExportBookmarksCommand}"
+                    HorizontalAlignment="Right"
+                    Padding="20,10"
+                    FontWeight="SemiBold"
+                    Classes="accent" />
+        </Grid>
+    </Grid>
+
+</Window>
