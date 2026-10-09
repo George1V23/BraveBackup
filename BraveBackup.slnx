@@ -4,6 +4,11 @@
     <Project Path="src\Core\Core.csproj" />
     <Project Path="src\Infrastructure\Infrastructure.csproj" />
     <Project Path="src\UI\UI.csproj" />
-    <Project Path="src\Core.Tests\Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests\Core.Tests\Core.Tests.csproj" />
+    <Project Path="tests\Brave.Tests\Brave.Tests.csproj" />
+    <Project Path="tests\Windows.Tests\Windows.Tests.csproj" />
+    <Project Path="tests\Linux.Tests\Linux.Tests.csproj" />
   </Folder>
 </Solution>
