@@ -16,7 +16,7 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <Grid Margin="20" RowDefinitions="Auto,*,Auto,Auto">
+    <Grid Margin="20" RowDefinitions="Auto,*,Auto">
         <!-- Header -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
             <TextBlock Text="Brave Browser Bookmark Exporter"
@@ -47,6 +47,7 @@
 
                         <ComboBox ItemsSource="{Binding DetectedApps}"
                                   SelectedItem="{Binding SelectedApp}"
+                                  PlaceholderText="{Binding AppSelectionPlaceholder}"
                                   HorizontalAlignment="Stretch">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate DataType="vm:AppChannelItem">
@@ -55,10 +56,9 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
 
-                        <StackPanel IsVisible="{Binding SelectedApp, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                    Spacing="4"
+                        <StackPanel Spacing="4"
                                     Margin="4,0,0,0">
-                            <TextBlock Text="{Binding SelectedApp.AppInfo.UserDataDirectory, StringFormat='Data directory: {0}'}"
+                            <TextBlock Text="{Binding DataDirectoryText}"
                                        FontSize="11"
                                        Foreground="Gray"
                                        TextTrimming="CharacterEllipsis" />
@@ -99,6 +99,12 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   FontSize="12"
+                                   Foreground="Gray"
+                                   IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
@@ -126,16 +132,8 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Status Message -->
-        <TextBlock Grid.Row="2"
-                   Text="{Binding StatusMessage}"
-                   Margin="0,10,0,10"
-                   FontWeight="Medium"
-                   IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                   TextWrapping="Wrap" />
-
         <!-- Export Action Button -->
-        <Grid Grid.Row="3" Margin="0,6,0,0">
+        <Grid Grid.Row="2" Margin="0,16,0,0">
             <Button Content="Export Bookmarks"
                     Command="{Binding ExportBookmarksCommand}"
                     HorizontalAlignment="Right"

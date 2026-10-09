@@ -108,4 +108,31 @@ public class MainViewModelTests
             }
         }
     }
+
+    [Fact]
+    public void LoadInstalledApps_SetsInitialPlaceholderAndDataDirectoryText()
+    {
+        var vm = new MainViewModel();
+
+        Assert.Null(vm.SelectedApp);
+        Assert.Equal($"[{vm.DetectedApps.Count} applications]", vm.AppSelectionPlaceholder);
+        Assert.Equal($"Data directory: [installed on {vm.DetectedApps.Count} paths]", vm.DataDirectoryText);
+    }
+
+    [Fact]
+    public void Refresh_ResetsSelectionAndInitialTexts()
+    {
+        var vm = new MainViewModel();
+        if (vm.DetectedApps.Count > 0)
+        {
+            vm.SelectedApp = vm.DetectedApps[0];
+            Assert.Equal($"Data directory: {vm.SelectedApp.AppInfo.UserDataDirectory}", vm.DataDirectoryText);
+        }
+
+        vm.Refresh();
+
+        Assert.Null(vm.SelectedApp);
+        Assert.Equal($"[{vm.DetectedApps.Count} applications]", vm.AppSelectionPlaceholder);
+        Assert.Equal($"Data directory: [installed on {vm.DetectedApps.Count} paths]", vm.DataDirectoryText);
+    }
 }

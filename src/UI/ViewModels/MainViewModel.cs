@@ -59,6 +59,12 @@ public partial class MainViewModel : ViewModelBase
     private ProfileItem? _selectedProfile;
 
     [ObservableProperty]
+    private string _appSelectionPlaceholder = string.Empty;
+
+    [ObservableProperty]
+    private string _dataDirectoryText = string.Empty;
+
+    [ObservableProperty]
     private string _targetFilePath = string.Empty;
 
     [ObservableProperty]
@@ -97,11 +103,10 @@ public partial class MainViewModel : ViewModelBase
                 DetectedApps.Add(new AppChannelItem(app));
             }
 
-            if (DetectedApps.Count > 0)
-            {
-                SelectedApp = DetectedApps[0];
-            }
-            else
+            AppSelectionPlaceholder = $"[{DetectedApps.Count} applications]";
+            DataDirectoryText = $"Data directory: [installed on {DetectedApps.Count} paths]";
+
+            if (DetectedApps.Count == 0)
             {
                 StatusMessage = "No Brave Browser installations detected.";
                 IsStatusError = false;
@@ -116,7 +121,18 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedAppChanged(AppChannelItem? value)
     {
-        LoadProfilesForApp(value?.AppInfo);
+        if (value != null)
+        {
+            DataDirectoryText = $"Data directory: {value.AppInfo.UserDataDirectory}";
+            LoadProfilesForApp(value.AppInfo);
+        }
+        else
+        {
+            DataDirectoryText = $"Data directory: [installed on {DetectedApps.Count} paths]";
+            Profiles.Clear();
+            SelectedProfile = null;
+            StatusMessage = string.Empty;
+        }
     }
 
     partial void OnSelectedProfileChanged(ProfileItem? value)
