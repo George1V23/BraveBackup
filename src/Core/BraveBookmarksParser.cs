@@ -2,8 +2,18 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
+/// <summary>
+/// Provides functionality for parsing Chromium / Brave Bookmarks JSON files into strongly-typed structures.
+/// </summary>
 public static class BraveBookmarksParser
 {
+    /// <summary>
+    /// Parses a raw Bookmarks JSON string into a <see cref="BraveBookmarksFile"/> instance.
+    /// </summary>
+    /// <param name="json">The JSON content from a Brave Bookmarks file.</param>
+    /// <returns>A strongly-typed <see cref="BraveBookmarksFile"/> containing roots and bookmark trees.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="json"/> is null.</exception>
+    /// <exception cref="JsonException">Thrown when the JSON format or required properties are invalid.</exception>
     public static BraveBookmarksFile Parse(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
@@ -119,8 +129,21 @@ public static class BraveBookmarksParser
     }
 }
 
+/// <summary>
+/// Represents a parsed Chromium / Brave Bookmarks file.
+/// </summary>
+/// <param name="Version">The file format version.</param>
+/// <param name="Roots">The collection of bookmark root nodes (e.g. bookmark_bar, other, synced).</param>
 public sealed record BraveBookmarksFile(int Version, IReadOnlyList<BraveBookmarkRoot> Roots);
 
+/// <summary>
+/// Represents a root folder node in the Brave bookmarks hierarchy.
+/// </summary>
+/// <param name="Key">The JSON property key identifying the root (e.g., 'bookmark_bar').</param>
+/// <param name="Name">The display name of the root folder.</param>
+/// <param name="Id">The unique ID assigned by Chromium/Brave, if present.</param>
+/// <param name="Guid">The GUID assigned by Chromium/Brave, if present.</param>
+/// <param name="Children">The direct child bookmarks or folders under this root.</param>
 public sealed record BraveBookmarkRoot(
     string Key,
     string Name,
@@ -128,12 +151,33 @@ public sealed record BraveBookmarkRoot(
     string? Guid,
     IReadOnlyList<BraveBookmark> Children);
 
+/// <summary>
+/// Specifies the type of bookmark node in the Brave bookmarks structure.
+/// </summary>
 public enum BraveBookmarkType
 {
+    /// <summary>
+    /// A folder bookmark that can contain child nodes.
+    /// </summary>
     Folder,
+
+    /// <summary>
+    /// A URL bookmark pointing to a web address.
+    /// </summary>
     Url
 }
 
+/// <summary>
+/// Represents a single bookmark item or folder in the Brave bookmarks hierarchy.
+/// </summary>
+/// <param name="Type">The bookmark node type (Folder or Url).</param>
+/// <param name="Name">The display title or folder name.</param>
+/// <param name="Id">The internal numeric ID string assigned by Chromium/Brave.</param>
+/// <param name="Guid">The GUID assigned by Chromium/Brave.</param>
+/// <param name="DateAdded">The timestamp when the bookmark was created.</param>
+/// <param name="DateModified">The timestamp when the bookmark was last modified.</param>
+/// <param name="Url">The URL if this item is a bookmark; otherwise <c>null</c>.</param>
+/// <param name="Children">The child bookmarks if this item is a folder; otherwise empty.</param>
 public sealed record BraveBookmark(
     BraveBookmarkType Type,
     string Name,

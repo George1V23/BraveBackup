@@ -10,27 +10,64 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace UI.ViewModels;
 
+/// <summary>
+/// Represents a selectable Brave Browser application channel in the UI.
+/// </summary>
 public sealed class AppChannelItem
 {
+    /// <summary>
+    /// Gets the underlying detected Brave application information.
+    /// </summary>
     public BraveAppInfo AppInfo { get; }
+
+    /// <summary>
+    /// Gets the formatted display name of the application channel and version.
+    /// </summary>
     public string DisplayName { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AppChannelItem"/> class.
+    /// </summary>
+    /// <param name="appInfo">The detected application metadata.</param>
     public AppChannelItem(BraveAppInfo appInfo)
     {
         AppInfo = appInfo;
         DisplayName = $"{appInfo.Channel} (v{appInfo.Version})";
     }
 
+    /// <inheritdoc />
     public override string ToString() => DisplayName;
 }
 
+/// <summary>
+/// Represents a selectable Brave browser profile in the UI.
+/// </summary>
 public sealed class ProfileItem
 {
+    /// <summary>
+    /// Gets the underlying profile information.
+    /// </summary>
     public BraveProfileInfo ProfileInfo { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether bookmarks are present for this profile.
+    /// </summary>
     public bool HasBookmarks { get; }
+
+    /// <summary>
+    /// Gets the display name of the profile.
+    /// </summary>
     public string DisplayName { get; }
+
+    /// <summary>
+    /// Gets a descriptive text for the profile bookmark availability.
+    /// </summary>
     public string StatusDescription { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProfileItem"/> class.
+    /// </summary>
+    /// <param name="profileInfo">The discovered profile metadata.</param>
     public ProfileItem(BraveProfileInfo profileInfo)
     {
         ProfileInfo = profileInfo;
@@ -39,53 +76,97 @@ public sealed class ProfileItem
         StatusDescription = HasBookmarks ? "Bookmarks available" : "No bookmarks found";
     }
 
+    /// <inheritdoc />
     public override string ToString() => DisplayName;
 }
 
+/// <summary>
+/// Main view model managing application detection, profile selection, and bookmark export operations.
+/// </summary>
 public partial class MainViewModel : ViewModelBase
 {
     private readonly Func<Task<IStorageFile?>>? _saveFileDialogPicker;
 
+    /// <summary>
+    /// Collection of detected Brave installations.
+    /// </summary>
     [ObservableProperty]
     private ObservableCollection<AppChannelItem> _detectedApps = new();
 
+    /// <summary>
+    /// Currently selected Brave installation.
+    /// </summary>
     [ObservableProperty]
     private AppChannelItem? _selectedApp;
 
+    /// <summary>
+    /// Discovered profiles for the selected Brave installation.
+    /// </summary>
     [ObservableProperty]
     private ObservableCollection<ProfileItem> _profiles = new();
 
+    /// <summary>
+    /// Currently selected profile.
+    /// </summary>
     [ObservableProperty]
     private ProfileItem? _selectedProfile;
 
+    /// <summary>
+    /// Placeholder text for the application selection dropdown.
+    /// </summary>
     [ObservableProperty]
     private string _appSelectionPlaceholder = string.Empty;
 
+    /// <summary>
+    /// Formatted status text showing the data directory or detected installations count.
+    /// </summary>
     [ObservableProperty]
     private string _dataDirectoryText = string.Empty;
 
+    /// <summary>
+    /// Target file path where the backup will be saved.
+    /// </summary>
     [ObservableProperty]
     private string _targetFilePath = string.Empty;
 
+    /// <summary>
+    /// User-facing status message.
+    /// </summary>
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
+    /// <summary>
+    /// Indicates whether the current status message represents an error.
+    /// </summary>
     [ObservableProperty]
     private bool _isStatusError;
 
+    /// <summary>
+    /// Indicates whether an asynchronous operation (such as export) is in progress.
+    /// </summary>
     [ObservableProperty]
     private bool _isBusy;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainViewModel"/> class.
+    /// </summary>
     public MainViewModel() : this(null)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainViewModel"/> class with an optional file picker callback.
+    /// </summary>
+    /// <param name="saveFileDialogPicker">Optional delegate to invoke file save dialog.</param>
     public MainViewModel(Func<Task<IStorageFile?>>? saveFileDialogPicker)
     {
         _saveFileDialogPicker = saveFileDialogPicker;
         LoadInstalledApps();
     }
 
+    /// <summary>
+    /// Scans the system for installed Brave applications and initializes view model state.
+    /// </summary>
     public void LoadInstalledApps()
     {
         StatusMessage = string.Empty;
@@ -188,6 +269,9 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Opens the file picker dialog to choose a destination file path for export.
+    /// </summary>
     [RelayCommand]
     public async Task BrowseExportPathAsync()
     {
@@ -201,6 +285,10 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Determines whether the export bookmarks action can currently execute.
+    /// </summary>
+    /// <returns><c>true</c> if valid export parameters and profile are selected; otherwise <c>false</c>.</returns>
     public bool CanExportBookmarks()
     {
         return !IsBusy &&
@@ -209,6 +297,9 @@ public partial class MainViewModel : ViewModelBase
                !string.IsNullOrWhiteSpace(TargetFilePath);
     }
 
+    /// <summary>
+    /// Exports bookmarks for the selected profile to the chosen destination path.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanExportBookmarks))]
     public async Task ExportBookmarksAsync()
     {
@@ -250,6 +341,9 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Reloads installed Brave applications and refreshes the view model state.
+    /// </summary>
     [RelayCommand]
     public void Refresh()
     {

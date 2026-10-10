@@ -7,8 +7,16 @@ using System.Text.RegularExpressions;
 
 namespace BraveBackup.Core;
 
+/// <summary>
+/// Provides cross-platform detection of installed Brave Browser instances (Stable, Beta, Nightly).
+/// </summary>
 public static class BraveAppDetector
 {
+    /// <summary>
+    /// Detects all installed Brave Browser applications on the current operating system.
+    /// </summary>
+    /// <returns>A read-only list of detected <see cref="BraveAppInfo"/> records.</returns>
+    /// <exception cref="PlatformNotSupportedException">Thrown when the current OS is neither Windows nor Linux.</exception>
     public static IReadOnlyList<BraveAppInfo> DetectInstalledApps()
     {
         var isWindows = OperatingSystem.IsWindows();

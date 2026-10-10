@@ -1,7 +1,7 @@
-using Xunit;
 using BraveBackup.Core;
+using Xunit;
 
-namespace BraveBackup.Core.Tests;
+namespace Brave.Tests;
 
 public class BraveProfileLocatorEdgeCasesTests
 {

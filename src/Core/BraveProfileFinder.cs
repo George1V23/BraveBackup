@@ -6,19 +6,39 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
+/// <summary>
+/// Contains information about a discovered Brave profile.
+/// </summary>
+/// <param name="ProfileName">The display or configured name of the profile.</param>
+/// <param name="ProfileDirectory">The absolute path to the profile directory on disk.</param>
+/// <param name="BookmarksPath">The absolute path to the profile's Bookmarks file.</param>
 public sealed record BraveProfileInfo(
     string ProfileName,
     string ProfileDirectory,
     string BookmarksPath);
 
+/// <summary>
+/// Provides methods to discover Brave Browser profiles from user data directories and check bookmark availability.
+/// </summary>
 public static class BraveProfileFinder
 {
+    /// <summary>
+    /// Discovers all browser profiles for the specified Brave application installation.
+    /// </summary>
+    /// <param name="appInfo">The installed Brave application metadata.</param>
+    /// <returns>A read-only list of discovered <see cref="BraveProfileInfo"/> instances.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="appInfo"/> is null.</exception>
     public static IReadOnlyList<BraveProfileInfo> FindProfiles(BraveAppInfo appInfo)
     {
         ArgumentNullException.ThrowIfNull(appInfo);
         return FindProfiles(appInfo.UserDataDirectory);
     }
 
+    /// <summary>
+    /// Discovers browser profiles within the specified user data directory using <c>Local State</c> or filesystem fallback.
+    /// </summary>
+    /// <param name="userDataDir">The path to the browser's User Data directory.</param>
+    /// <returns>A read-only list of discovered <see cref="BraveProfileInfo"/> instances.</returns>
     public static IReadOnlyList<BraveProfileInfo> FindProfiles(string? userDataDir)
     {
         if (string.IsNullOrWhiteSpace(userDataDir) || !Directory.Exists(userDataDir))
@@ -46,6 +66,12 @@ public static class BraveProfileFinder
         return FallbackDiscoverProfiles(userDataDir);
     }
 
+    /// <summary>
+    /// Checks whether the specified profile has an existing Bookmarks file on disk.
+    /// </summary>
+    /// <param name="profileInfo">The profile metadata to inspect.</param>
+    /// <returns><c>true</c> if a Bookmarks file exists for the profile; otherwise <c>false</c>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="profileInfo"/> is null.</exception>
     public static bool HasBookmarks(BraveProfileInfo profileInfo)
     {
         ArgumentNullException.ThrowIfNull(profileInfo);

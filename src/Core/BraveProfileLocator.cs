@@ -5,8 +5,22 @@ using System.Linq;
 
 namespace BraveBackup.Core;
 
+/// <summary>
+/// Provides utility methods to resolve Brave Browser default User Data directory paths for Windows and Linux.
+/// </summary>
 public static class BraveProfileLocator
 {
+    /// <summary>
+    /// Resolves the User Data directory for the specified operating system and directory overrides.
+    /// </summary>
+    /// <param name="operatingSystem">The target operating system name ("windows" or "linux").</param>
+    /// <param name="localAppData">Optional override for Windows LocalAppData path.</param>
+    /// <param name="homeDirectory">Optional override for Linux user home path.</param>
+    /// <param name="applicationData">Optional override for Linux ApplicationData path.</param>
+    /// <returns>The resolved User Data directory path.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="operatingSystem"/> is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when necessary environment paths cannot be resolved.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown when an unsupported operating system is specified.</exception>
     public static string GetUserDataDirectory(string operatingSystem, string? localAppData = null, string? homeDirectory = null, string? applicationData = null)
     {
         if (string.IsNullOrWhiteSpace(operatingSystem))

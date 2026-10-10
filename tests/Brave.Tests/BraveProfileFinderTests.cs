@@ -1,10 +1,7 @@
-using System;
-using System.IO;
-using System.Linq;
 using BraveBackup.Core;
 using Xunit;
 
-namespace BraveBackup.Core.Tests;
+namespace Brave.Tests;
 
 public class BraveProfileFinderTests : IDisposable
 {
