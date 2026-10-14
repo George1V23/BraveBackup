@@ -135,4 +135,54 @@ public class MainViewModelTests
         Assert.Equal($"[{vm.DetectedApps.Count} applications]", vm.AppSelectionPlaceholder);
         Assert.Equal($"Data directory: [installed on {vm.DetectedApps.Count} paths]", vm.DataDirectoryText);
     }
+
+    [Fact]
+    public void ProfileItem_PlaceholderConstructor_InitializesUnselectableItem()
+    {
+        var item = new ProfileItem("No profiles to export", isEnabled: false);
+
+        Assert.Equal("No profiles to export", item.DisplayName);
+        Assert.Null(item.ProfileInfo);
+        Assert.False(item.HasBookmarks);
+        Assert.False(item.IsEnabled);
+        Assert.Equal(string.Empty, item.StatusDescription);
+    }
+
+    [Fact]
+    public void CanExportBookmarks_ReturnsFalseWhenProfileIsUnselectablePlaceholder()
+    {
+        var vm = new MainViewModel();
+        vm.SelectedProfile = new ProfileItem("No profiles to export", isEnabled: false);
+        vm.TargetFilePath = "output.json";
+
+        Assert.False(vm.CanExportBookmarks());
+    }
+
+    [Fact]
+    public void OnSelectedAppChanged_WhenAppHasNoProfiles_AddsUnselectablePlaceholderToProfiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "vm_empty_app_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var appInfo = new BraveAppInfo(BraveAppChannel.Stable, "1.0.0", "/bin/brave", tempDir);
+            var appItem = new AppChannelItem(appInfo);
+
+            var vm = new MainViewModel();
+            vm.SelectedApp = appItem;
+
+            Assert.Single(vm.Profiles);
+            Assert.Equal("No profiles to export", vm.Profiles[0].DisplayName);
+            Assert.False(vm.Profiles[0].IsEnabled);
+            Assert.Null(vm.SelectedProfile);
+            Assert.False(vm.CanExportBookmarks());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

@@ -40,14 +40,14 @@ public sealed class AppChannelItem
 }
 
 /// <summary>
-/// Represents a selectable Brave browser profile in the UI.
+/// Represents a selectable Brave browser profile or unselectable placeholder item in the UI.
 /// </summary>
 public sealed class ProfileItem
 {
     /// <summary>
-    /// Gets the underlying profile information.
+    /// Gets the underlying profile information, or <c>null</c> if this item is a placeholder.
     /// </summary>
-    public BraveProfileInfo ProfileInfo { get; }
+    public BraveProfileInfo? ProfileInfo { get; }
 
     /// <summary>
     /// Gets a value indicating whether bookmarks are present for this profile.
@@ -55,7 +55,7 @@ public sealed class ProfileItem
     public bool HasBookmarks { get; }
 
     /// <summary>
-    /// Gets the display name of the profile.
+    /// Gets the display name of the profile or placeholder text.
     /// </summary>
     public string DisplayName { get; }
 
@@ -65,7 +65,12 @@ public sealed class ProfileItem
     public string StatusDescription { get; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProfileItem"/> class.
+    /// Gets a value indicating whether this item can be selected in the list.
+    /// </summary>
+    public bool IsEnabled { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProfileItem"/> class for a discovered profile.
     /// </summary>
     /// <param name="profileInfo">The discovered profile metadata.</param>
     public ProfileItem(BraveProfileInfo profileInfo)
@@ -74,6 +79,21 @@ public sealed class ProfileItem
         HasBookmarks = BraveProfileFinder.HasBookmarks(profileInfo);
         DisplayName = profileInfo.ProfileName;
         StatusDescription = HasBookmarks ? "Bookmarks available" : "No bookmarks found";
+        IsEnabled = true;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProfileItem"/> class for a placeholder message.
+    /// </summary>
+    /// <param name="message">The placeholder text to display.</param>
+    /// <param name="isEnabled">Whether the item is enabled/selectable (defaults to <c>false</c>).</param>
+    public ProfileItem(string message, bool isEnabled = false)
+    {
+        ProfileInfo = null;
+        HasBookmarks = false;
+        DisplayName = message;
+        StatusDescription = string.Empty;
+        IsEnabled = isEnabled;
     }
 
     /// <inheritdoc />
@@ -90,62 +110,52 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>
     /// Collection of detected Brave installations.
     /// </summary>
-    [ObservableProperty]
-    private ObservableCollection<AppChannelItem> _detectedApps = new();
+    [ObservableProperty] private ObservableCollection<AppChannelItem> _detectedApps = new();
 
     /// <summary>
     /// Currently selected Brave installation.
     /// </summary>
-    [ObservableProperty]
-    private AppChannelItem? _selectedApp;
+    [ObservableProperty] private AppChannelItem? _selectedApp;
 
     /// <summary>
     /// Discovered profiles for the selected Brave installation.
     /// </summary>
-    [ObservableProperty]
-    private ObservableCollection<ProfileItem> _profiles = new();
+    [ObservableProperty] private ObservableCollection<ProfileItem> _profiles = new();
 
     /// <summary>
     /// Currently selected profile.
     /// </summary>
-    [ObservableProperty]
-    private ProfileItem? _selectedProfile;
+    [ObservableProperty] private ProfileItem? _selectedProfile;
 
     /// <summary>
     /// Placeholder text for the application selection dropdown.
     /// </summary>
-    [ObservableProperty]
-    private string _appSelectionPlaceholder = string.Empty;
+    [ObservableProperty] private string _appSelectionPlaceholder = string.Empty;
 
     /// <summary>
     /// Formatted status text showing the data directory or detected installations count.
     /// </summary>
-    [ObservableProperty]
-    private string _dataDirectoryText = string.Empty;
+    [ObservableProperty] private string _dataDirectoryText = string.Empty;
 
     /// <summary>
     /// Target file path where the backup will be saved.
     /// </summary>
-    [ObservableProperty]
-    private string _targetFilePath = string.Empty;
+    [ObservableProperty] private string _targetFilePath = string.Empty;
 
     /// <summary>
     /// User-facing status message.
     /// </summary>
-    [ObservableProperty]
-    private string _statusMessage = string.Empty;
+    [ObservableProperty] private string _statusMessage = string.Empty;
 
     /// <summary>
     /// Indicates whether the current status message represents an error.
     /// </summary>
-    [ObservableProperty]
-    private bool _isStatusError;
+    [ObservableProperty] private bool _isStatusError;
 
     /// <summary>
     /// Indicates whether an asynchronous operation (such as export) is in progress.
     /// </summary>
-    [ObservableProperty]
-    private bool _isBusy;
+    [ObservableProperty] private bool _isBusy;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainViewModel"/> class.
@@ -218,14 +228,16 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnSelectedProfileChanged(ProfileItem? value)
     {
-        if (value != null)
+        if (value != null && value.ProfileInfo != null)
         {
             var safeProfileName = string.Join("_", value.ProfileInfo.ProfileName.Split(Path.GetInvalidFileNameChars()));
-            if (string.IsNullOrWhiteSpace(TargetFilePath) || TargetFilePath.StartsWith("brave-bookmarks-", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(TargetFilePath) ||
+                TargetFilePath.StartsWith("brave-bookmarks-", StringComparison.OrdinalIgnoreCase))
             {
                 TargetFilePath = $"brave-bookmarks-{safeProfileName.ToLowerInvariant()}.json";
             }
         }
+
         ExportBookmarksCommand.NotifyCanExecuteChanged();
     }
 
@@ -260,12 +272,14 @@ public partial class MainViewModel : ViewModelBase
             {
                 StatusMessage = $"No profiles found in {appInfo.UserDataDirectory}";
                 IsStatusError = false;
+                Profiles.Add(new ProfileItem("-- No profiles to export --", isEnabled: false));
             }
         }
         catch (Exception ex)
         {
             StatusMessage = $"Error finding profiles: {ex.Message}";
             IsStatusError = true;
+            Profiles.Add(new ProfileItem($"Error finding profiles: {ex.Message}", isEnabled: false));
         }
     }
 
@@ -293,6 +307,8 @@ public partial class MainViewModel : ViewModelBase
     {
         return !IsBusy &&
                SelectedProfile != null &&
+               SelectedProfile.IsEnabled &&
+               SelectedProfile.ProfileInfo != null &&
                SelectedProfile.HasBookmarks &&
                !string.IsNullOrWhiteSpace(TargetFilePath);
     }
@@ -303,7 +319,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanExportBookmarks))]
     public async Task ExportBookmarksAsync()
     {
-        if (SelectedProfile == null || string.IsNullOrWhiteSpace(TargetFilePath))
+        if (SelectedProfile == null || SelectedProfile.ProfileInfo == null || string.IsNullOrWhiteSpace(TargetFilePath))
         {
             return;
         }
