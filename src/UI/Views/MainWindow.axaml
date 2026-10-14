@@ -19,10 +19,10 @@
     <Grid Margin="20" RowDefinitions="Auto,*,Auto">
         <!-- Header -->
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="Brave Browser Bookmark Exporter"
+            <TextBlock Text="Brave Browser Backup"
                        FontSize="20"
                        FontWeight="Bold" />
-            <TextBlock Text="Export bookmarks from your Brave Browser profiles into a backup JSON file."
+            <TextBlock Text="Export/Import/Sync data for Brave Browser and between profiles."
                        Foreground="Gray" />
         </StackPanel>
 
@@ -36,7 +36,7 @@
                         Padding="14">
                     <StackPanel Spacing="10">
                         <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Text="1. Select Brave Installation"
+                            <TextBlock Text="1. Select Brave Browser"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center" />
                             <Button Grid.Column="1"

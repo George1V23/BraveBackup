@@ -172,7 +172,7 @@ public class MainViewModelTests
             vm.SelectedApp = appItem;
 
             Assert.Single(vm.Profiles);
-            Assert.Equal("No profiles to export", vm.Profiles[0].DisplayName);
+            Assert.Equal("-- No profiles to export --", vm.Profiles[0].DisplayName);
             Assert.False(vm.Profiles[0].IsEnabled);
             Assert.Null(vm.SelectedProfile);
             Assert.False(vm.CanExportBookmarks());

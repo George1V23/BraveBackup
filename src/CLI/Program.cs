@@ -118,7 +118,8 @@ if (string.IsNullOrEmpty(profileInput))
     return;
 }
 
-if (!int.TryParse(profileInput, out var selectedProfileIndex) || selectedProfileIndex < 1 || selectedProfileIndex > profiles.Count)
+if (!int.TryParse(profileInput, out var selectedProfileIndex) || selectedProfileIndex < 1 ||
+    selectedProfileIndex > profiles.Count)
 {
     Console.WriteLine($"Invalid selection. Please enter a number between 1 and {profiles.Count}.");
     return;
@@ -126,43 +127,181 @@ if (!int.TryParse(profileInput, out var selectedProfileIndex) || selectedProfile
 
 var selectedProfile = profiles[selectedProfileIndex - 1];
 
-if (!BraveProfileFinder.HasBookmarks(selectedProfile))
+// Step 5: Choose details to inspect
+bool exitMenu = false;
+while (!exitMenu)
 {
-    Console.WriteLine($"No bookmarks file found at: {selectedProfile.BookmarksPath}");
-    return;
-}
+    Console.WriteLine();
+    Console.WriteLine($"Selected profile: '{selectedProfile.ProfileName}'");
+    Console.WriteLine("What details would you like to see?");
+    Console.WriteLine("  [1] Bookmarks");
+    Console.WriteLine("  [2] Passwords");
+    Console.WriteLine("  [3] Extensions");
+    Console.WriteLine("  [4] Sessions");
+    Console.WriteLine("  [5] Exit");
+    Console.WriteLine();
+    Console.Write("Choose an option (1-5): ");
 
-// Step 5: Read and list bookmarks, then export upon user confirmation
-Console.WriteLine();
-Console.WriteLine($"Reading bookmarks from profile '{selectedProfile.ProfileName}'...");
-Console.WriteLine();
-
-try
-{
-    var bookmarksJson = File.ReadAllText(selectedProfile.BookmarksPath);
-    var backupModel = BraveBookmarksExporter.ExportJson(bookmarksJson);
-
-    Console.WriteLine($"Schema version: {backupModel.SchemaVersion}");
-    Console.WriteLine($"Top-level folders: {backupModel.Bookmarks.Count}");
+    var optionInput = Console.ReadLine()?.Trim();
     Console.WriteLine();
 
-    // Print bookmark summary first
-    PrintBookmarkSummary(backupModel.Bookmarks, 0);
-    Console.WriteLine();
+    switch (optionInput)
+    {
+        case "1" or "Bookmarks":
+            ShowBookmarks(selectedProfile);
+            break;
 
-    // Export only if user chooses to proceed
-    if (ConfirmExport(out var targetPath))
-    {
-        ExportBookmarks(backupModel, selectedProfile.ProfileName, targetPath);
-    }
-    else
-    {
-        Console.WriteLine("Export skipped by user.");
+        case "2" or "Passwords":
+            ShowPasswords(selectedProfile);
+            break;
+
+        case "3" or "Extensions":
+            ShowExtensions(selectedProfile);
+            break;
+
+        case "4" or "Sessions":
+            ShowSessions(selectedProfile);
+            break;
+
+        case "5" or "Exit" or "exit" or "q" or "Q":
+            exitMenu = true;
+            Console.WriteLine("Exiting. Goodbye!");
+            break;
+
+        default:
+            Console.WriteLine("Invalid choice. Please select an option between 1 and 5.");
+            break;
     }
 }
-catch (Exception ex)
+
+static void ShowBookmarks(BraveProfileInfo selectedProfile)
 {
-    Console.WriteLine($"Error processing bookmarks: {ex.Message}");
+    if (!BraveProfileFinder.HasBookmarks(selectedProfile))
+    {
+        Console.WriteLine($"No bookmarks file found at: {selectedProfile.BookmarksPath}");
+        return;
+    }
+
+    Console.WriteLine($"Reading bookmarks from profile '{selectedProfile.ProfileName}'...");
+    Console.WriteLine();
+
+    try
+    {
+        var bookmarksJson = File.ReadAllText(selectedProfile.BookmarksPath);
+        var backupModel = BraveBookmarksExporter.ExportJson(bookmarksJson);
+
+        Console.WriteLine($"Schema version: {backupModel.SchemaVersion}");
+        Console.WriteLine($"Top-level folders: {backupModel.Bookmarks.Count}");
+        Console.WriteLine();
+
+        // Print bookmark summary first
+        PrintBookmarkSummary(backupModel.Bookmarks, 0);
+        Console.WriteLine();
+
+        // Export only if user chooses to proceed
+        if (ConfirmExport(out var targetPath))
+        {
+            ExportBookmarks(backupModel, selectedProfile.ProfileName, targetPath);
+        }
+        else
+        {
+            Console.WriteLine("Export skipped by user.");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error processing bookmarks: {ex.Message}");
+    }
+}
+
+static void ShowPasswords(BraveProfileInfo selectedProfile)
+{
+    Console.WriteLine($"--- Saved Passwords ({selectedProfile.ProfileName}) ---");
+    var entries = BraveProfileDetailsReader.GetPasswordEntries(selectedProfile);
+
+    if (entries.Count == 0)
+    {
+        Console.WriteLine("No saved password credentials found for this profile.");
+        return;
+    }
+
+    Console.WriteLine($"Found {entries.Count} password record(s):");
+    Console.WriteLine();
+
+    for (int i = 0; i < entries.Count; i++)
+    {
+        var entry = entries[i];
+        Console.WriteLine($"  [{i + 1}] Site/Origin: {entry.OriginUrl}");
+        Console.WriteLine($"      Username:    {entry.Username}");
+        if (entry.DateCreatedUtc.HasValue)
+        {
+            Console.WriteLine($"      Created:     {entry.DateCreatedUtc.Value:yyyy-MM-dd HH:mm:ss} UTC");
+        }
+
+        if (entry.DateLastUsedUtc.HasValue)
+        {
+            Console.WriteLine($"      Last used:   {entry.DateLastUsedUtc.Value:yyyy-MM-dd HH:mm:ss} UTC");
+        }
+
+        Console.WriteLine();
+    }
+
+    Console.WriteLine("Note: Actual password secrets and encryption keys are protected and not displayed.");
+}
+
+static void ShowExtensions(BraveProfileInfo selectedProfile)
+{
+    Console.WriteLine($"--- Extensions ({selectedProfile.ProfileName}) ---");
+    var extensions = BraveProfileDetailsReader.GetExtensions(selectedProfile);
+
+    if (extensions.Count == 0)
+    {
+        Console.WriteLine("No installed extensions found for this profile.");
+        return;
+    }
+
+    Console.WriteLine($"Found {extensions.Count} installed extension(s):");
+    Console.WriteLine();
+
+    for (int i = 0; i < extensions.Count; i++)
+    {
+        var ext = extensions[i];
+        Console.WriteLine($"  [{i + 1}] {ext.Name} (v{ext.Version})");
+        Console.WriteLine($"      ID:          {ext.Id}");
+        if (!string.IsNullOrWhiteSpace(ext.Description))
+        {
+            Console.WriteLine($"      Description: {ext.Description}");
+        }
+
+        Console.WriteLine();
+    }
+}
+
+static void ShowSessions(BraveProfileInfo selectedProfile)
+{
+    Console.WriteLine($"--- Sessions & Tabs ({selectedProfile.ProfileName}) ---");
+    var sessionInfo = BraveProfileDetailsReader.GetSessionInfo(selectedProfile);
+
+    if (sessionInfo.SessionFilesCount == 0)
+    {
+        Console.WriteLine("No session or tab state files found for this profile.");
+        return;
+    }
+
+    Console.WriteLine($"Found {sessionInfo.SessionFilesCount} session file(s) or folder(s):");
+    Console.WriteLine($"Total size:    {sessionInfo.TotalSizeBytes:N0} bytes");
+    if (sessionInfo.LastModifiedUtc.HasValue)
+    {
+        Console.WriteLine($"Last modified: {sessionInfo.LastModifiedUtc.Value:yyyy-MM-dd HH:mm:ss} UTC");
+    }
+
+    Console.WriteLine();
+
+    Console.WriteLine("Files:");
+    foreach (var fileName in sessionInfo.FileNames)
+    {
+        Console.WriteLine($"  - {fileName}");
+    }
 }
 
 static bool ConfirmExport(out string targetPath)
