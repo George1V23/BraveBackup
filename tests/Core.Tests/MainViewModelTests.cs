@@ -146,6 +146,14 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void ProfileItem_WithoutHighlightColorLeavesDefaultForegroundAvailable()
+    {
+        var item = new ProfileItem(new BraveProfileInfo("Profile", "/profile", "/profile/Bookmarks"));
+
+        Assert.Null(item.ProfileNameForeground);
+    }
+
+    [Fact]
     public void CanExportBookmarks_ReturnsFalseWhenNoProfileSelected()
     {
         var vm = new MainViewModel();
@@ -294,14 +302,21 @@ public class MainViewModelTests
         Assert.False(vm.CanExportBookmarks());
     }
 
-    [Fact]
-    public void OnSelectedAppChanged_WhenAppHasNoProfiles_AddsUnselectablePlaceholderToProfiles()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OnSelectedBetaAppChanged_WhenAppHasNoProfiles_AddsUnselectablePlaceholderToProfiles(
+        bool createDataDirectory)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "vm_empty_app_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
+        if (createDataDirectory)
+        {
+            Directory.CreateDirectory(tempDir);
+        }
+
         try
         {
-            var appInfo = new BraveAppInfo(BraveAppChannel.Stable, "1.0.0", "/bin/brave", tempDir);
+            var appInfo = new BraveAppInfo(BraveAppChannel.Beta, "1.0.0", "/bin/brave-beta", tempDir);
             var appItem = new AppChannelItem(appInfo);
 
             var vm = new MainViewModel();
@@ -310,8 +325,51 @@ public class MainViewModelTests
             Assert.Single(vm.Profiles);
             Assert.Equal("-- No profiles to export --", vm.Profiles[0].DisplayName);
             Assert.False(vm.Profiles[0].IsEnabled);
+            Assert.Null(vm.Profiles[0].ProfileNameForeground);
             Assert.Null(vm.SelectedProfile);
             Assert.False(vm.CanExportBookmarks());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void OnSelectedAppChanged_SwitchingBetweenPopulatedAndUnconfiguredBetaShowsPlaceholder()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "vm_profiles_" + Guid.NewGuid().ToString("N"));
+        var profileDirectory = Path.Combine(tempDir, "Default");
+        Directory.CreateDirectory(profileDirectory);
+        try
+        {
+            var bookmarksPath = Path.Combine(profileDirectory, "Bookmarks");
+            File.WriteAllText(bookmarksPath, "{}");
+            var vm = new MainViewModel();
+            vm.SelectedApp = new AppChannelItem(new BraveAppInfo(
+                BraveAppChannel.Stable, "1.0.0", "/bin/brave", tempDir));
+
+            Assert.Single(vm.Profiles);
+            Assert.Equal("Default", vm.Profiles[0].DisplayName);
+
+            var betaDataDirectory = Path.Combine(tempDir, "beta-data");
+            vm.SelectedApp = new AppChannelItem(new BraveAppInfo(
+                BraveAppChannel.Beta, "1.0.0", "/bin/brave-beta", betaDataDirectory));
+
+            Assert.Single(vm.Profiles);
+            Assert.Equal("-- No profiles to export --", vm.Profiles[0].DisplayName);
+            Assert.False(vm.Profiles[0].IsEnabled);
+            Assert.Null(vm.SelectedProfile);
+
+            vm.SelectedApp = new AppChannelItem(new BraveAppInfo(
+                BraveAppChannel.Stable, "1.0.0", "/bin/brave", tempDir));
+
+            Assert.Single(vm.Profiles);
+            Assert.Equal("Default", vm.Profiles[0].DisplayName);
+            Assert.Same(vm.Profiles[0], vm.SelectedProfile);
         }
         finally
         {
