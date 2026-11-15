@@ -1,5 +1,14 @@
 namespace BraveBackup.Core;
 
+/// <summary>Identifies the independently installed Brave product.</summary>
+public enum BraveAppProduct
+{
+    /// <summary>The standard Brave browser.</summary>
+    Browser,
+    /// <summary>Brave Origin.</summary>
+    Origin
+}
+
 /// <summary>
 /// Specifies the release channel of a Brave Browser installation.
 /// </summary>
@@ -32,4 +41,8 @@ public sealed record BraveAppInfo(
     BraveAppChannel Channel,
     string Version,
     string ProgramPath,
-    string UserDataDirectory);
+    string UserDataDirectory)
+{
+    /// <summary>Gets the browser product; older callers default to standard Brave.</summary>
+    public BraveAppProduct Product { get; init; } = BraveAppProduct.Browser;
+}

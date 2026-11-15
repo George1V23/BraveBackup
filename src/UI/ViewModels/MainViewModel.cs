@@ -32,7 +32,7 @@ public sealed class AppChannelItem
     public AppChannelItem(BraveAppInfo appInfo)
     {
         AppInfo = appInfo;
-        DisplayName = $"{appInfo.Channel} (v{appInfo.Version})";
+        DisplayName = $"Brave {(appInfo.Product == BraveAppProduct.Origin ? "Origin " : "")}{appInfo.Channel} (v{appInfo.Version})";
     }
 
     /// <inheritdoc />

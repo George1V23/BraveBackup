@@ -10,6 +10,15 @@ namespace Core.Tests;
 public class MainViewModelTests
 {
     [Fact]
+    public void AppChannelItem_DistinguishesOriginFromBrowser()
+    {
+        var browser = new BraveAppInfo(BraveAppChannel.Beta, "1.0", "/browser", "/data");
+        var origin = browser with { Product = BraveAppProduct.Origin };
+
+        Assert.Equal("Brave Beta (v1.0)", new AppChannelItem(browser).DisplayName);
+        Assert.Equal("Brave Origin Beta (v1.0)", new AppChannelItem(origin).DisplayName);
+    }
+    [Fact]
     public void CanExportBookmarks_ReturnsFalseWhenNoProfileSelected()
     {
         var vm = new MainViewModel();

@@ -8,12 +8,13 @@ using System.Text.RegularExpressions;
 namespace BraveBackup.Core;
 
 /// <summary>
-/// Provides cross-platform detection of installed Brave Browser instances (Stable, Beta, Nightly).
+/// Detects supported Brave Browser and Brave Origin installations on Windows and Linux.
 /// </summary>
 public static class BraveAppDetector
 {
     /// <summary>
-    /// Detects all installed Brave Browser applications on the current operating system.
+    /// Detects Brave installations at supported locations on the current operating system.
+    /// Returned data directories are default paths and are not checked for existing profiles.
     /// </summary>
     /// <returns>A read-only list of detected <see cref="BraveAppInfo"/> records.</returns>
     /// <exception cref="PlatformNotSupportedException">Thrown when the current OS is neither Windows nor Linux.</exception>
@@ -24,15 +25,100 @@ public static class BraveAppDetector
 
         if (isWindows)
         {
-            return DetectWindowsApps();
+            return DetectWindowsApps(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                GetRegistryValue, File.Exists, GetFileVersion);
         }
 
         if (isLinux)
         {
-            return DetectLinuxApps();
+            var config = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            if (string.IsNullOrEmpty(config) || !Path.IsPathFullyQualified(config))
+                config = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+            var paths = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':', StringSplitOptions.RemoveEmptyEntries);
+            return DetectLinuxApps(paths, config, File.Exists, path => GetLinuxVersion(path, ""));
         }
 
         throw new PlatformNotSupportedException("Only Windows and Linux are supported.");
+    }
+
+    /// <summary>
+    /// Detects standard and Origin installations across Stable, Beta, and Nightly Windows locations.
+    /// The registry candidate is checked before the standard installation roots for each product and channel.
+    /// </summary>
+    /// <param name="localAppData">Local application data root, also used to construct default user-data paths.</param>
+    /// <param name="programFiles">Program Files installation root.</param>
+    /// <param name="programFilesX86">Program Files (x86) installation root.</param>
+    /// <param name="registry">Reads a registry value by key path and value name, or returns null.</param>
+    /// <param name="exists">Tests whether a candidate executable exists.</param>
+    /// <param name="version">Obtains the version of a detected executable.</param>
+    /// <returns>One entry per detected product and channel, with its default user-data path.</returns>
+    internal static IReadOnlyList<BraveAppInfo> DetectWindowsApps(string localAppData, string programFiles,
+        string programFilesX86, Func<string, string, string?> registry, Func<string, bool> exists, Func<string, string> version)
+    {
+        var results = new List<BraveAppInfo>();
+        foreach (var product in new[] { BraveAppProduct.Browser, BraveAppProduct.Origin })
+        foreach (var channel in new[] { BraveAppChannel.Stable, BraveAppChannel.Beta, BraveAppChannel.Nightly })
+        {
+            var name = ProductDirectory(product, channel);
+            var key = $"HKEY_CURRENT_USER\\Software\\BraveSoftware\\{name}";
+            var directory = registry(key, "installation directory");
+            var candidates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(directory)) candidates.Add(Path.Combine(directory, "brave.exe"));
+            foreach (var root in new[] { localAppData, programFiles, programFilesX86 }.Where(root => !string.IsNullOrWhiteSpace(root)))
+                candidates.Add(Path.Combine(root, "BraveSoftware", name, "Application", "brave.exe"));
+            var executable = candidates.FirstOrDefault(exists);
+            if (executable != null)
+                results.Add(new BraveAppInfo(channel, version(executable), executable,
+                    Path.Combine(localAppData, "BraveSoftware", name, "User Data")) { Product = product });
+        }
+        return results.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Detects standard Brave channels and the stable Origin launcher on Linux.
+    /// Searches common launcher directories before the supplied paths and supported release fallbacks.
+    /// Alternative launcher names for a channel yield a single result.
+    /// </summary>
+    /// <param name="paths">Directories to search for launcher commands.</param>
+    /// <param name="configDirectory">Configuration root used to construct default user-data paths.</param>
+    /// <param name="exists">Tests whether a candidate executable exists.</param>
+    /// <param name="version">Obtains the version of a detected executable.</param>
+    /// <returns>One entry per detected product and channel, with its default user-data path.</returns>
+    internal static IReadOnlyList<BraveAppInfo> DetectLinuxApps(IEnumerable<string> paths, string configDirectory,
+        Func<string, bool> exists, Func<string, string> version)
+    {
+        var results = new List<BraveAppInfo>();
+        var definitions = new[]
+        {
+            (BraveAppProduct.Browser, BraveAppChannel.Stable, new[] { "brave-browser", "brave" }, "/opt/brave.com/brave/brave"),
+            (BraveAppProduct.Browser, BraveAppChannel.Beta, new[] { "brave-browser-beta", "brave-beta" }, ""),
+            (BraveAppProduct.Browser, BraveAppChannel.Nightly, new[] { "brave-browser-nightly", "brave-nightly" }, ""),
+            (BraveAppProduct.Origin, BraveAppChannel.Stable, new[] { "brave-origin" }, "/opt/brave.com/brave-origin/brave")
+        };
+        foreach (var (product, channel, commands, fallback) in definitions)
+        {
+            var candidates = new[] { "/usr/bin", "/usr/local/bin", "/snap/bin" }.Concat(paths)
+                .SelectMany(path => commands.Select(command => Path.Combine(path, command)));
+            if (!string.IsNullOrEmpty(fallback)) candidates = candidates.Append(fallback);
+            var executable = candidates.FirstOrDefault(exists);
+            if (executable != null)
+                results.Add(new BraveAppInfo(channel, version(executable), executable,
+                    Path.Combine(configDirectory, "BraveSoftware", ProductDirectory(product, channel))) { Product = product });
+        }
+        return results.AsReadOnly();
+    }
+
+    /// <summary>Builds the default product directory name for a product and release channel.</summary>
+    /// <param name="product">The Brave product.</param>
+    /// <param name="channel">The release channel.</param>
+    /// <returns>The product directory name, including any channel suffix.</returns>
+    private static string ProductDirectory(BraveAppProduct product, BraveAppChannel channel)
+    {
+        var name = product == BraveAppProduct.Origin ? "Brave-Origin" : "Brave-Browser";
+        return name + (channel switch { BraveAppChannel.Beta => "-Beta", BraveAppChannel.Nightly => "-Nightly", _ => "" });
     }
 
     static IReadOnlyList<BraveAppInfo> DetectWindowsApps()
@@ -232,13 +318,21 @@ public static class BraveAppDetector
                     Arguments = "--version",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     CreateNoWindow = true
                 }
             };
 
             process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(3000);
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(3000))
+            {
+                process.Kill(entireProcessTree: true);
+                return "Unknown";
+            }
+            var output = outputTask.GetAwaiter().GetResult().Trim();
+            errorTask.GetAwaiter().GetResult();
 
             if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
             {
@@ -283,7 +377,7 @@ public static class BraveAppDetector
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = "reg",
-                    Arguments = $"query \"{keyPath}\" /v {valueName}",
+                    Arguments = $"query \"{keyPath}\" /v \"{valueName}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true
