@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using BraveBackup.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -32,7 +34,8 @@ public sealed class AppChannelItem
     public AppChannelItem(BraveAppInfo appInfo)
     {
         AppInfo = appInfo;
-        DisplayName = $"Brave {(appInfo.Product == BraveAppProduct.Origin ? "Origin " : "")}{appInfo.Channel} (v{appInfo.Version})";
+        DisplayName =
+            $"Brave {(appInfo.Product == BraveAppProduct.Origin ? "Origin " : "")}{appInfo.Channel} (v{appInfo.Version})";
     }
 
     /// <inheritdoc />
@@ -69,6 +72,21 @@ public sealed class ProfileItem
     /// </summary>
     public bool IsEnabled { get; }
 
+    /// <summary>Gets the selected account picture or built-in avatar image, or <see langword="null"/> for a generated placeholder.</summary>
+    public Bitmap? AvatarImage { get; }
+
+    /// <summary>Gets whether a discovered profile has no loaded avatar image and should display the generated placeholder.</summary>
+    public bool IsPlaceholderAvatar { get; }
+
+    /// <summary>Gets a brush for the stored profile highlight color, or <see langword="null"/> to retain the UI's default text color.</summary>
+    public IBrush? ProfileNameForeground { get; }
+
+    /// <summary>Gets the generated placeholder fill brush, preferring its stored color, then the profile highlight, then the UI default.</summary>
+    public IBrush AvatarFillBrush { get; }
+
+    /// <summary>Gets the generated placeholder stroke brush, preferring its stored color, then the profile highlight, then the UI default.</summary>
+    public IBrush AvatarStrokeBrush { get; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ProfileItem"/> class for a discovered profile.
     /// </summary>
@@ -80,6 +98,13 @@ public sealed class ProfileItem
         DisplayName = profileInfo.ProfileName;
         StatusDescription = HasBookmarks ? "Bookmarks available" : "No bookmarks found";
         IsEnabled = true;
+        AvatarImage = ProfileAvatarLoader.Load(profileInfo);
+        IsPlaceholderAvatar = AvatarImage == null;
+        ProfileNameForeground = CreateBrush(profileInfo.ProfileHighlightColor);
+        AvatarFillBrush =
+            CreateBrush(profileInfo.DefaultAvatarFillColor ?? profileInfo.ProfileHighlightColor ?? 0xFFE8EAEDu)!;
+        AvatarStrokeBrush =
+            CreateBrush(profileInfo.DefaultAvatarStrokeColor ?? profileInfo.ProfileHighlightColor ?? 0xFF5F6368u)!;
     }
 
     /// <summary>
@@ -94,6 +119,19 @@ public sealed class ProfileItem
         DisplayName = message;
         StatusDescription = string.Empty;
         IsEnabled = isEnabled;
+        AvatarImage = null;
+        IsPlaceholderAvatar = false;
+        ProfileNameForeground = null;
+        AvatarFillBrush = CreateBrush(0xFFE8EAEDu)!;
+        AvatarStrokeBrush = CreateBrush(0xFF5F6368u)!;
+    }
+
+    /// <summary>Creates a solid brush for an ARGB color when one is available.</summary>
+    /// <param name="color">The optional unsigned ARGB color.</param>
+    /// <returns>A solid color brush, or <see langword="null"/> when no color was stored.</returns>
+    private static IBrush? CreateBrush(uint? color)
+    {
+        return color is { } value ? new SolidColorBrush(Color.FromUInt32(value)) : null;
     }
 
     /// <inheritdoc />

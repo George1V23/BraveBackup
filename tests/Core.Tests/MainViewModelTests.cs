@@ -1,7 +1,12 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using BraveBackup.Core;
+using UI;
 using UI.ViewModels;
 using Xunit;
 
@@ -9,6 +14,11 @@ namespace Core.Tests;
 
 public class MainViewModelTests
 {
+    static MainViewModelTests()
+    {
+        AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+    }
+
     [Fact]
     public void AppChannelItem_DistinguishesOriginFromBrowser()
     {
@@ -18,6 +28,123 @@ public class MainViewModelTests
         Assert.Equal("Brave Beta (v1.0)", new AppChannelItem(browser).DisplayName);
         Assert.Equal("Brave Origin Beta (v1.0)", new AppChannelItem(origin).DisplayName);
     }
+
+    [Fact]
+    public void ProfileItem_LoadsSelectedAvatarAndUsesProfileHighlightColor()
+    {
+        var profile = new BraveProfileInfo("Profile", "/profile", "/profile/Bookmarks")
+        {
+            AvatarIconIndex = 38,
+            ProfileHighlightColor = 0xFF123456
+        };
+
+        var item = new ProfileItem(profile);
+
+        Assert.NotNull(item.AvatarImage);
+        Assert.False(item.IsPlaceholderAvatar);
+        Assert.Equal(Color.FromUInt32(0xFF123456), Assert.IsType<SolidColorBrush>(item.ProfileNameForeground).Color);
+    }
+
+    [Theory]
+    [InlineData(56, "avatar_edgy_brave.png")]
+    [InlineData(89, "avatar_bonbon_ninja.png")]
+    public void ProfileItem_LoadsMatchingBraveAvatar(int avatarIndex, string assetName)
+    {
+        var profile = new BraveProfileInfo("Profile", "/profile", "/profile/Bookmarks")
+        {
+            AvatarIconIndex = avatarIndex,
+            ProfileHighlightColor = 0xFF123456
+        };
+
+        var item = new ProfileItem(profile);
+
+        Assert.NotNull(item.AvatarImage);
+        Assert.False(item.IsPlaceholderAvatar);
+        Assert.Equal(Color.FromUInt32(0xFF123456), Assert.IsType<SolidColorBrush>(item.ProfileNameForeground).Color);
+
+        using var expectedStream = AssetLoader.Open(new Uri($"avares://UI/Assets/BraveAvatars/{assetName}"));
+        using var expected = new Bitmap(expectedStream);
+        using var expectedPng = new MemoryStream();
+        using var actualPng = new MemoryStream();
+        expected.Save(expectedPng, PngBitmapEncoderOptions.Default);
+        item.AvatarImage!.Save(actualPng, PngBitmapEncoderOptions.Default);
+
+        Assert.Equal(expectedPng.ToArray(), actualPng.ToArray());
+    }
+
+    [Fact]
+    public void ProfileAvatarLoader_LoadsAllBraveAvatarIndices()
+    {
+        for (var index = 56; index < 90; index++)
+        {
+            using var avatar = ProfileAvatarLoader.Load(new BraveProfileInfo("Profile", "/profile", "/profile/Bookmarks")
+            {
+                AvatarIconIndex = index
+            });
+
+            Assert.NotNull(avatar);
+        }
+    }
+
+    [Fact]
+    public void ProfileItem_UsesProfilePictureAndFallsBackToBundledAvatarWhenUnreadable()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "profile_avatar_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var picturePath = Path.Combine(tempDir, "Google Profile Picture.png");
+            using (var source = AssetLoader.Open(new Uri("avares://UI/Assets/ProfileAvatars/avatar-00.png")))
+            using (var destination = File.Create(picturePath))
+            {
+                source.CopyTo(destination);
+            }
+
+            var withPicture = new BraveProfileInfo("Profile", tempDir, Path.Combine(tempDir, "Bookmarks"))
+            {
+                AvatarIconIndex = 38,
+                AvatarPicturePath = picturePath
+            };
+
+            var pictureItem = new ProfileItem(withPicture);
+            Assert.NotNull(pictureItem.AvatarImage);
+            Assert.Equal(38, pictureItem.AvatarImage!.PixelSize.Width);
+
+            File.WriteAllText(picturePath, "not an image");
+            var fallbackItem = new ProfileItem(withPicture);
+            Assert.NotNull(fallbackItem.AvatarImage);
+            Assert.False(fallbackItem.IsPlaceholderAvatar);
+            Assert.True(fallbackItem.AvatarImage!.PixelSize.Width > 1);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ProfileItem_UsesColoredPlaceholderWhenNoAvatarImageIsAvailable()
+    {
+        var profile = new BraveProfileInfo("Profile", "/profile", "/profile/Bookmarks")
+        {
+            AvatarIconIndex = 26,
+            ProfileHighlightColor = 0xFF123456,
+            DefaultAvatarFillColor = 0xFFABCDEF,
+            DefaultAvatarStrokeColor = 0xFF654321
+        };
+
+        var item = new ProfileItem(profile);
+
+        Assert.Null(item.AvatarImage);
+        Assert.True(item.IsPlaceholderAvatar);
+        Assert.Equal(Color.FromUInt32(0xFFABCDEF), Assert.IsType<SolidColorBrush>(item.AvatarFillBrush).Color);
+        Assert.Equal(Color.FromUInt32(0xFF654321), Assert.IsType<SolidColorBrush>(item.AvatarStrokeBrush).Color);
+        Assert.Equal(Color.FromUInt32(0xFF123456), Assert.IsType<SolidColorBrush>(item.ProfileNameForeground).Color);
+    }
+
     [Fact]
     public void CanExportBookmarks_ReturnsFalseWhenNoProfileSelected()
     {

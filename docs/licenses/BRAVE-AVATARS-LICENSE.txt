@@ -1,0 +1,14 @@
+Brave profile avatar artwork attribution
+
+The PNG files in src/UI/Assets/BraveAvatars/ are copied from the Brave
+browser source repository:
+
+  https://github.com/brave/brave-core/tree/d36e8c924b742f48fdf42f1f2c44641619136578/app/theme/default_100_percent/common/avatars
+
+Source revision: d36e8c924b742f48fdf42f1f2c44641619136578
+Copyright (c) 2022 The Brave Authors
+
+The artwork is distributed under the Mozilla Public License, version 2.0
+(MPL-2.0). The license text is available at:
+
+  https://mozilla.org/MPL/2.0/
