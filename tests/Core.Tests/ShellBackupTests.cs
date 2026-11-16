@@ -6,14 +6,17 @@ namespace BraveBackup.Core.Tests;
 
 public sealed class ShellBackupTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "ShellBackupTests_" + Guid.NewGuid().ToString("N"));
+    private readonly string _root =
+        Path.Combine(Path.GetTempPath(), "ShellBackupTests_" + Guid.NewGuid().ToString("N"));
+
     private readonly BraveAppInfo _app;
     private readonly BraveProfileInfo _profile;
 
     public ShellBackupTests()
     {
         var data = Path.Combine(_root, "browser-data");
-        var directory = Path.Combine(data, "Default"); Directory.CreateDirectory(directory);
+        var directory = Path.Combine(data, "Default");
+        Directory.CreateDirectory(directory);
         _app = new BraveAppInfo(BraveAppChannel.Stable, "fixture", Path.Combine(_root, "brave"), data);
         _profile = new BraveProfileInfo("Private fixture profile", directory, Path.Combine(directory, "Bookmarks"));
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json"), _profile.BookmarksPath);
@@ -21,8 +24,10 @@ public sealed class ShellBackupTests : IDisposable
 
     private async Task<ShellViewModel> Create()
     {
-        var shell = new ShellViewModel(() => new[] { _app }, _ => new[] { _profile }, _ => new BraveProfileSummary(3, 0));
-        await shell.RefreshAsync(); shell.Activate(shell.Installations[0]);
+        var shell = new ShellViewModel(() => new[] { _app }, _ => new[] { _profile },
+            _ => new BraveProfileSummary(3, 0));
+        await shell.RefreshAsync();
+        shell.Activate(shell.Installations[0]);
         shell.Options.BackupPath = Path.Combine(_root, "result.bravebackup");
         return shell;
     }
@@ -57,18 +62,23 @@ public sealed class ShellBackupTests : IDisposable
         using var shell = await Create();
         shell.Installations[0].Profiles[0].IsSelected = true;
         const string password = "Fixture-secret-4812";
-        shell.Options.Password = password; shell.Options.PasswordConfirmation = password;
+        shell.Options.Password = password;
+        shell.Options.PasswordConfirmation = password;
         await shell.CreateBackupAsync();
         Assert.True(shell.BackupSucceeded);
         Assert.False(shell.IsBackupRunning);
-        Assert.True(shell.HasBackupFeedback); Assert.True(shell.HasBackupReport);
+        Assert.True(shell.HasBackupFeedback);
+        Assert.True(shell.HasBackupReport);
         Assert.Contains(Path.GetFullPath(shell.Options.BackupPath), shell.BackupMessage);
         Assert.DoesNotContain(password, shell.BackupReport);
         Assert.DoesNotContain(_profile.ProfileName, shell.BackupReport);
         Assert.DoesNotContain(_root, shell.BackupReport);
-        Assert.Empty(shell.Options.Password); Assert.Empty(shell.Options.PasswordConfirmation);
-        shell.ToggleBackupReport(); Assert.True(shell.ShowBackupReport);
-        using var archive = File.OpenRead(shell.Options.BackupPath); BackupArchive.Validate(archive, password);
+        Assert.Empty(shell.Options.Password);
+        Assert.Empty(shell.Options.PasswordConfirmation);
+        shell.ToggleBackupReport();
+        Assert.True(shell.ShowBackupReport);
+        using var archive = File.OpenRead(shell.Options.BackupPath);
+        BackupArchive.Validate(archive, password);
     }
 
     [Fact]
@@ -84,14 +94,17 @@ public sealed class ShellBackupTests : IDisposable
         var pending = shell.CreateBackupAsync();
         // Fingerprinting is asynchronous; yield until confirmation is pending.
         for (var i = 0; i < 100 && !shell.IsBackupRunning; i++) await Task.Delay(5);
-        Assert.True(shell.IsBackupRunning); Assert.False(shell.IsWorkspaceEnabled);
+        Assert.True(shell.IsBackupRunning);
+        Assert.False(shell.IsWorkspaceEnabled);
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
         shell.ResetBackupForm();
         Assert.True(shell.Installations[0].Profiles[0].IsSelected);
-        shell.CancelBackup(); choice.SetResult(true);
+        shell.CancelBackup();
+        choice.SetResult(true);
         await pending;
         Assert.Equal("original", File.ReadAllText(target));
-        Assert.False(shell.BackupSucceeded); Assert.Contains("cancelled", shell.BackupMessage);
+        Assert.False(shell.BackupSucceeded);
+        Assert.Contains("cancelled", shell.BackupMessage);
         Assert.Contains("Published: no", shell.BackupReport);
     }
 
@@ -115,12 +128,15 @@ public sealed class ShellBackupTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SettingsSelection_CreatesRequestedCategoriesAndShowsStoredCounts(bool bookmarks)
     {
         using var shell = await Create();
         File.Delete(_profile.BookmarksPath);
-        if (bookmarks) File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json"), _profile.BookmarksPath);
+        if (bookmarks)
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json"),
+                _profile.BookmarksPath);
         File.WriteAllText(Path.Combine(_profile.ProfileDirectory, "Preferences"), "{}");
         shell.Installations[0].Profiles[0].IsSelected = true;
         shell.Options.EncryptBackup = false;
@@ -147,11 +163,18 @@ public sealed class ShellBackupTests : IDisposable
         shell.Options.Categories.Single(item => item.Id == "extensions").IsSelected = true;
         Assert.True(shell.CreateBackupCommand.CanExecute(null));
         await shell.CreateBackupAsync();
-        Assert.False(shell.BackupSucceeded); Assert.False(File.Exists(shell.Options.BackupPath));
+        Assert.False(shell.BackupSucceeded);
+        Assert.False(File.Exists(shell.Options.BackupPath));
         var confirmations = 0;
-        shell.ConfirmUnencryptedExtensionData = path => { confirmations++; Assert.Equal(shell.Options.FullBackupPath, path); return Task.FromResult(true); };
+        shell.ConfirmUnencryptedExtensionData = path =>
+        {
+            confirmations++;
+            Assert.Equal(shell.Options.FullBackupPath, path);
+            return Task.FromResult(true);
+        };
         await shell.CreateBackupAsync();
-        Assert.True(shell.BackupSucceeded); Assert.Equal(1, confirmations);
+        Assert.True(shell.BackupSucceeded);
+        Assert.Equal(1, confirmations);
         Assert.Contains("Extension packages: 0; versions: 0", shell.BackupMessage);
         Assert.Contains("extensions (completed)", shell.BackupReport);
         using var source = File.OpenRead(shell.Options.BackupPath);
@@ -161,7 +184,8 @@ public sealed class ShellBackupTests : IDisposable
     [Theory]
     [InlineData(BraveBackup.Platform.ProcessPresence.Running)]
     [InlineData(BraveBackup.Platform.ProcessPresence.Unknown)]
-    public async Task ExtensionUi_BlocksLiveOrIndeterminateBrowserWithSafeFeedback(BraveBackup.Platform.ProcessPresence state)
+    public async Task ExtensionUi_BlocksLiveOrIndeterminateBrowserWithSafeFeedback(
+        BraveBackup.Platform.ProcessPresence state)
     {
         using var shell = await Create();
         shell.ExtensionBrowserState = () => state;
@@ -169,33 +193,120 @@ public sealed class ShellBackupTests : IDisposable
         shell.Installations[0].Profiles[0].IsSelected = true;
         shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
         shell.Options.Categories.Single(item => item.Id == "extensions").IsSelected = true;
-        shell.ConfirmUnencryptedExtensionData = _ => throw new InvalidOperationException("Must not prompt before process check.");
+        shell.ConfirmUnencryptedExtensionData =
+            _ => throw new InvalidOperationException("Must not prompt before process check.");
         await shell.CreateBackupAsync();
-        Assert.False(shell.BackupSucceeded); Assert.Contains("Brave", shell.BackupMessage);
+        Assert.False(shell.BackupSucceeded);
+        Assert.Contains("Brave", shell.BackupMessage);
         Assert.Contains("extensions-browser-", shell.BackupReport);
-        Assert.DoesNotContain(_root, shell.BackupReport); Assert.False(File.Exists(shell.Options.BackupPath));
+        Assert.DoesNotContain(_root, shell.BackupReport);
+        Assert.False(File.Exists(shell.Options.BackupPath));
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task SessionsUi_FreezesNativeChoiceAndDisplaysPersistedCounts(bool native)
     {
         using var shell = await Create();
-        var directory = Path.Combine(_profile.ProfileDirectory, "Sessions"); Directory.CreateDirectory(directory);
+        var directory = Path.Combine(_profile.ProfileDirectory, "Sessions");
+        Directory.CreateDirectory(directory);
         File.WriteAllBytes(Path.Combine(directory, "Session_10"), BraveSessionDecoderTests.Fixture());
-        shell.Installations[0].Profiles[0].IsSelected = true; shell.Options.EncryptBackup = false;
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.EncryptBackup = false;
         shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
         shell.Options.Categories.Single(item => item.Id == "sessions").IsSelected = true;
         shell.Options.IncludeNativeSessionFiles = native;
         if (native)
         {
-            await shell.CreateBackupAsync(); Assert.False(shell.BackupSucceeded); Assert.False(File.Exists(shell.Options.BackupPath));
+            await shell.CreateBackupAsync();
+            Assert.False(shell.BackupSucceeded);
+            Assert.False(File.Exists(shell.Options.BackupPath));
             shell.ConfirmUnencryptedNativeSessions = _ => Task.FromResult(true);
         }
-        Assert.True(shell.CreateBackupCommand.CanExecute(null)); await shell.CreateBackupAsync();
-        Assert.True(shell.BackupSucceeded); Assert.Contains("windows: 2; tabs: 3; groups: 1", shell.BackupMessage);
-        Assert.Contains("persisted", shell.BackupMessage); Assert.DoesNotContain("selected.example", shell.BackupReport);
-        using var source = File.OpenRead(shell.Options.BackupPath); Assert.Equal(4, BraveSettingsBackup.ValidateArchive(source).FormatVersion);
+
+        Assert.True(shell.CreateBackupCommand.CanExecute(null));
+        await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded);
+        Assert.Contains("windows: 2; tabs: 3; groups: 1", shell.BackupMessage);
+        Assert.Contains("persisted", shell.BackupMessage);
+        Assert.DoesNotContain("selected.example", shell.BackupReport);
+        using var source = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(4, BraveSettingsBackup.ValidateArchive(source).FormatVersion);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TabManagerPlusUi_UsesConsentAndReportsActualStoredCounts(bool encrypted)
+    {
+        TabManagerPlusBackupTests.PrepareProfile(_profile.ProfileDirectory);
+        using var shell = await Create();
+        shell.ExtensionBrowserState = () => BraveBackup.Platform.ProcessPresence.Stopped;
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
+        shell.Options.Categories.Single(item => item.Id == "tabmanagerplus").IsSelected = true;
+        shell.Options.EncryptBackup = encrypted;
+        if (encrypted)
+        {
+            shell.Options.Password = "fixture";
+            shell.Options.PasswordConfirmation = "fixture";
+        }
+
+        Assert.True(shell.CreateBackupCommand.CanExecute(null));
+        Assert.DoesNotContain("Deselect other", shell.BackupAvailability);
+        if (!encrypted)
+        {
+            await shell.CreateBackupAsync();
+            Assert.False(shell.BackupSucceeded);
+            Assert.False(File.Exists(shell.Options.BackupPath));
+        }
+
+        var prompts = 0;
+        shell.ConfirmUnencryptedTabManagerPlus = path =>
+        {
+            prompts++;
+            Assert.Equal(shell.Options.FullBackupPath, path);
+            Assert.True(shell.IsBackupRunning);
+            Assert.False(shell.IsWorkspaceEnabled);
+            return Task.FromResult(true);
+        };
+        await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded);
+        Assert.Equal(encrypted ? 0 : 1, prompts);
+        Assert.Contains("profiles: 1; windows: 1; tabs: 1", shell.BackupMessage);
+        Assert.DoesNotContain("Synthetic work", shell.BackupReport);
+        Assert.DoesNotContain("example.invalid", shell.BackupReport);
+        Assert.Empty(shell.Options.Password);
+        using var source = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(5, BraveSettingsBackup.ValidateArchive(source, encrypted ? "fixture" : null).FormatVersion);
+    }
+
+    [Fact]
+    public async Task TabManagerPlusUi_FreezesRequestAndDoesNotReuseConsent()
+    {
+        TabManagerPlusBackupTests.PrepareProfile(_profile.ProfileDirectory);
+        using var shell = await Create();
+        shell.ExtensionBrowserState = () => BraveBackup.Platform.ProcessPresence.Stopped;
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.EncryptBackup = false;
+        var category = shell.Options.Categories.Single(item => item.Id == "tabmanagerplus");
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
+        category.IsSelected = true;
+        shell.ConfirmUnencryptedTabManagerPlus = _ =>
+        {
+            category.IsSelected = false;
+            return Task.FromResult(true);
+        };
+        await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded);
+        Assert.Contains("tabmanagerplus (completed)", shell.BackupReport);
+        var original = File.ReadAllBytes(shell.Options.BackupPath);
+        category.IsSelected = true;
+        shell.ConfirmUnencryptedTabManagerPlus = _ => Task.FromResult(false);
+        await shell.CreateBackupAsync();
+        Assert.False(shell.BackupSucceeded);
+        Assert.Equal(original, File.ReadAllBytes(shell.Options.BackupPath));
     }
 
     public void Dispose() => Directory.Delete(_root, true);

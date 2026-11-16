@@ -20,7 +20,8 @@ public partial class MainWindow : Window
             ExportFilePicker = PickExportFileAsync,
             ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync,
             ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync,
-            ConfirmUnencryptedNativeSessions = ConfirmUnencryptedNativeSessionsAsync
+            ConfirmUnencryptedNativeSessions = ConfirmUnencryptedNativeSessionsAsync,
+            ConfirmUnencryptedTabManagerPlus = ConfirmUnencryptedTabManagerPlusAsync
         };
         Opened += OnOpened;
         Closed += OnClosed;
@@ -43,9 +44,16 @@ public partial class MainWindow : Window
             Margin = new Avalonia.Thickness(24), Spacing = 16,
             Children =
             {
-                new TextBlock { Text = "Replace this existing file after the new backup is verified?", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new TextBlock
+                {
+                    Text = "Replace this existing file after the new backup is verified?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
                 new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, replace } }
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, replace }
+                }
             }
         };
         return await dialog.ShowDialog<bool>(this);
@@ -70,11 +78,13 @@ public partial class MainWindow : Window
             {
                 new TextBlock
                 {
-                    Text = "Copied extension data may contain readable private information or authentication material. Anyone with access to this file can read its contents. Save this backup without encryption?",
+                    Text =
+                        "Copied extension data may contain readable private information or authentication material. Anyone with access to this file can read its contents. Save this backup without encryption?",
                     TextWrapping = Avalonia.Media.TextWrapping.Wrap
                 },
                 new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+                new StackPanel
+                    { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
             }
         };
         return await dialog.ShowDialog<bool>(this);
@@ -97,9 +107,46 @@ public partial class MainWindow : Window
             Margin = new Avalonia.Thickness(24), Spacing = 16,
             Children =
             {
-                new TextBlock { Text = "Native session files contain browsing data beyond portable URLs and titles. Anyone with file access can read this unencrypted backup. Save these raw files without encryption?", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new TextBlock
+                {
+                    Text =
+                        "Native session files contain browsing data beyond portable URLs and titles. Anyone with file access can read this unencrypted backup. Save these raw files without encryption?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
                 new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+                new StackPanel
+                    { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+            }
+        };
+        return await dialog.ShowDialog<bool>(this);
+    }
+
+    /// <summary>Confirms readable saved URLs, titles and private-window records for this specific unencrypted save.</summary>
+    private async Task<bool> ConfirmUnencryptedTabManagerPlusAsync(string destination)
+    {
+        var dialog = new Window
+        {
+            Title = "Save saved windows without encryption?", Width = 580, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel" };
+        var save = new Button { Content = "Save unencrypted" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        save.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24), Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text =
+                        "Saved windows contain readable URLs, titles, window names and any stored private-window records. Anyone with file access can read this unencrypted backup. Save without encryption?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
+                new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel
+                    { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
             }
         };
         return await dialog.ShowDialog<bool>(this);

@@ -1,9 +1,9 @@
 # Tab Manager Plus saved-window capture checkpoint
 
 Implemented 2026-11-17. The dedicated extension project now validates saved windows;
-Backup supplies stable read-only profile capture. **Archive/UI integration is pending**:
-selecting TabManagerPlus in Create Backup still produces the existing explicit unsupported
-message. No archive format, restore operation or application control changed here.
+Backup supplies stable read-only profile capture. The subsequent
+[archive/UI increment](tabmanagerplus-backup.md) now enables this category and documents
+archive v5. This document describes the capture layer; no restore operation is included.
 
 ## Verified source and initial compatibility
 
@@ -115,8 +115,6 @@ All **514 solution tests pass** on Linux (447 Core, 48 Brave, 13 Linux, 6 Window
 The solution including UI/CLI builds with zero warnings/errors. These results do not
 constitute a native Windows or real installed-Brave end-to-end capture test.
 
-Next: add documented portable archive capability/version handling with backward-compatible
-v1–4 readers, validate payload semantics and source consistency, wire category feedback
-and the unencrypted-data warning, and test mixed categories, cancellation, destination
-preservation and final source checks before enabling the UI category. More multi-table
+The subsequent archive/UI increment adds portable version handling with backward-compatible
+v1–4 reads, semantic verification, feedback, warnings and publication tests. More multi-table
 LevelDB compatibility fixtures remain useful coverage work before release.

@@ -28,6 +28,9 @@ public partial class ShellViewModel
     /// <summary>Gets or sets explicit confirmation before each unencrypted native-session save.</summary>
     public Func<string, Task<bool>>? ConfirmUnencryptedNativeSessions { get; set; }
 
+    /// <summary>Gets per-save confirmation that unencrypted saved windows expose URLs, titles and private records.</summary>
+    public Func<string, Task<bool>>? ConfirmUnencryptedTabManagerPlus { get; set; }
+
     /// <summary>Gets whether one frozen archive request is currently running.</summary>
     [ObservableProperty] private bool _isBackupRunning;
 
@@ -61,15 +64,16 @@ public partial class ShellViewModel
         : !HasBackupScope || !BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected))
             ? "Select at least one profile for backup."
             : !Options.Categories.Any(item => item.IsSelected)
-                ? "Select supported Bookmarks, Settings, Extensions and/or Sessions."
+                ? "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus."
                 : Options.Categories.Any(item =>
-                    item.IsSelected && item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions"))
-                    ? "Bookmarks, Settings, Extensions and persisted Sessions are available. Deselect other categories to create an archive."
+                    item.IsSelected &&
+                    item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus"))
+                    ? "Bookmarks, Settings, Extensions, persisted Sessions and supported TabManagerPlus saved windows are available. Deselect other categories to create an archive."
                     : Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation)
                         ? Options.PasswordValidation
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
                             ? BackupDestinationValidation
-                            : "Ready to create a backup. Extensions requires Brave closed. Restore is not available yet.";
+                            : "Ready to create a backup. Extensions and TabManagerPlus require Brave closed. Restore is not available yet.";
 
     private string BackupDestinationValidation
     {
@@ -96,7 +100,8 @@ public partial class ShellViewModel
                                       Options.Categories.Any(item => item.IsSelected) &&
                                       Options.Categories.All(item =>
                                           !item.IsSelected ||
-                                          item.Id is "bookmarks" or "settings" or "extensions" or "sessions") &&
+                                          item.Id is "bookmarks" or "settings" or "extensions" or "sessions"
+                                              or "tabmanagerplus") &&
                                       (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
                                       string.IsNullOrEmpty(BackupDestinationValidation);
 
@@ -152,6 +157,11 @@ public partial class ShellViewModel
                     IncludeNativeFiles = includeNativeSessions,
                     ConfirmUnencryptedNativeFiles = path =>
                         ConfirmUnencryptedNativeSessions?.Invoke(path) ?? Task.FromResult(false)
+                }, new TabManagerPlusBackupOptions
+                {
+                    ObserveBrowserState = ExtensionBrowserState,
+                    ConfirmUnencryptedData = path =>
+                        ConfirmUnencryptedTabManagerPlus?.Invoke(path) ?? Task.FromResult(false)
                 });
             if (_disposed) return;
             _completedBackupPath = result.Destination;
@@ -163,6 +173,7 @@ public partial class ShellViewModel
                 BackupMessage += "\n" + result.ExtensionsSummary +
                                  "\nRaw files were saved; extensions have not been installed or restored.";
             if (categories.Contains("sessions")) BackupMessage += "\n" + result.SessionsSummary;
+            if (categories.Contains("tabmanagerplus")) BackupMessage += "\n" + result.TabManagerPlusSummary;
             BackupReport = result.Report;
         }
         catch (OperationCanceledException)

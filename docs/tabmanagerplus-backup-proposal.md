@@ -3,13 +3,13 @@
 Status: the user's continuation accepted the recommended automatic profile capture and
 proposed saved-window scope. Research/fixtures are the first implementation checkpoint;
 see [the storage research](tabmanagerplus-research.md). The
-[offline reader](tabmanagerplus-storage-reader.md) is implemented; application integration is pending.
+[offline reader](tabmanagerplus-storage-reader.md), capture and
+[archive/UI integration](tabmanagerplus-backup.md) are implemented for review.
 
 The existing Extensions category can preserve raw extension files and local/sync stores.
-It does not decode Tab Manager Plus saved windows. The dedicated category still blocks
-backup as unsupported. Its dedicated project now contains the tested storage reader;
-decoded saved-window capture is now implemented as a tested component, while archive/UI
-integration remains pending. See [the capture checkpoint](tabmanagerplus-capture.md).
+It does not decode Tab Manager Plus saved windows. The dedicated category now creates
+validated portable saved-window archives using its own tested reader/capture components.
+See [the capture checkpoint](tabmanagerplus-capture.md) and current archive/UI behavior.
 
 ## Source findings
 
@@ -75,4 +75,5 @@ reported for another decision, not replaced with raw-only success.
 5. Review the working Backup increment before starting passwords or restore/import.
 
 No restore, merge, extension installation, browser helper, or live-profile write is
-included in this proposal. No package, application code or backup format changed here.
+included in this proposal. Implementation progress and the documented v5 format are
+recorded in the linked checkpoints. No new package was required.

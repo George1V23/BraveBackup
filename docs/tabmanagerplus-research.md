@@ -2,8 +2,8 @@
 
 Inspected 2026-11-17. Scope: the accepted [saved-window proposal](tabmanagerplus-backup-proposal.md).
 The subsequent [offline reader checkpoint](tabmanagerplus-storage-reader.md) implements
-storage decoding with tests. No package dependency, archive capability or UI behavior
-has changed. TabManagerPlus remains explicitly unsupported in backup creation.
+storage decoding with tests. Subsequent capture and [archive/UI integration](tabmanagerplus-backup.md)
+now enable supported saved-window backups in v5. No new package was required.
 
 ## Primary sources and storage semantics
 

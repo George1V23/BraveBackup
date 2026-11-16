@@ -23,6 +23,9 @@ public sealed record BackupResult(string Destination, string Report, long Bytes)
 
     /// <summary>Gets last-persisted session counts and limits without URLs, titles or source paths.</summary>
     public string SessionsSummary { get; init; } = string.Empty;
+
+    /// <summary>Gets saved-window counts and capture limits without browsing content or source paths.</summary>
+    public string TabManagerPlusSummary { get; init; } = string.Empty;
 }
 
 /// <summary>User-facing operation failure with a stable sanitized error code.</summary>
@@ -66,6 +69,19 @@ public static class BraveArchiveBackup
         CancellationToken cancellationToken, ExtensionBackupOptions extensionOptions,
         SessionBackupOptions sessionOptions)
     {
+        return await CreateAsync(selections, categories, destination, password, compression, protectedDirectories,
+            applicationVersion, confirmOverwrite, progress, cancellationToken, extensionOptions, sessionOptions,
+            new TabManagerPlusBackupOptions());
+    }
+
+    /// <summary>Creates supported-category archives with saved-window consent and process observation supplied by the host.</summary>
+    public static async Task<BackupResult> CreateAsync(IReadOnlyList<BraveBackupSelection> selections,
+        IReadOnlyList<string> categories, string destination, string? password, string compression,
+        IReadOnlyList<string> protectedDirectories, string applicationVersion,
+        Func<string, Task<bool>> confirmOverwrite, IProgress<BackupProgress>? progress,
+        CancellationToken cancellationToken, ExtensionBackupOptions extensionOptions,
+        SessionBackupOptions sessionOptions, TabManagerPlusBackupOptions tabManagerPlusOptions)
+    {
         // Freeze caller-owned collections before any await or worker-thread access.
         var scope = selections.Select(item => new BraveBackupSelection(item.Installation, item.Profiles.ToArray()))
             .ToArray();
@@ -76,9 +92,9 @@ public static class BraveArchiveBackup
         if (selectedCategories.Length == 0 ||
             selectedCategories.Distinct(StringComparer.Ordinal).Count() != selectedCategories.Length ||
             selectedCategories.Any(category =>
-                category is not ("bookmarks" or "settings" or "extensions" or "sessions")))
+                category is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus")))
             throw new BackupOperationException("unsupported-category",
-                "Select supported Bookmarks, Settings, Extensions and/or Sessions. Deselect unfinished categories before creating a backup.");
+                "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus. Passwords remain unavailable.");
         if (scope.Length == 0 || scope.Any(item => item.Profiles.Count == 0))
             throw new BackupOperationException("empty-scope",
                 "Select at least one profile for each installation included in the backup.");
@@ -115,18 +131,32 @@ public static class BraveArchiveBackup
             sessionSession = new SessionCaptureSession(sessionOptions.IncludeNativeFiles, cancellationToken);
         }
 
+        TabManagerPlusCaptureSession? tabManagerPlus = null;
+        if (selectedCategories.Contains("tabmanagerplus"))
+        {
+            tabManagerPlus = new TabManagerPlusCaptureSession(scope, tabManagerPlusOptions, cancellationToken);
+            await Task.Run(tabManagerPlus.EnsureStopped, cancellationToken);
+            if (password is null && (tabManagerPlusOptions.ConfirmUnencryptedData is null ||
+                                     !await tabManagerPlusOptions.ConfirmUnencryptedData(target)))
+                throw new OperationCanceledException(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Run(tabManagerPlus.EnsureStopped, cancellationToken);
+        }
+
         var initial = await Task.Run(() => Fingerprint(target, cancellationToken), cancellationToken);
         if (initial != null && !await confirmOverwrite(target)) throw new OperationCanceledException(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return await Task.Run(() => Run(scope, target, password, compression, roots, applicationVersion,
-                initial, progress, cancellationToken, selectedCategories, extensionSession, sessionSession),
+                initial, progress, cancellationToken, selectedCategories, extensionSession, sessionSession,
+                tabManagerPlus),
             cancellationToken);
     }
 
     private static BackupResult Run(BraveBackupSelection[] selections, string target, string? password,
         string compression, string[] roots, string applicationVersion, string? initialFingerprint,
         IProgress<BackupProgress>? progress, CancellationToken token, string[] categories,
-        ExtensionCaptureSession? extensions, SessionCaptureSession? sessions)
+        ExtensionCaptureSession? extensions, SessionCaptureSession? sessions,
+        TabManagerPlusCaptureSession? tabManagerPlus)
     {
         var start = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
@@ -137,7 +167,7 @@ public static class BraveArchiveBackup
         var settingsCounts = new List<int>();
         var hasBookmarks = categories.Contains("bookmarks", StringComparer.Ordinal);
         var hasSettings = categories.Contains("settings", StringComparer.Ordinal);
-        var capabilities = new[] { "bookmarks", "settings", "extensions", "sessions" }
+        var capabilities = new[] { "bookmarks", "settings", "extensions", "sessions", "tabmanagerplus" }
             .Where(categories.Contains).Select(category => category + "-v1").ToArray();
         var entryCount = 1;
         var temp = Path.Combine(Path.GetDirectoryName(target)!, $".bravebackup-{Guid.NewGuid():N}.tmp");
@@ -254,6 +284,15 @@ public static class BraveArchiveBackup
                                         profileCategories.Sum(item => item.Files.Length)));
                                     extensions?.EnsureStopped(true);
                                 }
+
+                                if (tabManagerPlus is not null)
+                                {
+                                    progress?.Report(new BackupProgress("Reading/writing saved windows", done, total));
+                                    profileCategories.Add(tabManagerPlus.Capture(profile.ProfileDirectory,
+                                        $"installations/{installationId:D}/profiles/{profileId:D}/tabmanagerplus/", zip,
+                                        compression, ArchiveLimits.MaxEntries - entryCount -
+                                                     profileCategories.Sum(item => item.Files.Length)));
+                                }
                             }
                             catch (BackupOperationException error)
                             {
@@ -263,7 +302,8 @@ public static class BraveArchiveBackup
 
                             entryCount += profileCategories.Sum(item => item.Files.Length);
                             if (entryCount > ArchiveLimits.MaxEntries ||
-                                expanded + (extensions?.RawBytes ?? 0) + (sessions?.Bytes ?? 0) >
+                                expanded + (extensions?.RawBytes ?? 0) + (sessions?.Bytes ?? 0) +
+                                (tabManagerPlus?.Bytes ?? 0) >
                                 ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
                                 throw new BackupOperationException("size-limit",
                                     "Selected data exceeds archive resource limits.");
@@ -280,7 +320,10 @@ public static class BraveArchiveBackup
                     }
 
                     BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive",
-                        sessions is not null ? 4 : extensions is not null ? 3 : hasSettings ? 2 : 1, id,
+                        tabManagerPlus is not null ? 5 :
+                        sessions is not null ? 4 :
+                        extensions is not null ? 3 :
+                        hasSettings ? 2 : 1, id,
                         start,
                         applicationVersion, capabilities, compression, installations.ToArray()));
                 }
@@ -300,9 +343,11 @@ public static class BraveArchiveBackup
                     "The destination changed during backup. Start again to review replacement.");
             sessions?.VerifySources();
             extensions?.VerifySources();
+            tabManagerPlus?.VerifySources();
             token.ThrowIfCancellationRequested();
             extensions?.EnsureStopped(true);
             var bytes = new FileInfo(temp).Length;
+            tabManagerPlus?.EnsureStopped();
             File.Move(temp, target, overwrite: initialFingerprint != null);
             var end = DateTimeOffset.UtcNow;
             var categoryNames = string.Join(", ", capabilities.Select(value => value[..^3]));
@@ -312,19 +357,24 @@ public static class BraveArchiveBackup
             var sessionsSummary = sessions is null
                 ? string.Empty
                 : $"Last persisted sessions: {sessions.Profiles}; windows: {sessions.WindowCount}; tabs: {sessions.TabCount}; groups: {sessions.GroupCount}\nGroups without stored metadata: {sessions.MissingGroupMetadata}; native files: {sessions.NativeCount}\nSource: modern unencrypted session format 3. Persisted data may be older than visible browser state. Restore is not available.";
+            var tabManagerPlusSummary = tabManagerPlus is null
+                ? string.Empty
+                : $"TabManagerPlus saved-window profiles: {tabManagerPlus.Profiles}; windows: {tabManagerPlus.WindowCount}; tabs: {tabManagerPlus.TabCount}\nSource: supported 7.0.0 stored saved windows, captured with Brave observed closed. Unsaved live windows, extension preferences and native tab-group metadata are not included. Restore is not available.";
             var settingsSummary = hasSettings
                 ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
                 : string.Empty;
             var report =
-                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}{(extensionsSummary.Length == 0 ? "" : "\n" + extensionsSummary)}{(sessionsSummary.Length == 0 ? "" : "\n" + sessionsSummary)}";
+                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}{(extensionsSummary.Length == 0 ? "" : "\n" + extensionsSummary)}{(sessionsSummary.Length == 0 ? "" : "\n" + sessionsSummary)}{(tabManagerPlusSummary.Length == 0 ? "" : "\n" + tabManagerPlusSummary)}";
             return new BackupResult(target, report, bytes)
             {
                 SettingsSummary = settingsSummary.TrimStart(), ExtensionsSummary = extensionsSummary,
-                SessionsSummary = sessionsSummary
+                SessionsSummary = sessionsSummary, TabManagerPlusSummary = tabManagerPlusSummary
             };
         }
         finally
+
         {
+            tabManagerPlus?.Dispose();
             try
             {
                 if (temporaryCreated) File.Delete(temp);

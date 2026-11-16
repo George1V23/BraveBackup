@@ -1,14 +1,14 @@
 # TabManagerPlus offline storage reader
 
-Implemented parser checkpoint, 2026-11-17. This is a storage component, not yet a working
-TabManagerPlus backup category. No profile is opened, no package was added and archive
-versions 1–4 are unchanged.
+Implemented parser checkpoint, 2026-11-17. This storage component performs no profile
+access. Subsequent capture and [archive/UI integration](tabmanagerplus-backup.md) now
+enable saved-window backups using v5; versions 1–4 remain supported. No package was added.
 
 ## Project and API
 
 `src/Extensions/TabManagerPlus/TabManagerPlus.csproj` targets .NET 10 with no project or
 NuGet dependencies. Backup now references it for the separate
-[saved-window capture component](tabmanagerplus-capture.md); archive/UI wiring remains pending. Its namespace is
+[saved-window capture component](tabmanagerplus-capture.md) and semantic archive validation. Its namespace is
 `BraveBackup.Extensions.TabManagerPlus`.
 
 `OfflineLevelDb.ReadValue(files, key, cancellationToken)` synchronously reads a map of
@@ -87,5 +87,5 @@ These are not native Windows or real installed-Brave end-to-end results.
 
 The subsequent capture checkpoint implements store-package research, typed saved-window
 parsing and stable stopped-browser capture with additional tests. Archive capability/version
-validation, UI feedback and more multi-table/manifest-transition coverage remain pending.
-The UI still blocks this category explicitly until integration is complete.
+validation and UI feedback are implemented in the linked archive/UI increment. Further
+multi-table/manifest-transition coverage remains release validation work.

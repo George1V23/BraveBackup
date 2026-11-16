@@ -82,7 +82,9 @@ TabManagerPlus automatic profile capture and saved-window scope were accepted:
 first checkpoint. The [bounded storage reader](tabmanagerplus-storage-reader.md) is
 implemented and tested in its own extension project. [Saved-window parsing, store-package
 research and read-only capture](tabmanagerplus-capture.md) are implemented and tested.
-Archive/UI integration remains pending; the category still blocks backup explicitly.
+Archive/UI integration is implemented for review: [TabManagerPlus backup and archive v5](tabmanagerplus-backup.md).
+The existing category now creates verified supported saved-window backups. Passwords are
+the next category scope review; no password implementation starts from this checkpoint.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and

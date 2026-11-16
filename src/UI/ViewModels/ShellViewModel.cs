@@ -119,7 +119,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the selected installation and profile names within the current scope.</summary>
     public string BackupSelectionSummary => string.Join("\n", BackupInstallations.Select(installation =>
         $"{installation.DisplayName}: " + (installation.Profiles.Any(profile => profile.IsSelected)
-            ? string.Join(", ", installation.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.DisplayName))
+            ? string.Join(", ",
+                installation.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.DisplayName))
             : "No profiles selected")));
 
     /// <summary>Gets selected categories and the optional session-file choice without secret values.</summary>
@@ -132,11 +133,25 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     public string BackupSizeEstimate => "Unavailable — compressed archive size depends on the captured profile data.";
 
     /// <summary>Gets actual discovery or export state without copying paths or secrets into the status bar.</summary>
-    public string StatusText => IsBackupRunning ? BackupStage :
-        HasBackupFeedback && !BackupSucceeded ? "Backup needs attention — see the Backup tab." : IsRefreshing ? "Searching for Brave installations…" :
-        !string.IsNullOrEmpty(DiscoveryMessage) ? DiscoveryMessage :
-        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy ? "Exporting bookmarks…" :
-        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError ? "Export needs attention — see the Export tab." : "Ready";
+    public string StatusText => IsBackupRunning
+        ? BackupStage
+        :
+        HasBackupFeedback && !BackupSucceeded
+            ? "Backup needs attention — see the Backup tab."
+            :
+            IsRefreshing
+                ? "Searching for Brave installations…"
+                :
+                !string.IsNullOrEmpty(DiscoveryMessage)
+                    ? DiscoveryMessage
+                    :
+                    SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy
+                        ? "Exporting bookmarks…"
+                        :
+                        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError
+                            ?
+                            "Export needs attention — see the Export tab."
+                            : "Ready";
 
     /// <summary>Gets the active browser version, separate from bulk scope.</summary>
     public string ActiveVersionText => ActiveInstallation?.VersionText ?? "No active Brave installation";
@@ -153,13 +168,17 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     }
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs args) => NotifyBackupSummary();
-    private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args) => OnPropertyChanged(nameof(StatusText));
+
+    private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args) =>
+        OnPropertyChanged(nameof(StatusText));
+
     partial void OnIsRefreshingChanged(bool value)
     {
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(IsWorkspaceEnabled));
         NotifyBackupValidation();
     }
+
     partial void OnDiscoveryMessageChanged(string value) => OnPropertyChanged(nameof(StatusText));
 
     /// <summary>Creates a shell with injectable read-only discovery, clock and destination picker.</summary>
@@ -335,6 +354,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         ConfirmBackupOverwrite = null;
         ConfirmUnencryptedExtensionData = null;
         ConfirmUnencryptedNativeSessions = null;
+        ConfirmUnencryptedTabManagerPlus = null;
         ExtensionBrowserState = null;
         Options.PropertyChanged -= OnOptionsChanged;
         ExportViewModel.PropertyChanged -= OnExportStateChanged;

@@ -19,7 +19,8 @@ creation. Workflows on unreviewed pages remain unavailable.
 - Clicking a sidebar profile opens it in Profiles. It does not check the profile for backup.
 - Export All appears only when installations are checked. It opens the Backup tab with
   profile groups from those installations. If Refresh removed the active installation,
-  Export All activates the first checked installation so the workspace can be shown. Clicking a header returns to individual scope
+  Export All activates the first checked installation so the workspace can be shown. Clicking a header returns to
+  individual scope
   while preserving bulk checkmarks and remembered profile selections.
 - Profile select all affects only profiles in the current backup scope. A mixed selection
   is shown as indeterminate. Category choices are shared across the scoped profiles.
@@ -49,7 +50,8 @@ and profile highlight colors reuse the existing presentation behavior.
   is editable and Browse chooses a destination. These controls do not write files.
 - Bookmarks is initially selected; other implemented categories start unchecked. The later
   review approved Sessions (open windows, tabs and tab groups) and optional native session
-  files enabled only with Sessions. Their selection controls are implemented; session data handling is not implemented yet.
+  files enabled only with Sessions. Their selection controls are implemented; session data handling is not implemented
+  yet.
 - Encryption starts checked. Password and confirmation are masked, with a shared reveal
   control, matching validation and a labelled heuristic strength estimate. The estimate
   considers length/character variety; it is not a cryptographic guarantee.
@@ -65,9 +67,9 @@ and profile highlight colors reuse the existing presentation behavior.
 
 ## Existing export and deferred pages
 
-**Backup** contains only the custom archive form. Its former exporter-launcher row is removed.
-**Restore** is reserved for restoring backup files; it does not combine import operations.
-**Export** directly embeds `BookmarkExportView`, with profile selection, destination text,
+**Backup** contains only the custom archive form. Its former exporter-launcher row is removed. **Restore** is reserved
+for restoring backup files; it does not combine import operations. **Export** directly embeds `BookmarkExportView`, with
+profile selection, destination text,
 HTML/JSON format choice, native Browse, export action and operation feedback. Panel 2 includes a selectable,
 wrapping full destination path, so long paths and resolved relative input remain visible. There is no separate exporter
 window in the shell workflow. The selected sidebar installation supplies the profile list;
@@ -109,7 +111,8 @@ when closed. This preserves the existing standalone type without duplicate form 
 - `ShellViewModel`: injectable discovery, activation, bulk scope, profile selection,
   refresh preservation, picker delegation and reset coordination. Construction does not
   scan the machine; the window calls RefreshAsync when opened. Dispose releases owned
-  avatar bitmaps, disposes the embedded exporter and clears option secrets; a finishing scan cannot repopulate a closed shell.
+  avatar bitmaps, disposes the embedded exporter and clears option secrets; a finishing scan cannot repopulate a closed
+  shell.
 - `InstallationViewModel`: independent active, expanded and bulk-check states; profile list
   and navigation commands. Dispose releases profile presentation resources.
 - `ProfileSelectionViewModel`: existing ProfileItem presentation plus count strings,
@@ -191,3 +194,12 @@ The existing Sessions/native-file controls now create validated last-persisted s
 archives for supported format-3 sources. Feedback reports window/tab/group/native counts
 and persistence limits. Unencrypted native files require explicit confirmation; mixed
 Extensions still requires Brave closed. See [Sessions backup](sessions-backup.md).
+
+## TabManagerPlus saved windows
+
+The existing category now captures supported 7.0.0 saved windows with Brave observed
+closed. Its description/About text state that scope; completion shows actual saved-window
+profile/window/tab counts. Unencrypted saves require a fresh destination-specific warning
+covering readable URLs/titles/names/private records. Cancel saves nothing. Mixed categories
+write validated v5 archives; existing selections retain their old format versions when
+TabManagerPlus is absent. See [TabManagerPlus backup](tabmanagerplus-backup.md).

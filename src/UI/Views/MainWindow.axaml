@@ -389,16 +389,20 @@
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="4   Backup summary" Classes="section" />
                                         <TextBlock Text="{Binding BackupSelectionSummary}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding BackupCategorySummary}" TextWrapping="Wrap" Classes="muted" />
-                                        <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
+                                        <TextBlock Text="{Binding BackupCategorySummary}" TextWrapping="Wrap"
+                                                   Classes="muted" />
+                                        <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap"
+                                                   Classes="muted" />
                                         <TextBlock Text="Destination" FontWeight="SemiBold" />
-                                        <SelectableTextBlock Text="{Binding Options.FullBackupPath}" TextWrapping="Wrap" />
+                                        <SelectableTextBlock Text="{Binding Options.FullBackupPath}"
+                                                             TextWrapping="Wrap" />
                                         <StackPanel Orientation="Horizontal" Spacing="12">
                                             <TextBlock Text="Compression:" Classes="muted" />
                                             <TextBlock Text="{Binding Options.Compression}" />
                                         </StackPanel>
                                         <TextBlock Text="Approximate archive size" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding BackupSizeEstimate}" Classes="muted" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding BackupSizeEstimate}" Classes="muted"
+                                                   TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                                 <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
@@ -411,30 +415,42 @@
                                         </Border>
                                         <StackPanel Grid.Column="1" Spacing="8">
                                             <TextBlock Text="About the backup" Classes="section" />
-                                            <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
-                                            <TextBlock Text="Bookmarks, supported Settings, Extensions and persisted Sessions are available. Settings covers stored bookmark-bar, Home and startup choices. Extensions requires Brave closed and saves all discovered versions plus raw local/sync storage only; IndexedDB and other stores are not included. Unencrypted data is readable by anyone with file access. Sessions reflects last persisted state, not a live browser snapshot. Unsupported/encrypted session formats block saving. Restore is not available yet."
+                                            <TextBlock Text="{Binding Options.ProtectionDescription}"
                                                        TextWrapping="Wrap" Classes="muted" />
+                                            <TextBlock
+                                                Text="Bookmarks, supported Settings, Extensions, persisted Sessions and supported TabManagerPlus 7.0.0 saved windows are available. Settings covers stored bookmark-bar, Home and startup choices. Extensions and TabManagerPlus require Brave closed. Extensions saves version files and raw local/sync storage; IndexedDB and other stores are excluded. TabManagerPlus captures stored saved windows, not unsaved live windows or extension preferences. Unencrypted data is readable by anyone with file access. Sessions reflects last persisted state; unsupported/encrypted session formats block saving. Restore is not available yet."
+                                                TextWrapping="Wrap" Classes="muted" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="{Binding BackupAvailability}" TextWrapping="Wrap" Classes="muted" />
                                     <Grid ColumnDefinitions="Auto,*,Auto">
-                                        <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" IsEnabled="{Binding !IsBackupRunning}" />
-                                        <Button Grid.Column="2" Content="Create Backup" Command="{Binding CreateBackupCommand}"
+                                        <Button Content="Reset" Command="{Binding ResetBackupFormCommand}"
+                                                IsEnabled="{Binding !IsBackupRunning}" />
+                                        <Button Grid.Column="2" Content="Create Backup"
+                                                Command="{Binding CreateBackupCommand}"
                                                 ToolTip.Tip="{Binding BackupAvailability}" />
                                     </Grid>
                                     <!-- Progress describes actual stages; work without a reliable total is indeterminate. -->
-                                    <StackPanel x:Name="BackupProgressPanel" IsVisible="{Binding IsBackupRunning}" Spacing="8">
+                                    <StackPanel x:Name="BackupProgressPanel" IsVisible="{Binding IsBackupRunning}"
+                                                Spacing="8">
                                         <TextBlock Text="{Binding BackupStage}" TextWrapping="Wrap" />
                                         <ProgressBar IsIndeterminate="True" />
-                                        <Button Content="Cancel" Command="{Binding CancelBackupCommand}" HorizontalAlignment="Right" />
+                                        <Button Content="Cancel" Command="{Binding CancelBackupCommand}"
+                                                HorizontalAlignment="Right" />
                                     </StackPanel>
-                                    <StackPanel x:Name="BackupCompletionPanel" IsVisible="{Binding HasBackupFeedback}" Spacing="8">
+                                    <StackPanel x:Name="BackupCompletionPanel" IsVisible="{Binding HasBackupFeedback}"
+                                                Spacing="8">
                                         <TextBlock Text="{Binding BackupMessage}" TextWrapping="Wrap" />
-                                        <Button Content="Open destination folder" Command="{Binding OpenBackupFolderCommand}" IsVisible="{Binding BackupSucceeded}" />
-                                        <Button Content="View operation report" Command="{Binding ToggleBackupReportCommand}" IsVisible="{Binding HasBackupReport}" />
-                                        <SelectableTextBlock Text="{Binding BackupReport}" IsVisible="{Binding ShowBackupReport}" TextWrapping="Wrap" />
+                                        <Button Content="Open destination folder"
+                                                Command="{Binding OpenBackupFolderCommand}"
+                                                IsVisible="{Binding BackupSucceeded}" />
+                                        <Button Content="View operation report"
+                                                Command="{Binding ToggleBackupReportCommand}"
+                                                IsVisible="{Binding HasBackupReport}" />
+                                        <SelectableTextBlock Text="{Binding BackupReport}"
+                                                             IsVisible="{Binding ShowBackupReport}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </StackPanel>
 
@@ -533,12 +549,16 @@
                 </TabItem>
             </TabControl>
         </Grid>
-        <Border Grid.Row="1" Grid.Column="1" Background="#20202F" BorderBrush="#49415E" BorderThickness="0,1,0,0" Padding="14,7">
+        <Border Grid.Row="1" Grid.Column="1" Background="#20202F" BorderBrush="#49415E" BorderThickness="0,1,0,0"
+                Padding="14,7">
             <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBlock Text="{Binding StatusText}" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Text="{Binding ActiveVersionText}" Classes="muted" FontSize="11" Margin="16,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding OperatingSystemText}" Classes="muted" FontSize="11" MaxWidth="260"
-                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OperatingSystemText}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding ActiveVersionText}" Classes="muted" FontSize="11"
+                           Margin="16,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding OperatingSystemText}" Classes="muted" FontSize="11"
+                           MaxWidth="260"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OperatingSystemText}"
+                           VerticalAlignment="Center" />
             </Grid>
         </Border>
     </Grid>

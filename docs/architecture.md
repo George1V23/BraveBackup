@@ -23,7 +23,9 @@ CLI ──┘     └────── Platform
 - **UI** and **CLI** consume Backup independently. UI-only avatars/presentation stay in UI.
 - **Extensions/TabManagerPlus** is a dependency-free .NET 10 project containing a bounded
   offline storage reader and typed saved-window parser. Backup references it for version-gated
-  read-only capture; archive/UI wiring is pending. See [the capture checkpoint](tabmanagerplus-capture.md).
+  read-only capture and semantic archive validation. Core owns generic v5 envelope/integrity
+  checks without referencing this project; UI supplies per-operation consent and feedback.
+  See [TabManagerPlus backup](tabmanagerplus-backup.md).
 
 `HostEnvironment` centralizes OS calls. Browser path conventions and launcher definitions
 remain in Backup, where injected filesystem/registry/version delegates allow existing
@@ -94,7 +96,7 @@ for manifest v3. Backup owns approved source paths, extension ID/manifest rules 
 source-stability/stopped-browser policy. Platform owns native file-type inspection, safe
 read flags and process observations. Old v1/v2 writes/reads stay compatible; see
 [Extensions backup](extensions-backup.md). TabManagerPlus-specific saved-window parsing and
-read-only capture are now available as separate components; archive/UI integration is pending.
+read-only capture and archive/UI integration are now available; see [TabManagerPlus backup](tabmanagerplus-backup.md).
 
 ## Sessions category increment
 

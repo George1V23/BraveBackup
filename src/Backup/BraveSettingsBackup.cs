@@ -119,16 +119,24 @@ public static class BraveSettingsBackup
                      .SelectMany(item => item.Categories))
         {
             token.ThrowIfCancellationRequested();
+            if (category.Id == "tabmanagerplus")
+            {
+                BraveTabManagerPlusBackup.ValidateCategory(zip, category, token);
+                continue;
+            }
+
             if (category.Id == "sessions")
             {
                 BraveSessionBackup.ValidateCategory(zip, category, token);
                 continue;
             }
+
             if (category.Id == "extensions")
             {
                 BraveExtensionBackup.ValidateCategory(zip, category, token);
                 continue;
             }
+
             if (category.Id != "settings") continue;
             var descriptor = category.Files.Single();
             var bytes = new byte[checked((int)descriptor.Length)];

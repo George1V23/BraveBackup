@@ -43,9 +43,11 @@ public partial class BackupOptionsViewModel : ViewModelBase
         new("sessions", "Sessions", "Last persisted windows, tabs and supported groups; may lag live browser state"),
         new("bookmarks", "Bookmarks", "Bookmark folders and URLs", true),
         new("passwords", "Passwords", "Saved logins; protection enabled by default"),
-        new("extensions", "Extensions", "All discovered version files and raw local/sync storage; Brave must be closed"),
-        new("settings", "Settings", "Bookmark-bar visibility, Home button/homepage, startup mode and addresses (stored values only)"),
-        new("tabmanagerplus", "TabManagerPlus", "Supported saved windows, groups and extension data")
+        new("extensions", "Extensions",
+            "All discovered version files and raw local/sync storage; Brave must be closed"),
+        new("settings", "Settings",
+            "Bookmark-bar visibility, Home button/homepage, startup mode and addresses (stored values only)"),
+        new("tabmanagerplus", "TabManagerPlus", "Stored saved windows from supported 7.0.0; requires Brave closed")
     };
 
     /// <summary>Gets the approved compression choices.</summary>
