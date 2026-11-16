@@ -116,6 +116,48 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Gets the selected installation and profile names within the current scope.</summary>
+    public string BackupSelectionSummary => string.Join("\n", BackupInstallations.Select(installation =>
+        $"{installation.DisplayName}: " + (installation.Profiles.Any(profile => profile.IsSelected)
+            ? string.Join(", ", installation.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.DisplayName))
+            : "No profiles selected")));
+
+    /// <summary>Gets selected categories and the optional session-file choice without secret values.</summary>
+    public string BackupCategorySummary => Options.Categories.Any(item => item.IsSelected)
+        ? string.Join(", ", Options.Categories.Where(item => item.IsSelected).Select(item => item.Name)) +
+          (Options.IncludeNativeSessionFiles ? " (including native session files)" : string.Empty)
+        : "No data categories selected";
+
+    /// <summary>Gets why a reliable archive size cannot yet be calculated.</summary>
+    public string BackupSizeEstimate => "Unavailable — archive format and category sizes are not defined yet.";
+
+    /// <summary>Gets the reason the archive action remains disabled in this interface increment.</summary>
+    public string BackupAvailability => "Archive creation is unavailable until the archive format and encryption contract are approved and implemented.";
+
+    /// <summary>Gets actual discovery or export state without copying paths or secrets into the status bar.</summary>
+    public string StatusText => IsRefreshing ? "Searching for Brave installations…" :
+        !string.IsNullOrEmpty(DiscoveryMessage) ? DiscoveryMessage :
+        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy ? "Exporting bookmarks…" :
+        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError ? "Export needs attention — see the Export tab." : "Ready";
+
+    /// <summary>Gets the active browser version, separate from bulk scope.</summary>
+    public string ActiveVersionText => ActiveInstallation?.VersionText ?? "No active Brave installation";
+
+    /// <summary>Gets the actual host OS through the Platform project.</summary>
+    public string OperatingSystemText => HostEnvironment.OperatingSystemDescription;
+
+    private void NotifyBackupSummary()
+    {
+        OnPropertyChanged(nameof(BackupSelectionSummary));
+        OnPropertyChanged(nameof(BackupCategorySummary));
+        OnPropertyChanged(nameof(ActiveVersionText));
+    }
+
+    private void OnOptionsChanged(object? sender, PropertyChangedEventArgs args) => NotifyBackupSummary();
+    private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args) => OnPropertyChanged(nameof(StatusText));
+    partial void OnIsRefreshingChanged(bool value) => OnPropertyChanged(nameof(StatusText));
+    partial void OnDiscoveryMessageChanged(string value) => OnPropertyChanged(nameof(StatusText));
+
     /// <summary>Creates a shell with injectable read-only discovery, clock and destination picker.</summary>
     /// <remarks>Construction does not scan the machine. The window invokes RefreshAsync when opened.</remarks>
     public ShellViewModel(Func<IReadOnlyList<BraveAppInfo>>? detect = null,
@@ -128,12 +170,14 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         _summarize = summarize ?? BraveProfileSummaryReader.Read;
         _pickBackupPath = pickBackupPath;
         Options = new BackupOptionsViewModel(clock);
+        Options.PropertyChanged += OnOptionsChanged;
         ExportViewModel = new MainViewModel(
             () => ExportFilePicker?.Invoke() ?? Task.FromResult<IStorageFile?>(null),
             () => Installations.Select(item => item.AppInfo).ToArray(),
             app => Installations
                 .FirstOrDefault(item => PathComparer.Equals(InstallationKey(item.AppInfo), InstallationKey(app)))
                 ?.Profiles.Select(profile => profile.ProfileInfo).ToArray() ?? Array.Empty<BraveProfileInfo>());
+        ExportViewModel.PropertyChanged += OnExportStateChanged;
     }
 
     /// <summary>Rescans off the UI thread, preserving matching active, expanded, bulk and profile selections.</summary>
@@ -281,6 +325,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        Options.PropertyChanged -= OnOptionsChanged;
+        ExportViewModel.PropertyChanged -= OnExportStateChanged;
         Options.ClearSecrets();
         ExportViewModel.Dispose();
         ExportFilePicker = null;
@@ -351,9 +397,14 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(AllProfilesSelected));
         OnPropertyChanged(nameof(WorkspaceTitle));
         OnPropertyChanged(nameof(ScopeDescription));
+        NotifyBackupSummary();
     }
 
-    partial void OnSelectedTabIndexChanged(int value) => OnPropertyChanged(nameof(WorkspaceTitle));
+    partial void OnSelectedTabIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(WorkspaceTitle));
+        OnPropertyChanged(nameof(StatusText));
+    }
 
     private void OnInstallationChanged(object? sender, PropertyChangedEventArgs args)
     {
@@ -366,7 +417,10 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     private void OnProfileChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(ProfileSelectionViewModel.IsSelected))
+        {
             OnPropertyChanged(nameof(AllProfilesSelected));
+            NotifyBackupSummary();
+        }
     }
 
     private void Unsubscribe(InstallationViewModel installation)

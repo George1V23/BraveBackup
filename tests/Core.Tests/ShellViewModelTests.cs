@@ -45,6 +45,60 @@ public sealed class ShellViewModelTests : IDisposable
         clock: () => new DateTime(2026, 11, 16, 10, 30, 0));
 
     [Fact]
+    public async Task BackupSummary_FollowsScopeSelectionOptionsRefreshAndReset()
+    {
+        using var shell = CreateShell();
+        await shell.RefreshAsync();
+        var stable = shell.Installations[0];
+        var beta = shell.Installations[1];
+        shell.Activate(stable);
+        Assert.Contains("No profiles selected", shell.BackupSelectionSummary);
+        var changed = new List<string?>();
+        shell.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+        stable.Profiles[0].IsSelected = true;
+        Assert.Contains("Personal", shell.BackupSelectionSummary);
+        Assert.Contains(nameof(shell.BackupSelectionSummary), changed);
+        Assert.DoesNotContain("Beta", shell.BackupSelectionSummary);
+        stable.IsChecked = beta.IsChecked = true;
+        beta.Profiles[1].IsSelected = true;
+        shell.ExportAll();
+        Assert.Contains("Beta: Work", shell.BackupSelectionSummary);
+        shell.Options.Categories.Single(item => item.Id == "sessions").IsSelected = true;
+        shell.Options.IncludeNativeSessionFiles = true;
+        Assert.Contains("native session files", shell.BackupCategorySummary);
+        await shell.RefreshAsync();
+        Assert.Contains("Beta: Work", shell.BackupSelectionSummary);
+        Assert.True(shell.Options.IncludeNativeSessionFiles);
+        shell.ResetBackupForm();
+        Assert.DoesNotContain("Personal", shell.BackupSelectionSummary);
+        Assert.Equal("Bookmarks", shell.BackupCategorySummary);
+        Assert.Contains("Unavailable", shell.BackupSizeEstimate);
+        Assert.Contains("unavailable", shell.BackupAvailability);
+    }
+
+    [Fact]
+    public async Task Status_UsesRealDiscoveryExportAndActiveVersionState()
+    {
+        using var shell = CreateShell();
+        await shell.RefreshAsync();
+        Assert.Equal("Ready", shell.StatusText);
+        shell.Activate(shell.Installations[1]);
+        Assert.Equal("v2.0", shell.ActiveVersionText);
+        Assert.False(string.IsNullOrWhiteSpace(shell.OperatingSystemText));
+        shell.SelectedTabIndex = ShellViewModel.ExportTabIndex;
+        shell.ExportViewModel.IsBusy = true;
+        Assert.Contains("Exporting", shell.StatusText);
+        shell.ExportViewModel.IsBusy = false;
+        shell.ExportViewModel.IsStatusError = true;
+        Assert.Contains("attention", shell.StatusText);
+        shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
+        Assert.Equal("Ready", shell.StatusText);
+        _failDetection = true;
+        await shell.RefreshAsync();
+        Assert.Contains("Could not refresh", shell.StatusText);
+    }
+
+    [Fact]
     public async Task ActivationBulkSelectionAndExpansion_AreIndependent()
     {
         using var shell = CreateShell();

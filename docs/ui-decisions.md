@@ -39,7 +39,8 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Sessions is approved: include open windows, tabs and tab groups from selected profiles.
 - Include native session files is approved as an optional additional inclusion for best-effort
   restoration, enabled only when Sessions is selected. These two controls were explicitly
-  kept during the subsequent deferred-control review; implementation is still pending.
+  kept during the subsequent deferred-control review. Selection controls are implemented;
+  session data handling is pending.
 - Select all categories supports a mixed state. Choices apply across selected profiles;
   differences are intended for the later summary.
 
@@ -69,7 +70,8 @@ decided it was unnecessary. The first implementation increment was approved on 2
   when appropriate.
 - Create Backup: validate selections and destination, obtain the required confirmation
   for plaintext passwords, then create the `.bravebackup` file. Never silently omit
-  selected data. These controls are approved; implementation is still pending.
+  selected data. The summary and action layout are implemented; real size calculation
+  and archive creation await the archive engine.
 
 ## Approved backup feedback controls
 
@@ -81,7 +83,9 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Decorative illustration: keep a reference-style backup graphic adapted to placeholder branding;
   it is decorative only.
 
-All five controls were kept during the subsequent review. Their implementation is pending.
+All five controls were kept during the subsequent review. The explanatory panel, status
+bar, decorative graphic and idle operation layouts are implemented. Actual progress,
+cancellation and completion actions await the archive engine.
 The Backup page's previously deferred controls have now been reviewed; this does not approve
 unreviewed behavior for Restore, Import, Backups, Settings, About or Merge/Sync.
 

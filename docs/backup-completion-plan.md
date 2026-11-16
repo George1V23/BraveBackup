@@ -7,6 +7,8 @@ Each numbered increment ends with user review before the next increment starts.
 
 ## 1. Complete the approved Backup interface
 
+Implemented for user review. See [behavior and validation](backup-interface-completion.md).
+
 Scope:
 
 - Add Sessions and optional Include native session files, enabled only with Sessions.

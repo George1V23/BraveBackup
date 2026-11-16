@@ -37,9 +37,10 @@ public partial class BackupOptionsViewModel : ViewModelBase
 {
     private readonly Func<DateTime> _clock;
 
-    /// <summary>Gets the selectable categories; deferred Sessions is intentionally absent.</summary>
+    /// <summary>Gets the approved selectable categories; selection does not imply archive support.</summary>
     public ObservableCollection<BackupCategoryItem> Categories { get; } = new()
     {
+        new("sessions", "Sessions", "Open windows, tabs and tab groups"),
         new("bookmarks", "Bookmarks", "Bookmark folders and URLs", true),
         new("passwords", "Passwords", "Saved logins; protection enabled by default"),
         new("extensions", "Extensions", "Installed extensions and supported settings/data"),
@@ -67,6 +68,42 @@ public partial class BackupOptionsViewModel : ViewModelBase
 
     /// <summary>Gets or sets the selected compression level.</summary>
     [ObservableProperty] private string _compression = "Balanced";
+
+    /// <summary>Gets whether the optional native session files can be included.</summary>
+    public bool SessionsSelected => Categories.Any(item => item.Id == "sessions" && item.IsSelected);
+
+    /// <summary>Gets or sets the best-effort native session choice, valid only when Sessions is selected.</summary>
+    [ObservableProperty] private bool _includeNativeSessionFiles;
+
+    partial void OnIncludeNativeSessionFilesChanged(bool value)
+    {
+        if (value && !SessionsSelected) IncludeNativeSessionFiles = false;
+    }
+
+    /// <summary>Gets the full proposed destination without creating a file or directory.</summary>
+    public string FullBackupPath
+    {
+        get
+        {
+            try
+            {
+                return string.IsNullOrWhiteSpace(BackupPath)
+                    ? "Choose a destination"
+                    : System.IO.Path.GetFullPath(BackupPath);
+            }
+            catch (Exception error) when (error is ArgumentException or NotSupportedException or System.IO.IOException)
+            {
+                return "Invalid destination path";
+            }
+        }
+    }
+
+    partial void OnBackupPathChanged(string value) => OnPropertyChanged(nameof(FullBackupPath));
+
+    /// <summary>Gets an accurate description of the proposed archive protection and current limits.</summary>
+    public string ProtectionDescription => EncryptBackup
+        ? "Encryption is selected. No archive has been created. Archive encryption and restore are not available yet."
+        : "Encryption is off. A future archive would be readable by anyone with file access. Archive creation and restore are not available yet.";
 
     /// <summary>Gets the combined state, or sets all categories; assigning mixed state does nothing.</summary>
     public bool? AllCategoriesSelected
@@ -118,6 +155,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
         PasswordConfirmation = string.Empty;
         RevealPassword = false;
         Compression = "Balanced";
+        IncludeNativeSessionFiles = false;
         foreach (var item in Categories) item.IsSelected = item.Id == "bookmarks";
     }
 
@@ -132,6 +170,8 @@ public partial class BackupOptionsViewModel : ViewModelBase
     private void OnCategoryChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName != nameof(BackupCategoryItem.IsSelected)) return;
+        if (!SessionsSelected) IncludeNativeSessionFiles = false;
+        OnPropertyChanged(nameof(SessionsSelected));
         OnPropertyChanged(nameof(AllCategoriesSelected));
         OnPropertyChanged(nameof(RequiresPlaintextConfirmation));
     }
@@ -139,6 +179,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
     partial void OnEncryptBackupChanged(bool value)
     {
         if (!value) ClearSecrets();
+        OnPropertyChanged(nameof(ProtectionDescription));
         OnPropertyChanged(nameof(RequiresPlaintextConfirmation));
         OnPropertyChanged(nameof(PasswordValidation));
     }

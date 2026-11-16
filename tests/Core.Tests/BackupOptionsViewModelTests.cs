@@ -7,6 +7,38 @@ namespace BraveBackup.Core.Tests;
 public sealed class BackupOptionsViewModelTests
 {
     [Fact]
+    public void NativeSessions_RequireSessionsAndResetClearsTheChoice()
+    {
+        var options = new BackupOptionsViewModel();
+        options.IncludeNativeSessionFiles = true;
+        Assert.False(options.IncludeNativeSessionFiles);
+        var sessions = options.Categories.Single(item => item.Id == "sessions");
+        sessions.IsSelected = true;
+        options.IncludeNativeSessionFiles = true;
+        Assert.True(options.IncludeNativeSessionFiles);
+        sessions.IsSelected = false;
+        Assert.False(options.IncludeNativeSessionFiles);
+        sessions.IsSelected = true;
+        options.IncludeNativeSessionFiles = true;
+        options.Reset();
+        Assert.False(options.SessionsSelected);
+        Assert.False(options.IncludeNativeSessionFiles);
+    }
+
+    [Fact]
+    public void DestinationAndProtection_DescribeCurrentChoicesWithoutWritingFiles()
+    {
+        var options = new BackupOptionsViewModel();
+        options.BackupPath = "fixture.bravebackup";
+        Assert.Equal(Path.GetFullPath(options.BackupPath), options.FullBackupPath);
+        Assert.Contains("Encryption is selected", options.ProtectionDescription);
+        options.EncryptBackup = false;
+        Assert.Contains("Encryption is off", options.ProtectionDescription);
+        options.BackupPath = "\0";
+        Assert.Equal("Invalid destination path", options.FullBackupPath);
+    }
+
+    [Fact]
     public void CategorySelection_ExposesMixedStateAndNotifiesForIndividualChanges()
     {
         var options = new BackupOptionsViewModel();
@@ -20,7 +52,7 @@ public sealed class BackupOptionsViewModelTests
         Assert.Contains(nameof(options.AllCategoriesSelected), notifications);
         options.AllCategoriesSelected = false;
         Assert.Equal(false, options.AllCategoriesSelected);
-        Assert.DoesNotContain(options.Categories, category => category.Id == "sessions");
+        Assert.Contains(options.Categories, category => category.Id == "sessions");
     }
 
     [Fact]

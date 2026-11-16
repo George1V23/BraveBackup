@@ -6,6 +6,9 @@ namespace BraveBackup.Platform;
 /// <summary>Provides operating-system services without browser-specific paths or formats.</summary>
 public static class HostEnvironment
 {
+    /// <summary>Gets the actual host OS description for display.</summary>
+    public static string OperatingSystemDescription => System.Runtime.InteropServices.RuntimeInformation.OSDescription;
+
     /// <summary>Gets whether the host is Windows.</summary>
     public static bool IsWindows => OperatingSystem.IsWindows();
 

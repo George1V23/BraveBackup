@@ -76,7 +76,7 @@
             </Grid>
         </DataTemplate>
     </Window.DataTemplates>
-    <Grid RowDefinitions="*,18" ColumnDefinitions="300,*">
+    <Grid RowDefinitions="*,Auto" ColumnDefinitions="300,*">
         <Border Grid.RowSpan="2" BorderBrush="#49415E" BorderThickness="0,0,1,0">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
@@ -374,6 +374,9 @@
                                                 Text="Passwords would be saved as readable CSV in this unencrypted backup. Anyone with file access could read them. Explicit confirmation will be required before saving."
                                                 TextWrapping="Wrap" Foreground="#F3D5AA" />
                                         </Border>
+                                        <CheckBox Content="Include native session files (best-effort restoration)"
+                                                  IsChecked="{Binding Options.IncludeNativeSessionFiles}"
+                                                  IsEnabled="{Binding Options.SessionsSelected}" />
                                         <Grid ColumnDefinitions="110,*">
                                             <TextBlock Text="Compression" VerticalAlignment="Center" />
                                             <ComboBox Grid.Column="1" ItemsSource="{Binding Options.CompressionLevels}"
@@ -382,13 +385,55 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-                                <Grid ColumnDefinitions="Auto,*">
-                                    <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="Custom archive creation will be available in a later phase."
-                                               Classes="muted" FontSize="12" TextWrapping="Wrap"
-                                               VerticalAlignment="Center" Margin="16,0,0,0" />
-                                </Grid>
+                                <Border Classes="card">
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="4   Backup summary" Classes="section" />
+                                        <TextBlock Text="{Binding BackupSelectionSummary}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding BackupCategorySummary}" TextWrapping="Wrap" Classes="muted" />
+                                        <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
+                                        <TextBlock Text="Destination" FontWeight="SemiBold" />
+                                        <SelectableTextBlock Text="{Binding Options.FullBackupPath}" TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <TextBlock Text="Compression:" Classes="muted" />
+                                            <TextBlock Text="{Binding Options.Compression}" />
+                                        </StackPanel>
+                                        <TextBlock Text="Approximate archive size" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding BackupSizeEstimate}" Classes="muted" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="card">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <!-- Decorative placeholder branding; contains no interactive controls. -->
+                                        <Border Width="64" Height="72" CornerRadius="12" Background="#604184"
+                                                Margin="0,0,18,0" VerticalAlignment="Center">
+                                            <TextBlock Text="B" FontSize="40" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="8">
+                                            <TextBlock Text="About the backup" Classes="section" />
+                                            <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
+                                            <TextBlock Text="Selected data is a configuration only. Native sessions are intended for best-effort restoration; compatibility across devices or Brave versions is not guaranteed."
+                                                       TextWrapping="Wrap" Classes="muted" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="{Binding BackupAvailability}" TextWrapping="Wrap" Classes="muted" />
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" />
+                                        <Button Grid.Column="2" Content="Create Backup" IsEnabled="False"
+                                                ToolTip.Tip="{Binding BackupAvailability}" />
+                                    </Grid>
+                                    <!-- Idle operation layout. The future archive engine must supply real progress and outcomes. -->
+                                    <StackPanel x:Name="BackupProgressPanel" IsVisible="False" Spacing="8">
+                                        <ProgressBar Minimum="0" Maximum="100" Value="0" />
+                                        <Button Content="Cancel" IsEnabled="False" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="BackupCompletionPanel" IsVisible="False" Spacing="8">
+                                        <Button Content="Open destination folder" IsEnabled="False" />
+                                        <Button Content="View operation report" IsEnabled="False" />
+                                    </StackPanel>
+                                </StackPanel>
 
                             </StackPanel>
                         </StackPanel>
@@ -485,6 +530,13 @@
                 </TabItem>
             </TabControl>
         </Grid>
-        <Border Grid.Row="1" Grid.Column="1" Background="#20202F" BorderBrush="#49415E" BorderThickness="0,1,0,0" />
+        <Border Grid.Row="1" Grid.Column="1" Background="#20202F" BorderBrush="#49415E" BorderThickness="0,1,0,0" Padding="14,7">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Text="{Binding StatusText}" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding ActiveVersionText}" Classes="muted" FontSize="11" Margin="16,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding OperatingSystemText}" Classes="muted" FontSize="11" MaxWidth="260"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OperatingSystemText}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

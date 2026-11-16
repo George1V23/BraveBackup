@@ -1,7 +1,7 @@
 # Phase 3: approved shell and selection form
 
 This increment implements the controls approved in [ui-decisions.md](ui-decisions.md).
-It does not implement the future archive writer or the deferred review items.
+It does not implement the future archive writer or workflows on the unreviewed pages.
 
 ## Using the shell
 
@@ -48,7 +48,7 @@ and profile highlight colors reuse the existing presentation behavior.
   is editable and Browse chooses a destination. These controls do not write files.
 - Bookmarks is initially selected; other implemented categories start unchecked. The later
   review approved Sessions (open windows, tabs and tab groups) and optional native session
-  files enabled only with Sessions. Their controls and data handling are not implemented yet.
+  files enabled only with Sessions. Their selection controls are implemented; session data handling is not implemented yet.
 - Encryption starts checked. Password and confirmation are masked, with a shared reveal
   control, matching validation and a labelled heuristic strength estimate. The estimate
   considers length/character variety; it is not a cryptographic guarantee.
@@ -93,10 +93,11 @@ archive's filename, categories, encryption and compression do not affect these e
 formats and behavior still require review. Restore, Import, Backups, Settings and About
 currently have navigation shells only. Profiles provides read-only navigation/metadata
 and identifies where Merge/Sync will belong. The subsequent review approved the backup
-summary, size estimate and Create Backup action; their implementation is still pending.
-The explanatory panel, progress/cancellation, completion feedback, status-bar behavior
-and illustration were also approved in the subsequent review; implementation is pending.
-The currently empty bottom status-bar area remains reserved until that implementation.
+summary, size estimate and Create Backup action. The interface increment now includes these
+controls, the explanatory panel, placeholder-brand illustration and actual status bar.
+Create Backup stays disabled with its reason visible. Progress/cancel and completion
+layouts are hidden while idle and have no archive commands. No archive engine exists yet.
+See [Backup interface completion](backup-interface-completion.md).
 
 `BookmarkExportWindow` remains a compatibility host for the same reusable control, but
 there is no launcher for it in the shell. Both hosts release their exporter-owned avatars
@@ -157,5 +158,5 @@ queueing indefinitely on an idle dispatcher.
 - To review locally: `dotnet run --project src/UI/UI.csproj`. Select an installation,
   exercise the tabs, sidebar/checkboxes, refresh and Reset, and use Export for bookmark
   HTML or JSON. The future archive form never writes a `.bravebackup` file.
-- Next checkpoint: user review of this implementation, then return to the deferred
-  controls and unreviewed page behavior. No deferred workflow is implicitly approved.
+- Next checkpoint: user review of this interface increment, followed by the separate
+  archive-contract proposal. Unreviewed page workflows remain pending.
