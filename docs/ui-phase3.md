@@ -66,7 +66,7 @@ and profile highlight colors reuse the existing presentation behavior.
 **Backup** contains only the custom archive form. Its former exporter-launcher row is removed.
 **Restore** is reserved for restoring backup files; it does not combine import operations.
 **Export** directly embeds `BookmarkExportView`, with profile selection, destination text,
-native JSON Browse, export action and operation feedback. Panel 2 includes a selectable,
+HTML/JSON format choice, native Browse, export action and operation feedback. Panel 2 includes a selectable,
 wrapping full destination path, so long paths and resolved relative input remain visible. There is no separate exporter
 window in the shell workflow. The selected sidebar installation supplies the profile list;
 no duplicate installation selector can diverge from the sidebar. Custom export paths and
@@ -74,7 +74,7 @@ surviving profile selections are preserved through refresh; removed active insta
 clear the exporter and disable its action. There is no second installation scan on the UI
 thread: the embedded exporter consumes the shell's read-only discovery snapshot.
 
-The default destination is `Documents/BraveBackup/Exports/brave-bookmarks-<profile>.json`,
+The default destination is `Documents/BraveBackup/Exports/brave-bookmarks-<profile>.html`,
 falling back to `~/BraveBackup/Exports` when Documents is unavailable. The default is
 absolute. Relative filenames resolve against that same stable export directory, not the
 process launch directory. Selecting a profile or destination does not create files or
@@ -82,9 +82,11 @@ folders. The Export action writes to the full path shown in panel 2 and reports 
 success. Invalid destinations, folder paths, file-write failures and save-picker failures
 produce visible feedback. Custom paths are preserved when switching profiles or refreshing.
 
-The export action still writes schema-version-1, unencrypted bookmark-only JSON with
-phase-2 destination protections. The custom archive's filename, categories, encryption
-and compression do not affect this export. Other export formats remain unimplemented.
+HTML is primary and selected by default, using Brave's browser-compatible bookmark
+format. JSON remains selectable and writes the unchanged schema-version-1 format.
+See [HTML format research and limits](brave-bookmarks-html.md), including the absence of
+optional favicon images. Both choices retain phase-2 destination protections. The custom
+archive's filename, categories, encryption and compression do not affect these exports.
 
 **Import** is a separate navigation page for future import operations; its supported
 formats and behavior still require review. Restore, Import, Backups, Settings and About
@@ -119,6 +121,9 @@ when closed. This preserves the existing standalone type without duplicate form 
 - `MainWindow`: layout, native archive/JSON pickers and input routing.
   `BookmarkExportView`: reusable, host-supplied export controls without window creation.
   `BookmarkExportWindow`: compatibility host for that control.
+- `BookmarkExportFormatOption`: immutable HTML/JSON choice metadata, shared by the form
+  and native file-picker filters. HTML is first/default; choice changes preserve filename
+  location/basename while updating its extension and clear obsolete operation feedback.
 - Shell tab-position constants keep profile navigation correct after adding Export and Import.
 
 No NuGet package was added. Tests use injected discovery/clock/picker delegates and isolated
@@ -130,12 +135,12 @@ queueing indefinitely on an idle dispatcher.
 
 ## Validation and review
 
-- All 132 tests passed (33 Brave.Tests, 80 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
+- All 152 tests passed (48 Brave.Tests, 85 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
   Command: `dotnet test BraveBackup.slnx --no-restore --verbosity minimal -m:1 -nr:false`.
   The build reported no warnings/errors. The existing regression tests remain covered.
 - The latest Linux desktop fixture run checked all eight tab labels/order, hidden tabs
   without activation, profile navigation, direct Export hosting, no secondary window,
-  a successful fixture JSON export, installation switching and minimum-width navigation.
+  successful fixture HTML/JSON exports, installation switching and minimum-width navigation.
   It produced no binding errors or runtime warnings. Native Windows UI validation is pending.
 - A subsequent real-button check verified that a long destination wraps fully in panel 2,
   that the default field is absolute, and that clicking Export creates valid schema-1 JSON
@@ -148,6 +153,6 @@ queueing indefinitely on an idle dispatcher.
   [Export](screenshots/export-tab.png), [backup options](screenshots/phase3-options.png).
 - To review locally: `dotnet run --project src/UI/UI.csproj`. Select an installation,
   exercise the tabs, sidebar/checkboxes, refresh and Reset, and use Export for bookmark
-  JSON. The future archive form never writes a `.bravebackup` file.
+  HTML or JSON. The future archive form never writes a `.bravebackup` file.
 - Next checkpoint: user review of this implementation, then return to the deferred
   controls and unreviewed page behavior. No deferred workflow is implicitly approved.

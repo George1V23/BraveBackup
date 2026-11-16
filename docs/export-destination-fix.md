@@ -1,4 +1,7 @@
-# Export destination visibility and JSON output
+# Export destination visibility and output
+
+This note records the original JSON destination fix. The later [HTML export](brave-bookmarks-html.md)
+uses the same destination rules and is now the default UI choice; JSON remains available.
 
 ## Reproduced behavior
 
@@ -23,7 +26,8 @@ were left unchanged.
 ## Corrected behavior
 
 - `HostEnvironment.DocumentsDirectory` in Platform supplies the configured Documents path.
-- `MainViewModel` defaults to `Documents/BraveBackup/Exports`, with home-directory fallback.
+- `MainViewModel` defaults to `Documents/BraveBackup/Exports`, with home-directory fallback;
+  the selected format determines whether its suggested filename ends in .html or .json.
   Its additional constructor allows tests/hosts to supply an isolated export base.
 - `FullDestinationPath` resolves relative input against the stable export base. Panel 2
   shows that full path as selectable, wrapping text; no ellipsis or filename-only label

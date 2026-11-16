@@ -42,7 +42,11 @@ public static class BraveBookmarksParser
                 GetRequiredString(rootElement, "name"),
                 GetOptionalString(rootElement, "id"),
                 GetOptionalString(rootElement, "guid"),
-                ParseChildren(GetRequiredProperty(rootElement, "children"), $"Bookmark root '{rootProperty.Name}'")));
+                ParseChildren(GetRequiredProperty(rootElement, "children"), $"Bookmark root '{rootProperty.Name}'"))
+            {
+                DateAdded = ReadOptionalRootTime(rootElement, "date_added"),
+                DateModified = ReadOptionalRootTime(rootElement, "date_modified")
+            });
         }
 
         return new BraveBookmarksFile(version, roots.AsReadOnly());
@@ -83,6 +87,12 @@ public static class BraveBookmarksParser
 
         return children.AsReadOnly();
     }
+
+    /// <summary>Reads optional root timestamps without rejecting JSON exports for malformed optional metadata.</summary>
+    private static string? ReadOptionalRootTime(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static JsonElement GetRequiredProperty(JsonElement element, string propertyName)
     {
@@ -149,7 +159,14 @@ public sealed record BraveBookmarkRoot(
     string Name,
     string? Id,
     string? Guid,
-    IReadOnlyList<BraveBookmark> Children);
+    IReadOnlyList<BraveBookmark> Children)
+{
+    /// <summary>Gets the optional Chromium microseconds-since-1601 creation timestamp used by HTML export.</summary>
+    public string? DateAdded { get; init; }
+
+    /// <summary>Gets the optional Chromium microseconds-since-1601 modification timestamp used by HTML export.</summary>
+    public string? DateModified { get; init; }
+}
 
 /// <summary>
 /// Specifies the type of bookmark node in the Brave bookmarks structure.

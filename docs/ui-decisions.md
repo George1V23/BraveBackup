@@ -19,7 +19,8 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Main workspace tabs are hidden when no installation is active.
 - Main workspace tabs: Backup, Restore, Export, Import, Profiles, Backups, Settings, About.
   Backup is for custom backup archives; Restore is for restoration from backup files.
-  Export directly embeds the existing JSON exporter; Import is a distinct page for future import operations.
+  Export directly embeds bookmark export with browser-compatible HTML as the primary/default
+  option and existing schema-1 JSON as a secondary option. Import is a distinct page for future import operations.
   Export panel 2 shows the complete resolved destination path with wrapping; output must
   be written to that displayed path with explicit success/error feedback.
   The former exporter-launcher row is removed from Backup; no separate window is opened from the shell.

@@ -37,6 +37,7 @@ public sealed class ExportDestinationTests : IDisposable
     private MainViewModel CreateExporter(Func<Task<Avalonia.Platform.Storage.IStorageFile?>>? picker = null)
     {
         var model = new MainViewModel(picker, () => new[] { _app }, _ => _profiles, ExportDirectory);
+        model.SelectedExportFormat = BookmarkExportFormatOption.Json;
         model.SelectedApp = model.DetectedApps[0];
         return model;
     }

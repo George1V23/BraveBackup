@@ -53,22 +53,24 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Chooses a JSON export file for the embedded Export tab without creating a backup archive.</summary>
+    /// <summary>Chooses an HTML or JSON file matching the selected bookmark format, without creating a backup archive.</summary>
     private async Task<IStorageFile?> PickExportFileAsync()
     {
         if (!StorageProvider.CanSave)
             throw new NotSupportedException("A save dialog is not available. Enter a destination path directly.");
-        var path = (DataContext as ShellViewModel)?.ExportViewModel.FullDestinationPath;
+        var model = (DataContext as ShellViewModel)?.ExportViewModel;
+        var format = model?.SelectedExportFormat ?? BookmarkExportFormatOption.BrowserHtml;
+        var path = model?.FullDestinationPath;
         return await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export Bookmarks as JSON",
-            DefaultExtension = "json",
+            Title = model?.ExportButtonText ?? "Export Bookmarks as HTML",
+            DefaultExtension = format.Extension,
             SuggestedFileName =
-                string.IsNullOrWhiteSpace(path) ? "brave-bookmarks-export.json" : Path.GetFileName(path),
+                string.IsNullOrWhiteSpace(path) ? $"brave-bookmarks-export.{format.Extension}" : Path.GetFileName(path),
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JSON files (*.json)")
-                    { Patterns = new[] { "*.json" }, MimeTypes = new[] { "application/json" } }
+                new FilePickerFileType(format.DisplayName)
+                    { Patterns = new[] { $"*.{format.Extension}" }, MimeTypes = new[] { format.MimeType } }
             }
         });
     }

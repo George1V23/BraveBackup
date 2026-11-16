@@ -35,32 +35,22 @@ public partial class BookmarkExportWindow : Window
             return null;
         }
 
-        var defaultName = (DataContext as MainViewModel)?.TargetFilePath;
-        if (string.IsNullOrWhiteSpace(defaultName) ||
-            !defaultName.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase))
-        {
-            defaultName = "brave-bookmarks-backup.json";
-        }
-        else
-        {
-            defaultName = System.IO.Path.GetFileName(defaultName);
-        }
-
+        var model = DataContext as MainViewModel;
+        var format = model?.SelectedExportFormat ?? BookmarkExportFormatOption.BrowserHtml;
+        var path = model?.FullDestinationPath;
         var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save Bookmarks Backup",
-            DefaultExtension = "json",
-            SuggestedFileName = defaultName,
+            Title = model?.ExportButtonText ?? "Export Bookmarks as HTML",
+            DefaultExtension = format.Extension,
+            SuggestedFileName = string.IsNullOrWhiteSpace(path)
+                ? $"brave-bookmarks-export.{format.Extension}"
+                : System.IO.Path.GetFileName(path),
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JSON files (*.json)")
+                new FilePickerFileType(format.DisplayName)
                 {
-                    Patterns = new[] { "*.json" },
-                    MimeTypes = new[] { "application/json" }
-                },
-                new FilePickerFileType("All files (*.*)")
-                {
-                    Patterns = new[] { "*.*" }
+                    Patterns = new[] { $"*.{format.Extension}" },
+                    MimeTypes = new[] { format.MimeType }
                 }
             }
         });

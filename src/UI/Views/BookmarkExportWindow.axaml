@@ -6,6 +6,6 @@
         x:DataType="vm:MainViewModel"
         Width="650" Height="620" MinWidth="500" MinHeight="450"
         WindowStartupLocation="CenterScreen" Icon="/Assets/avalonia-logo.ico"
-        Title="Bookmark JSON export">
+        Title="Bookmark export">
     <views:BookmarkExportView Margin="20" />
 </Window>

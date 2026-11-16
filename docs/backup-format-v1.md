@@ -19,3 +19,6 @@ data is stored. The schema version stays 1. There is no restore/import workflow 
 `Bookmarks.sample.json`. Regression tests verify the old data can still deserialize and
 that new exports have identical JSON values and property names. Future formats must
 preserve the ability to read this version and document any version changes.
+
+Browser-compatible HTML is now the primary UI export choice; JSON remains selectable
+and retains this exact schema version. See [HTML export](brave-bookmarks-html.md).

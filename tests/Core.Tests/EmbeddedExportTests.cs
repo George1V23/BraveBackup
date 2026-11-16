@@ -57,6 +57,7 @@ public sealed class EmbeddedExportTests : IDisposable
         shell.Activate(shell.Installations[0]);
         shell.SelectedTabIndex = ShellViewModel.ExportTabIndex;
         var exporter = shell.ExportViewModel;
+        exporter.SelectedExportFormat = BookmarkExportFormatOption.Json;
         var source = exporter.SelectedProfile!.ProfileInfo!.BookmarksPath;
         var original = File.ReadAllText(source);
         var destination = Path.Combine(_root, "exports", "bookmarks.json");
@@ -82,6 +83,7 @@ public sealed class EmbeddedExportTests : IDisposable
         await shell.RefreshAsync();
         shell.Activate(shell.Installations[0]);
         var exporter = shell.ExportViewModel;
+        exporter.SelectedExportFormat = BookmarkExportFormatOption.Json;
         var source = exporter.SelectedProfile!.ProfileInfo!.BookmarksPath;
         var original = File.ReadAllText(source);
         exporter.TargetFilePath = source;
@@ -97,6 +99,7 @@ public sealed class EmbeddedExportTests : IDisposable
         await shell.RefreshAsync();
         shell.Activate(shell.Installations[0]);
         var exporter = shell.ExportViewModel;
+        exporter.SelectedExportFormat = BookmarkExportFormatOption.Json;
         exporter.SelectedProfile = exporter.Profiles[1];
         var selectedPath = exporter.SelectedProfile.ProfileInfo!.ProfileDirectory;
         var destination = Path.Combine(_root, "chosen.json");

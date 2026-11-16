@@ -110,6 +110,7 @@ public sealed class ExportSafetyTests : IDisposable
         File.WriteAllText(source, content);
         var viewModel = new MainViewModel
         {
+            SelectedExportFormat = BookmarkExportFormatOption.Json,
             SelectedProfile = new ProfileItem(new BraveProfileInfo("Test", _root, source)),
             TargetFilePath = source
         };
@@ -130,6 +131,7 @@ public sealed class ExportSafetyTests : IDisposable
         File.WriteAllText(source, File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json")));
         var viewModel = new MainViewModel
         {
+            SelectedExportFormat = BookmarkExportFormatOption.Json,
             SelectedApp = new AppChannelItem(new BraveAppInfo(BraveAppChannel.Stable, "test", "unused", userData)),
             SelectedProfile = new ProfileItem(new BraveProfileInfo("Test", profileDirectory, source)),
             TargetFilePath = Path.Combine(userData, "unconfigured-profile", "backup.json")

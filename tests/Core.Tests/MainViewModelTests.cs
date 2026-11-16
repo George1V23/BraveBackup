@@ -227,6 +227,7 @@ public class MainViewModelTests
             var profile = new BraveProfileInfo("Person 1", Path.GetDirectoryName(bookmarksFile)!, bookmarksFile);
             var vm = new MainViewModel();
             vm.SelectedProfile = new ProfileItem(profile);
+            vm.SelectedExportFormat = BookmarkExportFormatOption.Json;
             vm.TargetFilePath = targetExportPath;
 
             Assert.True(vm.CanExportBookmarks());

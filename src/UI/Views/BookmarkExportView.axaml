@@ -110,11 +110,24 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="2. Export Destination File"
                                    FontWeight="SemiBold" />
+                        <Grid ColumnDefinitions="90,*">
+                            <TextBlock Text="Format" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding ExportFormats}"
+                                      SelectedItem="{Binding SelectedExportFormat}" HorizontalAlignment="Stretch">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="vm:BookmarkExportFormatOption">
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+                        <TextBlock Text="{Binding ExportFormatDescription}" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="#B3ADC5" />
 
                         <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
                             <TextBox Grid.Column="0"
                                      Text="{Binding TargetFilePath}"
-                                     PlaceholderText="Enter a destination file path (e.g. bookmarks.json)"
+                                     PlaceholderText="{Binding ExportPathPlaceholder}"
                                      ToolTip.Tip="{Binding FullDestinationPath}"
                                      Margin="0,0,8,0" />
                             <Button Grid.Column="1"
@@ -137,7 +150,7 @@
         <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,Auto">
             <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Margin="0,0,16,0" VerticalAlignment="Center"
                        Classes="export-status" Classes.error="{Binding IsStatusError}" />
-            <Button Grid.Column="1" Content="Export Bookmarks as JSON"
+            <Button Grid.Column="1" Content="{Binding ExportButtonText}"
                     Command="{Binding ExportBookmarksCommand}"
                     HorizontalAlignment="Right"
                     Padding="20,10"

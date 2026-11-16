@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "roots": {
+    "other": {
+      "name": "Other bookmarks", "children": [
+        { "type": "url", "name": "Other & useful", "url": "https://example.test/other?a=1&b=2", "date_added": "13253760006000000" }
+      ]
+    },
+    "synced": {
+      "name": "Mobile bookmarks", "children": [
+        { "type": "url", "name": "Mobile", "url": "https://example.test/mobile", "date_added": "0" }
+      ]
+    },
+    "bookmark_bar": {
+      "name": "Bookmarks bar", "date_added": "13253760000000000", "date_modified": "13253760002000000",
+      "children": [
+        { "type": "url", "name": "Example", "url": "https://example.test/", "date_added": "13253760001000000" },
+        {
+          "type": "folder", "name": "<Work & \"notes\">'", "date_added": "13253760003000000", "date_modified": "13253760004000000",
+          "children": [
+            { "type": "url", "name": "Café 😀", "url": "https://example.test/cafe", "date_added": "13253760005000000" }
+          ]
+        }
+      ]
+    }
+  }
+}

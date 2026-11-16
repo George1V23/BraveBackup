@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -183,6 +184,63 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty] private string _dataDirectoryText = string.Empty;
 
+    private BookmarkExportFormatOption _selectedExportFormat = BookmarkExportFormatOption.BrowserHtml;
+
+    /// <summary>Gets available formats in priority order, with browser-compatible HTML first.</summary>
+    public IReadOnlyList<BookmarkExportFormatOption> ExportFormats => BookmarkExportFormatOption.All;
+
+    /// <summary>Gets or sets the format, preserving the chosen folder/basename while updating the extension.</summary>
+    public BookmarkExportFormatOption SelectedExportFormat
+    {
+        get => _selectedExportFormat;
+        set
+        {
+            if (value == null || !ExportFormats.Contains(value) ||
+                !SetProperty(ref _selectedExportFormat, value)) return;
+            if (!string.IsNullOrWhiteSpace(TargetFilePath))
+            {
+                try
+                {
+                    var wasSuggested = string.Equals(TargetFilePath, _suggestedExportPath,
+                        HostEnvironment.PathComparison);
+                    var changedPath = Path.ChangeExtension(TargetFilePath, value.Extension);
+                    if (wasSuggested) _suggestedExportPath = changedPath;
+                    TargetFilePath = changedPath;
+                }
+                catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+                {
+                    // Preserve invalid typed input so the visible validation can explain it.
+                }
+            }
+
+            if (!IsBusy)
+            {
+                StatusMessage = string.Empty;
+                IsStatusError = false;
+            }
+
+            OnPropertyChanged(nameof(ExportButtonText));
+            OnPropertyChanged(nameof(ExportFormatDescription));
+            OnPropertyChanged(nameof(ExportPathPlaceholder));
+            OnPropertyChanged(nameof(DestinationValidationMessage));
+            ExportBookmarksCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    /// <summary>Gets the action label corresponding to the selected output format.</summary>
+    public string ExportButtonText => SelectedExportFormat.Format == BookmarkExportFormat.BrowserHtml
+        ? "Export Bookmarks as HTML"
+        : "Export Bookmarks as JSON";
+
+    /// <summary>Gets the selected format's purpose and material fidelity limit.</summary>
+    public string ExportFormatDescription => SelectedExportFormat.Format == BookmarkExportFormat.BrowserHtml
+        ? "HTML bookmark file, as used by Brave's manual export. Website icons are not included."
+        : "BraveBackup bookmark JSON, schema version 1.";
+
+    /// <summary>Gets an example matching the selected format.</summary>
+    public string ExportPathPlaceholder =>
+        $"Enter a destination file path (e.g. bookmarks.{SelectedExportFormat.Extension})";
+
     /// <summary>
     /// Target file path where the backup will be saved.
     /// </summary>
@@ -207,11 +265,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Gets a visible explanation when the destination cannot be used.</summary>
-    public string DestinationValidationMessage => string.IsNullOrWhiteSpace(TargetFilePath)
-        ? "Choose a destination file."
-        : string.IsNullOrEmpty(FullDestinationPath)
-            ? "Enter a valid destination file path."
-            : string.Empty;
+    public string DestinationValidationMessage
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TargetFilePath)) return "Choose a destination file.";
+            if (string.IsNullOrEmpty(FullDestinationPath)) return "Enter a valid destination file path.";
+            var extension = Path.GetExtension(FullDestinationPath);
+            if (SelectedExportFormat.Format == BookmarkExportFormat.BrowserHtml &&
+                extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+                return "Use an .html filename for HTML export, or select the JSON format.";
+            if (SelectedExportFormat.Format == BookmarkExportFormat.Json &&
+                (extension.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
+                 extension.Equals(".htm", StringComparison.OrdinalIgnoreCase)))
+                return "Use a .json filename for JSON export, or select the HTML format.";
+            return string.Empty;
+        }
+    }
 
     /// <summary>
     /// User-facing status message.
@@ -342,7 +412,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 string.Equals(TargetFilePath, _suggestedExportPath, HostEnvironment.PathComparison))
             {
                 _suggestedExportPath = Path.Combine(_exportDirectory,
-                    $"brave-bookmarks-{safeProfileName.ToLowerInvariant()}.json");
+                    $"brave-bookmarks-{safeProfileName.ToLowerInvariant()}.{SelectedExportFormat.Extension}");
                 TargetFilePath = _suggestedExportPath;
             }
         }
@@ -408,7 +478,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             var localPath = file.TryGetLocalPath();
             if (string.IsNullOrWhiteSpace(localPath))
             {
-                StatusMessage = "Choose a local destination file for the JSON export.";
+                StatusMessage = "Choose a local destination file for the bookmark export.";
                 IsStatusError = true;
                 return;
             }
@@ -439,7 +509,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                SelectedProfile.IsEnabled &&
                SelectedProfile.ProfileInfo != null &&
                SelectedProfile.HasBookmarks &&
-               !string.IsNullOrWhiteSpace(FullDestinationPath);
+               !string.IsNullOrWhiteSpace(FullDestinationPath) && string.IsNullOrEmpty(DestinationValidationMessage);
     }
 
     /// <summary>
@@ -450,6 +520,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         var profile = SelectedProfile?.ProfileInfo;
         var destination = FullDestinationPath;
+        var format = SelectedExportFormat.Format;
         if (profile == null)
         {
             StatusMessage = "Select a profile with bookmarks to export.";
@@ -467,6 +538,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (Directory.Exists(destination))
         {
             StatusMessage = "The destination is a folder. Choose a destination file name.";
+            IsStatusError = true;
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(DestinationValidationMessage))
+        {
+            StatusMessage = DestinationValidationMessage;
             IsStatusError = true;
             return;
         }
@@ -492,8 +570,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             if (SelectedApp != null) protectedDirectories.Add(SelectedApp.AppInfo.UserDataDirectory);
             ExportDestinationGuard.Validate(destination, protectedDirectories);
             var bookmarksJson = await File.ReadAllTextAsync(profile.BookmarksPath);
-            var backupModel = BraveBookmarksExporter.ExportJson(bookmarksJson);
-            await BraveBookmarksExporter.ExportToFileAsync(backupModel, destination);
+            var bookmarks = BraveBookmarksParser.Parse(bookmarksJson);
+            if (format == BookmarkExportFormat.BrowserHtml)
+                await BraveBookmarksHtmlExporter.ExportToFileAsync(bookmarks, destination);
+            else
+                await BraveBookmarksExporter.ExportToFileAsync(BraveBookmarksExporter.Export(bookmarks), destination);
 
             StatusMessage = $"Successfully exported bookmarks to {destination}!";
             IsStatusError = false;
