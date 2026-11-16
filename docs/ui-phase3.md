@@ -168,3 +168,12 @@ The Backup form also supports the approved limited Settings category, alone or a
 Bookmarks. Its description lists stored bookmark-bar, Home and startup preferences.
 Completion reports stored/absent counts; unsupported categories still block creation.
 This does not implement the separate Settings page. See [Settings backup and archive v2](settings-backup.md).
+
+## Embedded export view loading
+
+`BookmarkExportView.axaml.cs` remains necessary: MainWindow embeds this control in
+the Export tab, and the compatibility export window uses it too. Its constructor loads
+the matching XAML with `AvaloniaXamlLoader.Load(this)`. This avoids Rider failing to
+resolve the generated `InitializeComponent` method while retaining the existing view
+and host-provided data context. The original error was reproduced in Rider even though
+the .NET UI build succeeded.
