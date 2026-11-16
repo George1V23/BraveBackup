@@ -34,6 +34,8 @@ Acceptance:
 
 ## 2. Review the concrete archive contract
 
+Prepared for review: [archive-format proposal](archive-format-proposal.md). No writer is implemented.
+
 Prepare a separate, reviewable format proposal before implementing the writer:
 
 - `.bravebackup` container, manifest, format identification/version and category layout;
