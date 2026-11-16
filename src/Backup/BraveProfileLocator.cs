@@ -1,4 +1,5 @@
 using System;
+using BraveBackup.Platform;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -41,7 +42,7 @@ public static class BraveProfileLocator
                 return CombinePaths(localAppData, true, "BraveSoftware", "Brave-Browser", "User Data");
             }
 
-            var localAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var localAppDataRoot = HostEnvironment.LocalApplicationData;
             if (string.IsNullOrWhiteSpace(localAppDataRoot))
             {
                 throw new InvalidOperationException("Unable to resolve the Windows local app data directory.");
@@ -77,13 +78,13 @@ public static class BraveProfileLocator
                 return CombinePaths(homeDirectory, false, ".config", "BraveSoftware", "Brave-Browser");
             }
 
-            var resolvedApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var resolvedApplicationData = HostEnvironment.ApplicationData;
             if (!string.IsNullOrWhiteSpace(resolvedApplicationData))
             {
                 return CombinePaths(resolvedApplicationData, false, "BraveSoftware", "Brave-Browser");
             }
 
-            var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var userHome = HostEnvironment.UserProfile;
             if (string.IsNullOrWhiteSpace(userHome))
             {
                 throw new InvalidOperationException("Unable to resolve the Linux home directory.");

@@ -6,7 +6,6 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using BraveBackup.Core;
-using UI;
 using UI.ViewModels;
 using Xunit;
 
@@ -14,11 +13,6 @@ namespace Core.Tests;
 
 public class MainViewModelTests
 {
-    static MainViewModelTests()
-    {
-        AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
-    }
-
     [Fact]
     public void AppChannelItem_DistinguishesOriginFromBrowser()
     {
@@ -223,12 +217,14 @@ public class MainViewModelTests
             var sampleFixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json");
             var sampleJson = File.ReadAllText(sampleFixture);
 
-            var bookmarksFile = Path.Combine(tempDir, "Bookmarks");
+            var profileDirectory = Path.Combine(tempDir, "profile");
+            Directory.CreateDirectory(profileDirectory);
+            var bookmarksFile = Path.Combine(profileDirectory, "Bookmarks");
             File.WriteAllText(bookmarksFile, sampleJson);
 
             var targetExportPath = Path.Combine(tempDir, "exported_bookmarks.json");
 
-            var profile = new BraveProfileInfo("Person 1", tempDir, bookmarksFile);
+            var profile = new BraveProfileInfo("Person 1", Path.GetDirectoryName(bookmarksFile)!, bookmarksFile);
             var vm = new MainViewModel();
             vm.SelectedProfile = new ProfileItem(profile);
             vm.TargetFilePath = targetExportPath;
@@ -287,6 +283,7 @@ public class MainViewModelTests
 
         Assert.Equal("No profiles to export", item.DisplayName);
         Assert.Null(item.ProfileInfo);
+        Assert.Empty(item.ProfileDirectoryText);
         Assert.False(item.HasBookmarks);
         Assert.False(item.IsEnabled);
         Assert.Equal(string.Empty, item.StatusDescription);

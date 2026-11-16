@@ -52,6 +52,9 @@ public sealed class ProfileItem
     /// </summary>
     public BraveProfileInfo? ProfileInfo { get; }
 
+    /// <summary>Gets the profile directory or an empty string for an unselectable placeholder.</summary>
+    public string ProfileDirectoryText => ProfileInfo?.ProfileDirectory ?? string.Empty;
+
     /// <summary>
     /// Gets a value indicating whether bookmarks are present for this profile.
     /// </summary>
@@ -376,11 +379,18 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
-            var bookmarksJson = await File.ReadAllTextAsync(SelectedProfile.ProfileInfo.BookmarksPath);
+            var profile = SelectedProfile.ProfileInfo;
+            var destination = TargetFilePath;
+            var protectedDirectories = new List<string> { profile.ProfileDirectory };
+            foreach (var app in DetectedApps)
+                protectedDirectories.Add(app.AppInfo.UserDataDirectory);
+            if (SelectedApp != null) protectedDirectories.Add(SelectedApp.AppInfo.UserDataDirectory);
+            ExportDestinationGuard.Validate(destination, protectedDirectories);
+            var bookmarksJson = await File.ReadAllTextAsync(profile.BookmarksPath);
             var backupModel = BraveBookmarksExporter.ExportJson(bookmarksJson);
-            await BraveBookmarksExporter.ExportToFileAsync(backupModel, TargetFilePath);
+            await BraveBookmarksExporter.ExportToFileAsync(backupModel, destination);
 
-            StatusMessage = $"Successfully exported bookmarks to {TargetFilePath}!";
+            StatusMessage = $"Successfully exported bookmarks to {destination}!";
             IsStatusError = false;
         }
         catch (Exception ex)

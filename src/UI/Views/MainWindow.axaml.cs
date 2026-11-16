@@ -1,61 +1,77 @@
-using System.Collections.Generic;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using UI.ViewModels;
 
 namespace UI.Views;
 
-/// <summary>
-/// Interaction logic for MainWindow view.
-/// </summary>
+/// <summary>Hosts approved shell controls; platform dialogs and window/input routing stay in the view.</summary>
 public partial class MainWindow : Window
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MainWindow"/> class.
-    /// </summary>
+    /// <summary>Creates the shell, starting read-only discovery after the window opens.</summary>
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainViewModel(PickSaveFileAsync);
+        DataContext = new ShellViewModel(pickBackupPath: PickBackupPathAsync);
+        Opened += OnOpened;
+        Closed += OnClosed;
     }
 
-    private async System.Threading.Tasks.Task<IStorageFile?> PickSaveFileAsync()
+    /// <summary>Starts discovery without blocking construction or the dispatcher.</summary>
+    private async void OnOpened(object? sender, EventArgs args)
     {
-        var topLevel = GetTopLevel(this);
-        if (topLevel?.StorageProvider == null)
-        {
-            return null;
-        }
+        if (DataContext is ShellViewModel viewModel) await viewModel.RefreshAsync();
+    }
 
-        var defaultName = (DataContext as MainViewModel)?.TargetFilePath;
-        if (string.IsNullOrWhiteSpace(defaultName) || !defaultName.EndsWith(".json", System.StringComparison.OrdinalIgnoreCase))
-        {
-            defaultName = "brave-bookmarks-backup.json";
-        }
-        else
-        {
-            defaultName = System.IO.Path.GetFileName(defaultName);
-        }
+    /// <summary>Releases shell-owned avatars and clears password text when closing.</summary>
+    private void OnClosed(object? sender, EventArgs args) => (DataContext as ShellViewModel)?.Dispose();
 
-        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+    /// <summary>Routes a header double-click to its independent bulk selection.</summary>
+    private void OnInstallationDoubleTapped(object? sender, TappedEventArgs args)
+    {
+        if (sender is Control { DataContext: InstallationViewModel installation })
         {
-            Title = "Save Bookmarks Backup",
-            DefaultExtension = "json",
-            SuggestedFileName = defaultName,
+            installation.ToggleBulkSelectionCommand.Execute(null);
+            args.Handled = true;
+        }
+    }
+
+    /// <summary>Provides Shift+Space as a keyboard equivalent for double-click bulk selection.</summary>
+    private void OnInstallationKeyDown(object? sender, KeyEventArgs args)
+    {
+        if (args.Key != Key.Space || !args.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
+        if (sender is Control { DataContext: InstallationViewModel installation })
+        {
+            installation.ToggleBulkSelectionCommand.Execute(null);
+            args.Handled = true;
+        }
+    }
+
+    /// <summary>Opens the established JSON-only exporter without using the custom archive options.</summary>
+    private void OnOpenBookmarkExporter(object? sender, RoutedEventArgs args)
+    {
+        if (DataContext is ShellViewModel { ActiveInstallation: { } installation })
+            new BookmarkExportWindow(installation.AppInfo).Show(this);
+    }
+
+    /// <summary>Chooses an archive destination without creating an archive.</summary>
+    private async Task<string?> PickBackupPathAsync(string currentPath)
+    {
+        if (!StorageProvider.CanSave) return null;
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Choose backup destination",
+            DefaultExtension = "bravebackup",
+            SuggestedFileName = Path.GetFileName(currentPath),
             FileTypeChoices = new[]
             {
-                new FilePickerFileType("JSON files (*.json)")
-                {
-                    Patterns = new[] { "*.json" },
-                    MimeTypes = new[] { "application/json" }
-                },
-                new FilePickerFileType("All files (*.*)")
-                {
-                    Patterns = new[] { "*.*" }
-                }
+                new FilePickerFileType("Brave backup (*.bravebackup)") { Patterns = new[] { "*.bravebackup" } }
             }
         });
-
-        return file;
+        return file?.TryGetLocalPath();
     }
 }

@@ -1,0 +1,50 @@
+{
+  "SchemaVersion": 1,
+  "Bookmarks": [
+    {
+      "Type": 0,
+      "Name": "Bookmarks bar",
+      "Url": null,
+      "Children": [
+        {
+          "Type": 1,
+          "Name": "Example",
+          "Url": "https://example.test/",
+          "Children": []
+        },
+        {
+          "Type": 0,
+          "Name": "Research & notes",
+          "Url": null,
+          "Children": [
+            {
+              "Type": 1,
+              "Name": "Nested bookmark",
+              "Url": "https://example.test/path?q=one%20two",
+              "Children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Type": 0,
+      "Name": "Other bookmarks",
+      "Url": null,
+      "Children": []
+    },
+    {
+      "Type": 0,
+      "Name": "Mobile bookmarks",
+      "Url": null,
+      "Children": [
+        {
+          "Type": 1,
+          "Name": "Caf\u00e9",
+          "Url": "https://example.test/cafe",
+          "Children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src\Backup\Backup.csproj" />
     <Project Path="src\CLI\CLI.csproj" />
     <Project Path="src\Core\Core.csproj" />
     <Project Path="src\Platform\Platform.csproj" />

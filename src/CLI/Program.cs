@@ -44,7 +44,8 @@ for (int i = 0; i < installedApps.Count; i++)
         _ => app.Channel.ToString()
     };
 
-    Console.WriteLine($"  [{i + 1}] Brave {(app.Product == BraveAppProduct.Origin ? "Origin " : "")}{channelName} (v{app.Version})");
+    Console.WriteLine(
+        $"  [{i + 1}] Brave {(app.Product == BraveAppProduct.Origin ? "Origin " : "")}{channelName} (v{app.Version})");
     Console.WriteLine($"      Program: {app.ProgramPath}");
     Console.WriteLine($"      Data:    {app.UserDataDirectory}");
     Console.WriteLine();
@@ -76,7 +77,8 @@ var selectedChannelName = selectedApp.Channel switch
 };
 
 Console.WriteLine();
-Console.WriteLine($"Selected: Brave {(selectedApp.Product == BraveAppProduct.Origin ? "Origin " : "")}{selectedChannelName} (v{selectedApp.Version})");
+Console.WriteLine(
+    $"Selected: Brave {(selectedApp.Product == BraveAppProduct.Origin ? "Origin " : "")}{selectedChannelName} (v{selectedApp.Version})");
 Console.WriteLine();
 
 // Step 3: Find profiles for the selected application
@@ -201,6 +203,7 @@ static void ShowBookmarks(BraveProfileInfo selectedProfile)
         // Export only if user chooses to proceed
         if (ConfirmExport(out var targetPath))
         {
+            ExportDestinationGuard.Validate(targetPath, new[] { selectedProfile.ProfileDirectory });
             ExportBookmarks(backupModel, selectedProfile.ProfileName, targetPath);
         }
         else

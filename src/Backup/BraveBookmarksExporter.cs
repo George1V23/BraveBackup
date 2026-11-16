@@ -55,19 +55,30 @@ public static class BraveBookmarksExporter
     /// <param name="filePath">The target file path where the JSON backup should be saved.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="backupModel"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The destination is inside browser data or traverses a filesystem link.</exception>
+    /// <remarks>Writes through a new temporary sibling and replaces the destination only after a successful write.</remarks>
     public static void ExportToFile(BackupModel backupModel, string filePath)
     {
         ArgumentNullException.ThrowIfNull(backupModel);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        var directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
         var json = JsonSerializer.Serialize(backupModel, JsonOptions);
-        File.WriteAllText(filePath, json);
+        var destination = ExportDestinationGuard.Validate(filePath);
+        var directory = Path.GetDirectoryName(destination)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, $".bravebackup-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream))
+                writer.Write(json);
+            ExportDestinationGuard.Validate(destination);
+            File.Move(temporaryPath, destination, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporaryPath);
+        }
     }
 
     /// <summary>
@@ -79,19 +90,35 @@ public static class BraveBookmarksExporter
     /// <returns>A task representing the asynchronous export operation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="backupModel"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null or whitespace.</exception>
-    public static async Task ExportToFileAsync(BackupModel backupModel, string filePath, CancellationToken cancellationToken = default)
+    /// <exception cref="InvalidOperationException">The destination is inside browser data or traverses a filesystem link.</exception>
+    /// <remarks>Failed or cancelled writes preserve an existing backup and remove their temporary file.</remarks>
+    public static async Task ExportToFileAsync(BackupModel backupModel, string filePath,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(backupModel);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        var directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
         var json = JsonSerializer.Serialize(backupModel, JsonOptions);
-        await File.WriteAllTextAsync(filePath, json, cancellationToken);
+        var destination = ExportDestinationGuard.Validate(filePath);
+        var directory = Path.GetDirectoryName(destination)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, $".bravebackup-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write,
+                             FileShare.None,
+                             4096, FileOptions.Asynchronous))
+            await using (var writer = new StreamWriter(stream))
+                await writer.WriteAsync(json.AsMemory(), cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            ExportDestinationGuard.Validate(destination);
+            File.Move(temporaryPath, destination, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporaryPath);
+        }
     }
 
     private static BackupBookmark CreateFolder(string name, IReadOnlyList<BraveBookmark> children)

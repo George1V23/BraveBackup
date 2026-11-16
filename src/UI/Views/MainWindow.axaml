@@ -1,189 +1,500 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:UI.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="650" d:DesignHeight="600"
-        Width="650" Height="620"
-        MinWidth="500" MinHeight="450"
-        WindowStartupLocation="CenterScreen"
-        x:Class="UI.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
+        x:Class="UI.Views.MainWindow" x:DataType="vm:ShellViewModel"
+        Title="Brave browsers Backup &amp; Restore custom data"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Brave Bookmarks Exporter">
-
-    <Design.DataContext>
-        <vm:MainViewModel />
-    </Design.DataContext>
-
-    <Grid Margin="20" RowDefinitions="Auto,*,Auto">
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-            <TextBlock Text="Brave Browser Backup"
-                       FontSize="20"
-                       FontWeight="Bold" />
-            <TextBlock Text="Export/Import/Sync data for Brave Browser and between profiles."
-                       Foreground="Gray" />
-        </StackPanel>
-
-        <!-- Main Form Content -->
-        <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="16">
-                <!-- Step 1: Select Application Channel -->
-                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="14">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Text="1. Select Brave Browser"
-                                       FontWeight="SemiBold"
-                                       VerticalAlignment="Center" />
-                            <Button Grid.Column="1"
-                                    Content="Refresh"
-                                    Command="{Binding RefreshCommand}"
-                                    Padding="10,4" />
-                        </Grid>
-
-                        <ComboBox ItemsSource="{Binding DetectedApps}"
-                                  SelectedItem="{Binding SelectedApp}"
-                                  PlaceholderText="{Binding AppSelectionPlaceholder}"
-                                  HorizontalAlignment="Stretch">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate DataType="vm:AppChannelItem">
-                                    <TextBlock Text="{Binding DisplayName}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-
-                        <StackPanel Spacing="4"
-                                    Margin="4,0,0,0">
-                            <TextBlock Text="{Binding DataDirectoryText}"
-                                       FontSize="11"
-                                       Foreground="Gray"
-                                       TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                    </StackPanel>
+        Width="1360" Height="920" MinWidth="1060" MinHeight="680"
+        WindowStartupLocation="CenterScreen" Background="#191925">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Muted">#B3ADC5</SolidColorBrush>
+    </Window.Resources>
+    <Window.Styles>
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#F4F0FC" />
+        </Style>
+        <Style Selector="TextBlock.muted">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        </Style>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="19" /><Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.profile-name.highlighted" x:DataType="vm:ProfileSelectionViewModel">
+            <Setter Property="Foreground" Value="{Binding Presentation.ProfileNameForeground}" />
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#242435" /><Setter Property="BorderBrush" Value="#55506B" />
+            <Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="20" />
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="7" /><Setter Property="Padding" Value="12,8" />
+        </Style>
+        <Style Selector="Button.installation">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.installation.active">
+            <Setter Property="Background" Value="#44305F" /><Setter Property="BorderBrush" Value="#A780DC" />
+        </Style>
+        <Style Selector="Border.profile-row">
+            <Setter Property="Padding" Value="12,9" /><Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Border.profile-row.checked">
+            <Setter Property="Background" Value="#46315F" />
+        </Style>
+        <Style Selector="Border.category">
+            <Setter Property="Margin" Value="0,0,10,10" /><Setter Property="Padding" Value="10" />
+            <Setter Property="BorderBrush" Value="#514866" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="Border.category.checked">
+            <Setter Property="Background" Value="#3D2F54" /><Setter Property="BorderBrush" Value="#AB83DF" />
+        </Style>
+    </Window.Styles>
+    <Window.DataTemplates>
+        <DataTemplate DataType="vm:ProfileItem">
+            <Grid Width="32" Height="32">
+                <Border CornerRadius="16" Background="{Binding AvatarFillBrush}"
+                        BorderBrush="{Binding AvatarStrokeBrush}" BorderThickness="1"
+                        IsVisible="{Binding IsPlaceholderAvatar}">
+                    <Grid>
+                        <Ellipse Width="10" Height="10" Stroke="{Binding AvatarStrokeBrush}" StrokeThickness="1.5"
+                                 VerticalAlignment="Top" Margin="0,6,0,0" />
+                        <Border Width="18" Height="10" CornerRadius="9,9,0,0" BorderBrush="{Binding AvatarStrokeBrush}"
+                                BorderThickness="1.5" VerticalAlignment="Bottom" Margin="0,0,0,5" />
+                    </Grid>
                 </Border>
-
-                <!-- Step 2: Select Profile -->
-                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="14">
+                <Image Source="{Binding AvatarImage}" Stretch="UniformToFill"
+                       IsVisible="{Binding AvatarImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            </Grid>
+        </DataTemplate>
+    </Window.DataTemplates>
+    <Grid RowDefinitions="*,18" ColumnDefinitions="300,*">
+        <Border Grid.RowSpan="2" BorderBrush="#49415E" BorderThickness="0,0,1,0">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#1E1E2E" Offset="0" /><GradientStop Color="#211932" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid Margin="14,22,14,18" RowDefinitions="Auto,Auto,*,Auto" IsEnabled="{Binding !IsRefreshing}">
+                <Grid ColumnDefinitions="44,*" Margin="6,0,0,24">
+                    <Border Width="36" Height="40" Background="#7F4BC1" CornerRadius="10" VerticalAlignment="Top">
+                        <TextBlock Text="B" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                        <TextBlock Text="Brave browsers" FontSize="20" FontWeight="Bold" />
+                        <TextBlock Text="Backup &amp; Restore custom data" FontSize="11" Classes="muted" />
+                    </StackPanel>
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="6,0,0,12">
+                    <TextBlock Text="INSTALLATIONS" Classes="muted" FontSize="11" FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" Padding="10,5" />
+                </Grid>
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Spacing="10">
-                        <TextBlock Text="2. Select Profile to Export"
-                                   FontWeight="SemiBold" />
-
-                        <ListBox ItemsSource="{Binding Profiles}"
-                                 SelectedItem="{Binding SelectedProfile}"
-                                 MinHeight="100"
-                                 MaxHeight="180">
-                            <ListBox.Styles>
-                                <Style Selector="ListBoxItem" x:DataType="vm:ProfileItem">
-                                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
-                                </Style>
-                                <Style Selector="TextBlock.profile-name.highlighted" x:DataType="vm:ProfileItem">
-                                    <Setter Property="Foreground" Value="{Binding ProfileNameForeground}" />
-                                </Style>
-                            </ListBox.Styles>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate DataType="vm:ProfileItem">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,2">
-                                        <Grid Grid.Column="0"
-                                              Width="34"
-                                              Height="34"
-                                              Margin="0,0,10,0"
-                                              VerticalAlignment="Center"
-                                              IsVisible="{Binding ProfileInfo, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                            <Border Width="32"
-                                                    Height="32"
-                                                    CornerRadius="16"
-                                                    Background="{Binding AvatarFillBrush}"
-                                                    BorderBrush="{Binding AvatarStrokeBrush}"
-                                                    BorderThickness="1"
-                                                    IsVisible="{Binding IsPlaceholderAvatar}">
+                        <TextBlock Text="{Binding DiscoveryMessage}" Classes="muted" TextWrapping="Wrap" Margin="6"
+                                   IsVisible="{Binding DiscoveryMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <ItemsControl ItemsSource="{Binding Installations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:InstallationViewModel">
+                                    <StackPanel Margin="0,0,0,10">
+                                        <Grid ColumnDefinitions="28,*">
+                                            <ToggleButton IsChecked="{Binding IsExpanded}" Padding="4"
+                                                          Background="Transparent" BorderThickness="0"
+                                                          ToolTip.Tip="Expand installation details and profiles"
+                                                          AutomationProperties.Name="Expand installation details and profiles">
                                                 <Grid>
-                                                    <Ellipse Width="10"
-                                                             Height="10"
-                                                             Stroke="{Binding AvatarStrokeBrush}"
-                                                             StrokeThickness="1.5"
-                                                             HorizontalAlignment="Center"
-                                                             VerticalAlignment="Top"
-                                                             Margin="0,6,0,0" />
-                                                    <Border Width="18"
-                                                            Height="10"
-                                                            CornerRadius="9,9,0,0"
-                                                            BorderBrush="{Binding AvatarStrokeBrush}"
-                                                            BorderThickness="1.5"
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Bottom"
-                                                            Margin="0,0,0,5" />
+                                                    <TextBlock Text="›" IsVisible="{Binding !IsExpanded}" />
+                                                    <TextBlock Text="⌄" IsVisible="{Binding IsExpanded}" />
                                                 </Grid>
-                                            </Border>
-                                            <Image Width="32"
-                                                   Height="32"
-                                                   Source="{Binding AvatarImage}"
-                                                   Stretch="UniformToFill"
-                                                   IsVisible="{Binding AvatarImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </ToggleButton>
+                                            <Button Grid.Column="1" Classes="installation"
+                                                    Classes.active="{Binding IsActive}"
+                                                    Command="{Binding ActivateCommand}"
+                                                    DoubleTapped="OnInstallationDoubleTapped"
+                                                    KeyDown="OnInstallationKeyDown"
+                                                    ToolTip.Tip="Click to activate. Double-click or press Shift+Space to toggle inclusion in Export All.">
+                                                <Grid ColumnDefinitions="32,*,22">
+                                                    <Border Width="26" Height="30" Background="#6C479C"
+                                                            CornerRadius="7">
+                                                        <TextBlock Text="B" FontSize="18" FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Spacing="3">
+                                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                                   FontSize="13" />
+                                                        <TextBlock Text="{Binding VersionText}" FontSize="11"
+                                                                   Classes="muted" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="✓" Foreground="#CBA4FF"
+                                                               FontSize="20" IsVisible="{Binding IsChecked}"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Button>
                                         </Grid>
-                                        <StackPanel Grid.Column="1">
-                                            <TextBlock Text="{Binding DisplayName}"
-                                                       FontWeight="Medium"
-                                                       Classes="profile-name"
-                                                       Classes.highlighted="{Binding ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                            <TextBlock Text="{Binding ProfileInfo.ProfileDirectory}"
-                                                       FontSize="11"
-                                                       Foreground="Gray"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       IsVisible="{Binding ProfileInfo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        <StackPanel Margin="34,8,6,4" Spacing="5" IsVisible="{Binding IsExpanded}">
+                                            <TextBlock Text="Product / channel" Classes="muted" FontSize="10" />
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="11" />
+                                            <TextBlock Text="Executable" Classes="muted" FontSize="10" Margin="0,4,0,0" />
+                                            <SelectableTextBlock Text="{Binding AppInfo.ProgramPath}" FontSize="11"
+                                                                 TextWrapping="Wrap" />
+                                            <TextBlock Text="Profile data directory" Classes="muted" FontSize="10"
+                                                       Margin="0,4,0,0" />
+                                            <SelectableTextBlock Text="{Binding AppInfo.UserDataDirectory}"
+                                                                 FontSize="11" TextWrapping="Wrap" />
+                                            <TextBlock Text="PROFILES" Classes="muted" FontSize="10" Margin="0,10,0,3" />
+                                            <TextBlock Text="{Binding DiscoveryMessage}" Classes="muted" FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       IsVisible="{Binding DiscoveryMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            <ItemsControl ItemsSource="{Binding Profiles}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="vm:ProfileSelectionViewModel">
+                                                        <Button Command="{Binding OpenDetailsCommand}"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Stretch" Padding="4,6">
+                                                            <Grid ColumnDefinitions="32,*">
+                                                                <ContentControl Content="{Binding Presentation}" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                                                           Classes="profile-name"
+                                                                           Classes.highlighted="{Binding Presentation.ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                           Margin="8,0,0,0" VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </Grid>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding StatusDescription}"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="12"
-                                                   Foreground="{Binding HasBookmarks, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                                   IsVisible="{Binding StatusDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                    </Grid>
+                                    </StackPanel>
                                 </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
-                </Border>
-
-                <!-- Step 3: Destination File -->
-                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="1"
-                        CornerRadius="6"
-                        Padding="14">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="3. Export Destination File"
-                                   FontWeight="SemiBold" />
-
-                        <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
-                            <TextBox Grid.Column="0"
-                                     Text="{Binding TargetFilePath}"
-                                     PlaceholderText="Enter destination file path (e.g. bookmarks.json)"
-                                     Margin="0,0,8,0" />
-                            <Button Grid.Column="1"
-                                    Content="Browse..."
-                                    Command="{Binding BrowseExportPathCommand}"
-                                    Padding="14,6" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
+                </ScrollViewer>
+                <Button Grid.Row="3" Content="Export All" Command="{Binding ExportAllCommand}"
+                        IsVisible="{Binding HasBulkSelection}" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center" Classes="accent" Margin="0,16,0,0" />
+            </Grid>
+        </Border>
+        <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="26,24,26,14">
+            <StackPanel Margin="0,0,0,18" Spacing="5">
+                <TextBlock Text="{Binding WorkspaceTitle}" FontSize="26" FontWeight="Bold" />
+                <TextBlock Text="Select profiles and choose the data you want to keep." Classes="muted" />
             </StackPanel>
-        </ScrollViewer>
-
-        <!-- Export Action Button -->
-        <Grid Grid.Row="2" Margin="0,16,0,0">
-            <Button Content="Export Bookmarks"
-                    Command="{Binding ExportBookmarksCommand}"
-                    HorizontalAlignment="Right"
-                    Padding="20,10"
-                    FontWeight="SemiBold"
-                    Classes="accent" />
+            <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}">
+                <TabItem Header="Backup (Export)">
+                    <ScrollViewer x:Name="BackupScrollViewer" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="16" Margin="0,18,0,12" IsEnabled="{Binding !IsRefreshing}">
+                            <Border Classes="card" IsVisible="{Binding !HasBackupScope}">
+                                <TextBlock Text="Select a Brave installation in the sidebar to configure a backup."
+                                           Classes="muted" TextWrapping="Wrap" />
+                            </Border>
+                            <StackPanel Spacing="16" IsVisible="{Binding HasBackupScope}">
+                                <Border Classes="card">
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="1   Select profiles" Classes="section" />
+                                        <TextBlock Text="{Binding ScopeDescription}" Classes="muted" FontSize="12"
+                                                   TextWrapping="Wrap" />
+                                        <StackPanel IsVisible="{Binding !IsBulkMode}" Spacing="4">
+                                            <TextBlock Text="Brave profile data directory" FontWeight="SemiBold"
+                                                       FontSize="12" />
+                                            <SelectableTextBlock Text="{Binding ActiveDataDirectory}" FontSize="12"
+                                                                 TextWrapping="Wrap" Foreground="#C4B7DB" />
+                                        </StackPanel>
+                                        <CheckBox Content="Select all profiles"
+                                                  IsChecked="{Binding AllProfilesSelected}" IsThreeState="False"
+                                                  IsEnabled="{Binding HasBackupProfiles}" />
+                                        <ItemsControl ItemsSource="{Binding BackupInstallations}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="vm:InstallationViewModel">
+                                                    <StackPanel Margin="0,0,0,8" Spacing="8">
+                                                        <Grid ColumnDefinitions="*,Auto">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold" Foreground="#C9A6F7" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding VersionText}"
+                                                                       Classes="muted" FontSize="11" />
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding DiscoveryMessage}" Classes="muted"
+                                                                   TextWrapping="Wrap"
+                                                                   IsVisible="{Binding DiscoveryMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                                      VerticalScrollBarVisibility="Disabled">
+                                                            <StackPanel MinWidth="690">
+                                                                <Grid ColumnDefinitions="32,40,2*,*,85,90,95"
+                                                                      Margin="12,3,12,8">
+                                                                    <TextBlock Grid.Column="2" Text="Profile"
+                                                                               Classes="muted" FontSize="11" />
+                                                                    <TextBlock Grid.Column="3" Text="Directory"
+                                                                               Classes="muted" FontSize="11" />
+                                                                    <TextBlock Grid.Column="4" Text="Bookmarks"
+                                                                               Classes="muted" FontSize="11" />
+                                                                    <TextBlock Grid.Column="5" Text="Extensions"
+                                                                               Classes="muted" FontSize="11"
+                                                                               ToolTip.Tip="Discovered extension directories; not an enabled-extension count" />
+                                                                    <TextBlock Grid.Column="6" Text="Last used"
+                                                                               Classes="muted" FontSize="11" />
+                                                                </Grid>
+                                                                <ItemsControl ItemsSource="{Binding Profiles}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate
+                                                                            DataType="vm:ProfileSelectionViewModel">
+                                                                            <Border Classes="profile-row"
+                                                                                    Classes.checked="{Binding IsSelected}">
+                                                                                <Grid
+                                                                                    ColumnDefinitions="32,40,2*,*,85,90,95">
+                                                                                    <CheckBox
+                                                                                        IsChecked="{Binding IsSelected}"
+                                                                                        AutomationProperties.Name="{Binding DisplayName}"
+                                                                                        VerticalAlignment="Center" />
+                                                                                    <ContentControl Grid.Column="1"
+                                                                                        Content="{Binding Presentation}"
+                                                                                        VerticalAlignment="Center" />
+                                                                                    <StackPanel Grid.Column="2"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Margin="4,0,8,0" Spacing="3">
+                                                                                        <TextBlock
+                                                                                            Text="{Binding DisplayName}"
+                                                                                            Classes="profile-name"
+                                                                                            Classes.highlighted="{Binding Presentation.ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                            TextTrimming="CharacterEllipsis"
+                                                                                            ToolTip.Tip="{Binding DisplayName}" />
+                                                                                        <TextBlock Text="Default"
+                                                                                            FontSize="10"
+                                                                                            Foreground="#E7C55F"
+                                                                                            IsVisible="{Binding IsDefaultDirectory}"
+                                                                                            ToolTip.Tip="Uses the Default profile directory" />
+                                                                                    </StackPanel>
+                                                                                    <TextBlock Grid.Column="3"
+                                                                                        Text="{Binding DirectoryName}"
+                                                                                        VerticalAlignment="Center"
+                                                                                        FontSize="12"
+                                                                                        TextTrimming="CharacterEllipsis"
+                                                                                        ToolTip.Tip="{Binding ProfileInfo.ProfileDirectory}" />
+                                                                                    <TextBlock Grid.Column="4"
+                                                                                        Text="{Binding BookmarkCountText}"
+                                                                                        VerticalAlignment="Center"
+                                                                                        FontSize="12" />
+                                                                                    <TextBlock Grid.Column="5"
+                                                                                        Text="{Binding ExtensionCountText}"
+                                                                                        VerticalAlignment="Center"
+                                                                                        FontSize="12" />
+                                                                                    <TextBlock Grid.Column="6"
+                                                                                        Text="{Binding LastUsedText}"
+                                                                                        Classes="muted"
+                                                                                        VerticalAlignment="Center"
+                                                                                        FontSize="11" />
+                                                                                </Grid>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
+                                                        </ScrollViewer>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="card">
+                                    <StackPanel Spacing="12">
+                                        <TextBlock Text="2   Select data to include" Classes="section" />
+                                        <CheckBox Content="Select all categories"
+                                                  IsChecked="{Binding Options.AllCategoriesSelected}"
+                                                  IsThreeState="False" />
+                                        <ItemsControl ItemsSource="{Binding Options.Categories}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="2" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="vm:BackupCategoryItem">
+                                                    <Border Classes="category" Classes.checked="{Binding IsSelected}">
+                                                        <CheckBox IsChecked="{Binding IsSelected}"
+                                                                  HorizontalAlignment="Stretch">
+                                                            <StackPanel Spacing="3">
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{Binding Description}" Classes="muted"
+                                                                           FontSize="11" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </CheckBox>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <Border Classes="card">
+                                    <StackPanel Spacing="14">
+                                        <TextBlock Text="3   Backup options" Classes="section" />
+                                        <Grid ColumnDefinitions="110,*,Auto">
+                                            <TextBlock Text="Backup file" VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Text="{Binding Options.BackupPath}"
+                                                     PlaceholderText="Choose a .bravebackup destination" />
+                                            <Button Grid.Column="2" Content="Browse…"
+                                                    Command="{Binding BrowseBackupPathCommand}" Margin="8,0,0,0" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="110,*">
+                                            <TextBlock Text="Encryption" VerticalAlignment="Center" />
+                                            <CheckBox Grid.Column="1" Content="Encrypt the entire backup"
+                                                      IsChecked="{Binding Options.EncryptBackup}" />
+                                        </Grid>
+                                        <StackPanel Margin="110,0,0,0" Spacing="8"
+                                                    IsVisible="{Binding Options.EncryptBackup}">
+                                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                                                <TextBlock Text="Password" FontSize="11" Classes="muted" />
+                                                <TextBlock Grid.Column="1" Text="Confirm password" FontSize="11"
+                                                           Classes="muted" Margin="10,0,0,0" />
+                                                <TextBox Grid.Row="1" Text="{Binding Options.Password}"
+                                                         PasswordChar="●"
+                                                         RevealPassword="{Binding Options.RevealPassword}"
+                                                         AutomationProperties.Name="Encryption password" />
+                                                <TextBox Grid.Row="1" Grid.Column="1"
+                                                         Text="{Binding Options.PasswordConfirmation}" PasswordChar="●"
+                                                         RevealPassword="{Binding Options.RevealPassword}"
+                                                         Margin="10,0,0,0"
+                                                         AutomationProperties.Name="Confirm encryption password" />
+                                            </Grid>
+                                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                                <CheckBox Content="Show passwords"
+                                                          IsChecked="{Binding Options.RevealPassword}" FontSize="11" />
+                                                <ProgressBar Grid.Column="1" Value="{Binding Options.PasswordStrength}"
+                                                             Minimum="0" Maximum="100" Height="5" Margin="16,0"
+                                                             VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding Options.PasswordStrengthText}"
+                                                           Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding Options.PasswordValidation}" Classes="muted"
+                                                       FontSize="11"
+                                                       IsVisible="{Binding Options.PasswordValidation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </StackPanel>
+                                        <Border Background="#493326" BorderBrush="#B08047" BorderThickness="1"
+                                                CornerRadius="6" Padding="12"
+                                                IsVisible="{Binding Options.RequiresPlaintextConfirmation}">
+                                            <TextBlock
+                                                Text="Passwords would be saved as readable CSV in this unencrypted backup. Anyone with file access could read them. Explicit confirmation will be required before saving."
+                                                TextWrapping="Wrap" Foreground="#F3D5AA" />
+                                        </Border>
+                                        <Grid ColumnDefinitions="110,*">
+                                            <TextBlock Text="Compression" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options.CompressionLevels}"
+                                                      SelectedItem="{Binding Options.Compression}"
+                                                      HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Custom archive creation will be available in a later phase."
+                                               Classes="muted" FontSize="12" TextWrapping="Wrap"
+                                               VerticalAlignment="Center" Margin="16,0,0,0" />
+                                </Grid>
+                                <Border BorderBrush="#49415E" BorderThickness="0,1,0,0" Padding="0,14,0,0"
+                                        IsVisible="{Binding HasActiveInstallation}">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <Button Content="Open bookmark JSON exporter" Click="OnOpenBookmarkExporter" />
+                                        <TextBlock Text="Existing bookmark export" Classes="muted" FontSize="11"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+                <TabItem Header="Restore (Import)">
+                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="Restore is not available yet." Classes="muted" />
+                    </Border>
+                </TabItem>
+                <TabItem Header="Profiles">
+                    <Grid RowDefinitions="Auto,*" Margin="0,18,0,0">
+                        <StackPanel Spacing="5" Margin="0,0,0,16">
+                            <TextBlock Text="Profiles" Classes="section" />
+                            <TextBlock Text="Merge / Sync will be available here." Classes="muted" FontSize="12" />
+                        </StackPanel>
+                        <Grid Grid.Row="1" ColumnDefinitions="220,*" IsVisible="{Binding HasActiveInstallation}">
+                            <ListBox ItemsSource="{Binding ActiveProfiles}" SelectedItem="{Binding FocusedProfile}"
+                                     Margin="0,0,16,0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="vm:ProfileSelectionViewModel">
+                                        <Grid ColumnDefinitions="32,*">
+                                            <ContentControl Content="{Binding Presentation}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                                       Classes="profile-name"
+                                                       Classes.highlighted="{Binding Presentation.ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                       Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <ContentControl Grid.Column="1" Content="{Binding FocusedProfile}">
+                                <ContentControl.ContentTemplate>
+                                    <DataTemplate DataType="vm:ProfileSelectionViewModel">
+                                        <Border Classes="card" VerticalAlignment="Top">
+                                            <StackPanel Spacing="14">
+                                                <ContentControl Content="{Binding Presentation}"
+                                                                HorizontalAlignment="Left" />
+                                                <TextBlock Text="{Binding DisplayName}" Classes="profile-name"
+                                                           Classes.highlighted="{Binding Presentation.ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                           FontSize="22" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Installation.DisplayName}"
+                                                           Foreground="#C9A6F7" />
+                                                <TextBlock Text="Profile directory" Classes="muted" FontSize="12" />
+                                                <SelectableTextBlock Text="{Binding ProfileInfo.ProfileDirectory}"
+                                                                     TextWrapping="Wrap" />
+                                                <Grid ColumnDefinitions="*,*,*">
+                                                    <StackPanel>
+                                                        <TextBlock Text="Bookmarks" Classes="muted" FontSize="11" />
+                                                        <TextBlock Text="{Binding BookmarkCountText}" FontSize="18" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="Extensions" Classes="muted" FontSize="11" />
+                                                        <TextBlock Text="{Binding ExtensionCountText}" FontSize="18" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="Last used" Classes="muted" FontSize="11" />
+                                                        <TextBlock Text="{Binding LastUsedText}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="Backups">
+                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="Backup management is not available yet." Classes="muted" />
+                    </Border>
+                </TabItem>
+                <TabItem Header="Settings">
+                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="Application settings will be defined in a later review." Classes="muted" />
+                    </Border>
+                </TabItem>
+                <TabItem Header="About">
+                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="Brave browsers Backup &amp; Restore custom data" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </TabItem>
+            </TabControl>
         </Grid>
+        <Border Grid.Row="1" Grid.Column="1" Background="#20202F" BorderBrush="#49415E" BorderThickness="0,1,0,0" />
     </Grid>
-
 </Window>
