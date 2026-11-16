@@ -228,6 +228,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     public void ExportAll()
     {
         if (!HasBulkSelection) return;
+        if (ActiveInstallation == null) Activate(Installations.First(item => item.IsChecked));
         IsBulkMode = true;
         SelectedTabIndex = 0;
         UpdateBackupScope();

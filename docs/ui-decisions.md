@@ -8,12 +8,15 @@ decided it was unnecessary. The first implementation increment was approved on 2
 
 - Keep the dark design and purple accents. Use a placeholder icon and the name **Brave browsers Backup & Restore custom
   data**.
+- The static branding header is removed from the sidebar; the application name remains in the window title.
 - Each detected Brave installation has a sidebar header. Single-click activates the
   installation and updates the main workspace. Double-click also toggles a visible
   bulk-export checkmark. A separate chevron expands installation details and profiles.
 - Details show product, channel, version, executable path and user-data directory.
   The directory is read-only information, never an editable replacement or custom picker.
 - Sidebar profiles show avatar/name; clicking one opens it in the Profiles tab.
+- Remove the static main-workspace title and description; place tabs at the top.
+- Main workspace tabs are hidden when no installation is active.
 - Main workspace tabs: Backup (Export), Restore (Import), Profiles, Backups, Settings, About.
   Merge/Sync belongs within Profiles. Unreviewed page contents remain undecided.
 - Refresh rescans installations/profiles and preserves active/checked entries that still exist.

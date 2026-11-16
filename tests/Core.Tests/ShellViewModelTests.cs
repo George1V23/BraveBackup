@@ -172,6 +172,11 @@ public sealed class ShellViewModelTests : IDisposable
         Assert.False(shell.IsBulkMode);
         Assert.False(shell.HasBackupScope);
         Assert.False(shell.HasBulkSelection);
+        shell.Installations[0].IsChecked = true;
+        shell.ExportAllCommand.Execute(null);
+        Assert.Same(shell.Installations[0], shell.ActiveInstallation);
+        Assert.True(shell.HasActiveInstallation);
+        Assert.True(shell.IsBulkMode);
     }
 
     [Fact]
