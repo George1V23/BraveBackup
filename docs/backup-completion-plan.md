@@ -76,6 +76,11 @@ Sessions scope was kept in full. Tested unencrypted format-3 capture and optiona
 files are implemented for review: [Sessions backup and archive v4](sessions-backup.md).
 Encrypted/legacy decoding remains unsupported and blocks capture explicitly.
 
+TabManagerPlus is at its scope-review checkpoint:
+[source findings and proposed choices](tabmanagerplus-backup-proposal.md).
+Choose automatic profile capture or an explicitly manual official-export input before
+implementing the dedicated category.
+
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and
 user review accompany each category. TabManagerPlus belongs in its own project under
