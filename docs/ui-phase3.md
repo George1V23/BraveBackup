@@ -161,3 +161,10 @@ queueing indefinitely on an idle dispatcher.
   HTML or JSON. The Backup form now writes verified bookmarks-only `.bravebackup` files.
 - Next checkpoint: user review of bookmarks-only archive creation, then choose the next
   category increment. Unreviewed page workflows remain pending.
+
+## Settings backup category
+
+The Backup form also supports the approved limited Settings category, alone or alongside
+Bookmarks. Its description lists stored bookmark-bar, Home and startup preferences.
+Completion reports stored/absent counts; unsupported categories still block creation.
+This does not implement the separate Settings page. See [Settings backup and archive v2](settings-backup.md).

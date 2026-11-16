@@ -4,8 +4,13 @@ namespace BraveBackup.Core;
 
 /// <summary>Versioned browser-independent archive metadata; never contains passwords or absolute source paths.</summary>
 public sealed record ArchiveManifest(
-    string Format, int FormatVersion, Guid ArchiveId, DateTimeOffset CreatedUtc,
-    string ApplicationVersion, string[] RequiredCapabilities, string Compression,
+    string Format,
+    int FormatVersion,
+    Guid ArchiveId,
+    DateTimeOffset CreatedUtc,
+    string ApplicationVersion,
+    string[] RequiredCapabilities,
+    string Compression,
     ArchiveInstallation[] Installations)
 {
     /// <summary>Gets the canonical archive JSON settings, separate from legacy bookmark JSON.</summary>
@@ -14,7 +19,11 @@ public sealed record ArchiveManifest(
 }
 
 /// <summary>Archive-local installation identity and informational browser metadata.</summary>
-public sealed record ArchiveInstallation(Guid Id, string Product, string Channel, string BrowserVersion,
+public sealed record ArchiveInstallation(
+    Guid Id,
+    string Product,
+    string Channel,
+    string BrowserVersion,
     ArchiveProfile[] Profiles);
 
 /// <summary>Archive-local profile identity; directory name is informational, never a restore destination.</summary>
@@ -32,5 +41,7 @@ public static class ArchiveLimits
     public const long MaxBytes = 100L * 1024 * 1024 * 1024;
     public const int MaxEntries = 100_000;
     public const int MaxManifestBytes = 16 * 1024 * 1024;
+    public const int MaxPreferencesBytes = 32 * 1024 * 1024;
+    public const int MaxSettingsBytes = 1024 * 1024;
     public const int MaxBookmarkBytes = 256 * 1024 * 1024;
 }

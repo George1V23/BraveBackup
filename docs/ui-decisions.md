@@ -105,3 +105,10 @@ The approved shell and selection form are implemented. See [ui-phase3.md](ui-pha
 for behavior, review screenshots, validation and remaining limits. The previously deferred Backup-page controls have now been reviewed and kept.
 See [the next implementation checkpoints](backup-completion-plan.md); the remaining
 pages still require their own review.
+
+## Settings backup scope review
+
+The user kept all proposed groups: bookmark-bar visibility, Home button/homepage and
+startup mode/addresses. Only approved stored preference keys are captured; absent values
+are explicit and full Preferences files are excluded. Settings-only and combined backups
+are implemented; see [Settings scope and archive-v2 details](settings-backup.md).

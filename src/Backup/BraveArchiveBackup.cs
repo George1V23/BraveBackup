@@ -13,7 +13,11 @@ public sealed record BraveBackupSelection(BraveAppInfo Installation, IReadOnlyLi
 public sealed record BackupProgress(string Stage, int CompletedProfiles, int TotalProfiles);
 
 /// <summary>Secret-free operation outcome. Absolute destination is deliberately separate from Report.</summary>
-public sealed record BackupResult(string Destination, string Report, long Bytes);
+public sealed record BackupResult(string Destination, string Report, long Bytes)
+{
+    /// <summary>Gets stored/absent Settings counts for completion feedback, without preference values.</summary>
+    public string SettingsSummary { get; init; } = string.Empty;
+}
 
 /// <summary>User-facing operation failure with a stable sanitized error code.</summary>
 public sealed class BackupOperationException(string code, string message) : IOException(message)
@@ -21,10 +25,10 @@ public sealed class BackupOperationException(string code, string message) : IOEx
     public string Code { get; } = code;
 }
 
-/// <summary>Creates bookmarks-only archives transactionally, without any profile write or restore.</summary>
+/// <summary>Creates selected supported-category archives transactionally, without any profile write or restore.</summary>
 public static class BraveArchiveBackup
 {
-    /// <summary>Captures selected bookmark snapshots, writes, verifies and publishes one local archive.</summary>
+    /// <summary>Captures selected profile snapshots, writes, verifies and publishes one local archive.</summary>
     /// <remarks>Password is deliberately a method argument, never a record field or operation report.</remarks>
     public static async Task<BackupResult> CreateAsync(IReadOnlyList<BraveBackupSelection> selections,
         IReadOnlyList<string> categories, string destination, string? password, string compression,
@@ -33,18 +37,26 @@ public static class BraveArchiveBackup
         CancellationToken cancellationToken = default)
     {
         // Freeze caller-owned collections before any await or worker-thread access.
-        var scope = selections.Select(item => new BraveBackupSelection(item.Installation, item.Profiles.ToArray())).ToArray();
+        var scope = selections.Select(item => new BraveBackupSelection(item.Installation, item.Profiles.ToArray()))
+            .ToArray();
         var selectedCategories = categories.ToArray();
         var roots = protectedDirectories.Concat(scope.Select(item => item.Installation.UserDataDirectory))
             .Concat(scope.SelectMany(item => item.Profiles).Select(item => item.ProfileDirectory)).ToArray();
         cancellationToken.ThrowIfCancellationRequested();
-        if (selectedCategories.Length != 1 || selectedCategories[0] != "bookmarks")
-            throw new BackupOperationException("unsupported-category", "This increment supports Bookmarks only. Deselect other data categories before creating a backup.");
+        if (selectedCategories.Length == 0 ||
+            selectedCategories.Distinct(StringComparer.Ordinal).Count() != selectedCategories.Length ||
+            selectedCategories.Any(category => category is not ("bookmarks" or "settings")))
+            throw new BackupOperationException("unsupported-category",
+                "Select Bookmarks, supported Settings, or both. Deselect other categories before creating a backup.");
         if (scope.Length == 0 || scope.Any(item => item.Profiles.Count == 0))
-            throw new BackupOperationException("empty-scope", "Select at least one profile for each installation included in the backup.");
-        if (scope.Sum(item => (long)item.Profiles.Count) * 2 + 1 > ArchiveLimits.MaxEntries)
+            throw new BackupOperationException("empty-scope",
+                "Select at least one profile for each installation included in the backup.");
+        if (scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("bookmarks") ? 2 : 0) +
+            scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("settings") ? 1 : 0) + 1 >
+            ArchiveLimits.MaxEntries)
             throw new BackupOperationException("entry-limit", "Too many selected profiles for one archive.");
-        if (password is { Length: 0 }) throw new BackupOperationException("password-required", "Enter an encryption password.");
+        if (password is { Length: 0 })
+            throw new BackupOperationException("password-required", "Enter an encryption password.");
         BackupArchive.Compression(compression);
         var target = ExportDestinationGuard.Validate(destination, roots);
         if (!string.Equals(Path.GetExtension(target), ".bravebackup", StringComparison.OrdinalIgnoreCase))
@@ -53,17 +65,25 @@ public static class BraveArchiveBackup
         if (initial != null && !await confirmOverwrite(target)) throw new OperationCanceledException(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return await Task.Run(() => Run(scope, target, password, compression, roots, applicationVersion,
-            initial, progress, cancellationToken), cancellationToken);
+            initial, progress, cancellationToken, selectedCategories), cancellationToken);
     }
 
     private static BackupResult Run(BraveBackupSelection[] selections, string target, string? password,
         string compression, string[] roots, string applicationVersion, string? initialFingerprint,
-        IProgress<BackupProgress>? progress, CancellationToken token)
+        IProgress<BackupProgress>? progress, CancellationToken token, string[] categories)
     {
         var start = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
         var total = selections.Sum(item => item.Profiles.Count);
         var done = 0;
+        var storedSettings = 0;
+        var absentSettings = 0;
+        var settingsCounts = new List<int>();
+        var hasBookmarks = categories.Contains("bookmarks", StringComparer.Ordinal);
+        var hasSettings = categories.Contains("settings", StringComparer.Ordinal);
+        var capabilities = hasSettings
+            ? hasBookmarks ? new[] { "bookmarks-v1", "settings-v1" } : new[] { "settings-v1" }
+            : new[] { "bookmarks-v1" };
         var temp = Path.Combine(Path.GetDirectoryName(target)!, $".bravebackup-{Guid.NewGuid():N}.tmp");
         var temporaryCreated = false;
         try
@@ -74,7 +94,8 @@ public static class BraveArchiveBackup
             using (var output = BackupFileOperations.CreatePrivateFile(temp))
             {
                 temporaryCreated = true;
-                using (var encrypted = password is null ? null : ArchiveEncryption.CreateWriter(output, password, token))
+                using (var encrypted =
+                       password is null ? null : ArchiveEncryption.CreateWriter(output, password, token))
                 using (var zip = new ZipArchive(encrypted ?? output, ZipArchiveMode.Create, leaveOpen: true))
                 {
                     var installations = new List<ArchiveInstallation>();
@@ -88,83 +109,150 @@ public static class BraveArchiveBackup
                             token.ThrowIfCancellationRequested();
                             progress?.Report(new BackupProgress("Reading", done, total));
                             var profileId = Guid.NewGuid();
-                            byte[] snapshot;
-                            try { snapshot = ReadSnapshot(profile.BookmarksPath, token); }
-                            catch (BackupOperationException error)
-                            {
-                                throw new BackupOperationException(error.Code, $"Profile {done + 1} of {total}: {error.Message}");
-                            }
-                            byte[]? portable = null;
+                            var profileCategories = new List<ArchiveCategory>();
                             try
                             {
-                                var parsed = BraveBookmarksParser.Parse(new UTF8Encoding(false, true).GetString(snapshot).TrimStart('\uFEFF'));
-                                portable = JsonSerializer.SerializeToUtf8Bytes(BraveBookmarksExporter.Export(parsed),
-                                    new JsonSerializerOptions { WriteIndented = true });
-                                expanded += snapshot.LongLength + portable.LongLength;
-                                if (portable.Length > ArchiveLimits.MaxBookmarkBytes || expanded > ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
-                                    throw new BackupOperationException("size-limit", "Selected data exceeds the archive size limit.");
-                                progress?.Report(new BackupProgress("Writing", done, total));
-                                var prefix = $"installations/{installationId:D}/profiles/{profileId:D}/bookmarks/";
-                                var files = new[]
+                                if (hasBookmarks)
                                 {
-                                    BackupArchive.WriteFile(zip, prefix + "source.json", "native-source", snapshot, compression, token),
-                                    BackupArchive.WriteFile(zip, prefix + "portable-v1.json", "portable-v1", portable, compression, token)
-                                };
-                                profiles.Add(new ArchiveProfile(profileId, profile.ProfileName,
-                                    Path.GetFileName(Path.TrimEndingDirectorySeparator(profile.ProfileDirectory)),
-                                    new[] { new ArchiveCategory("bookmarks", 1, files) }));
-                                done++;
+                                    var snapshot = ReadSnapshot(profile.BookmarksPath, token);
+                                    byte[]? portable = null;
+                                    try
+                                    {
+                                        var parsed = BraveBookmarksParser.Parse(new UTF8Encoding(false, true)
+                                            .GetString(snapshot).TrimStart('\uFEFF'));
+                                        portable = JsonSerializer.SerializeToUtf8Bytes(
+                                            BraveBookmarksExporter.Export(parsed),
+                                            new JsonSerializerOptions { WriteIndented = true });
+                                        expanded += snapshot.LongLength + portable.LongLength;
+                                        if (portable.Length > ArchiveLimits.MaxBookmarkBytes ||
+                                            expanded > ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
+                                            throw new BackupOperationException("size-limit",
+                                                "Selected data exceeds the archive size limit.");
+                                        progress?.Report(new BackupProgress("Writing", done, total));
+                                        var prefix =
+                                            $"installations/{installationId:D}/profiles/{profileId:D}/bookmarks/";
+                                        var files = new[]
+                                        {
+                                            BackupArchive.WriteFile(zip, prefix + "source.json", "native-source",
+                                                snapshot, compression, token),
+                                            BackupArchive.WriteFile(zip, prefix + "portable-v1.json", "portable-v1",
+                                                portable, compression, token)
+                                        };
+                                        profileCategories.Add(new ArchiveCategory("bookmarks", 1, files));
+                                    }
+                                    finally
+                                    {
+                                        CryptographicOperations.ZeroMemory(snapshot);
+                                        if (portable != null) CryptographicOperations.ZeroMemory(portable);
+                                    }
+                                }
+
+                                if (hasSettings)
+                                {
+                                    progress?.Report(new BackupProgress("Reading settings", done, total));
+                                    var settings = BraveSettingsBackup.Capture(profile.ProfileDirectory, token);
+                                    try
+                                    {
+                                        var count = BraveSettingsBackup.ValidatePayload(settings);
+                                        storedSettings += count;
+                                        absentSettings += 7 - count;
+                                        settingsCounts.Add(count);
+                                        expanded += settings.LongLength;
+                                        if (expanded > ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
+                                            throw new BackupOperationException("size-limit",
+                                                "Selected data exceeds the archive size limit.");
+                                        progress?.Report(new BackupProgress("Writing settings", done, total));
+                                        var path =
+                                            $"installations/{installationId:D}/profiles/{profileId:D}/settings/allowlisted-v1.json";
+                                        var file = BackupArchive.WriteFile(zip, path, "portable-settings", settings,
+                                            compression, token);
+                                        profileCategories.Add(new ArchiveCategory("settings", 1, new[] { file }));
+                                    }
+                                    finally
+                                    {
+                                        CryptographicOperations.ZeroMemory(settings);
+                                    }
+                                }
                             }
-                            finally
+                            catch (BackupOperationException error)
                             {
-                                CryptographicOperations.ZeroMemory(snapshot);
-                                if (portable != null) CryptographicOperations.ZeroMemory(portable);
+                                throw new BackupOperationException(error.Code,
+                                    $"Profile {done + 1} of {total}: {error.Message}");
                             }
+
+                            profiles.Add(new ArchiveProfile(profileId, profile.ProfileName,
+                                Path.GetFileName(Path.TrimEndingDirectorySeparator(profile.ProfileDirectory)),
+                                profileCategories.ToArray()));
+                            done++;
                         }
-                        installations.Add(new ArchiveInstallation(installationId, selection.Installation.Product.ToString(),
-                            selection.Installation.Channel.ToString(), selection.Installation.Version, profiles.ToArray()));
+
+                        installations.Add(new ArchiveInstallation(installationId,
+                            selection.Installation.Product.ToString(),
+                            selection.Installation.Channel.ToString(), selection.Installation.Version,
+                            profiles.ToArray()));
                     }
-                    BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive", 1, id, start,
-                        applicationVersion, new[] { "bookmarks-v1" }, compression, installations.ToArray()));
+
+                    BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive", hasSettings ? 2 : 1, id,
+                        start,
+                        applicationVersion, capabilities, compression, installations.ToArray()));
                 }
+
                 token.ThrowIfCancellationRequested();
                 output.Flush(flushToDisk: true);
             }
+
             progress?.Report(new BackupProgress("Verifying", done, total));
             using (var verify = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.None))
-                BackupArchive.Validate(verify, password, token);
+                BraveSettingsBackup.ValidateArchive(verify, password, token);
             token.ThrowIfCancellationRequested();
             progress?.Report(new BackupProgress("Finalizing", done, total));
             ExportDestinationGuard.Validate(target, roots);
             if (Fingerprint(target, token) != initialFingerprint)
-                throw new BackupOperationException("destination-changed", "The destination changed during backup. Start again to review replacement.");
+                throw new BackupOperationException("destination-changed",
+                    "The destination changed during backup. Start again to review replacement.");
             token.ThrowIfCancellationRequested();
             var bytes = new FileInfo(temp).Length;
             File.Move(temp, target, overwrite: initialFingerprint != null);
             var end = DateTimeOffset.UtcNow;
-            var report = $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: bookmarks (completed)\nBytes: {bytes}";
-            return new BackupResult(target, report, bytes);
+            var categoryNames = string.Join(", ",
+                hasSettings
+                    ? hasBookmarks ? new[] { "bookmarks", "settings" } : new[] { "settings" }
+                    : new[] { "bookmarks" });
+            var settingsSummary = hasSettings
+                ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
+                : string.Empty;
+            var report =
+                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}";
+            return new BackupResult(target, report, bytes) { SettingsSummary = settingsSummary.TrimStart() };
         }
         finally
         {
-            try { if (temporaryCreated) File.Delete(temp); }
+            try
+            {
+                if (temporaryCreated) File.Delete(temp);
+            }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            { throw new BackupOperationException("cleanup-failed", "Backup did not complete and its temporary output could not be removed. Check the destination folder."); }
+            {
+                throw new BackupOperationException("cleanup-failed",
+                    "Backup did not complete and its temporary output could not be removed. Check the destination folder.");
+            }
         }
     }
 
     private static byte[] ReadSnapshot(string path, CancellationToken token)
     {
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0;; attempt++)
         {
             token.ThrowIfCancellationRequested();
             byte[]? bytes = null;
             try
             {
-                using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
                 var stamp = File.GetLastWriteTimeUtc(path);
                 var length = input.Length;
-                if (length > ArchiveLimits.MaxBookmarkBytes) throw new BackupOperationException("source-size", "A selected bookmark file exceeds 256 MiB.");
+                if (length > ArchiveLimits.MaxBookmarkBytes)
+                    throw new BackupOperationException("source-size", "A selected bookmark file exceeds 256 MiB.");
                 bytes = new byte[checked((int)length)];
                 for (var offset = 0; offset < bytes.Length;)
                 {
@@ -173,15 +261,20 @@ public static class BraveArchiveBackup
                     if (count == 0) throw new IOException("Source changed while reading.");
                     offset += count;
                 }
-                if (input.Length != length || File.GetLastWriteTimeUtc(path) != stamp || input.ReadByte() != -1) throw new IOException("Source changed while reading.");
+
+                if (input.Length != length || File.GetLastWriteTimeUtc(path) != stamp || input.ReadByte() != -1)
+                    throw new IOException("Source changed while reading.");
                 BraveBookmarksParser.Parse(new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'));
                 return bytes;
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or DecoderFallbackException)
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException
+                                              or DecoderFallbackException)
             {
                 if (bytes != null) CryptographicOperations.ZeroMemory(bytes);
                 if (error is BackupOperationException) throw;
-                if (attempt >= 2) throw new BackupOperationException("source-unreadable", "A selected profile's Bookmarks file could not be read as a valid snapshot. Refresh the profile list or close Brave and try again.");
+                if (attempt >= 2)
+                    throw new BackupOperationException("source-unreadable",
+                        "A selected profile's Bookmarks file could not be read as a valid snapshot. Refresh the profile list or close Brave and try again.");
             }
             catch
             {
@@ -195,9 +288,11 @@ public static class BraveArchiveBackup
     {
         if (!File.Exists(path))
         {
-            if (Directory.Exists(path)) throw new BackupOperationException("destination-folder", "Choose a filename, not a folder.");
+            if (Directory.Exists(path))
+                throw new BackupOperationException("destination-folder", "Choose a filename, not a folder.");
             return null;
         }
+
         using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[65536];
@@ -209,8 +304,13 @@ public static class BraveArchiveBackup
                 token.ThrowIfCancellationRequested();
                 hash.AppendData(buffer, 0, count);
             }
-            return $"{input.Length}:{File.GetLastWriteTimeUtc(path).Ticks}:{Convert.ToHexString(hash.GetHashAndReset())}";
+
+            return
+                $"{input.Length}:{File.GetLastWriteTimeUtc(path).Ticks}:{Convert.ToHexString(hash.GetHashAndReset())}";
         }
-        finally { CryptographicOperations.ZeroMemory(buffer); }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(buffer);
+        }
     }
 }

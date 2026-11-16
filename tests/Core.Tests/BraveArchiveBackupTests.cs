@@ -113,7 +113,7 @@ public sealed class BraveArchiveBackupTests : IDisposable
     }
 
     [Theory]
-    [InlineData("passwords")] [InlineData("sessions")] [InlineData("settings")]
+    [InlineData("passwords")] [InlineData("sessions")] [InlineData("unknown")]
     [InlineData("extensions")] [InlineData("tabmanagerplus")]
     public async Task UnsupportedCategory_NeverSilentlyOmitsSelectedData(string category)
     {
@@ -201,6 +201,91 @@ public sealed class BraveArchiveBackupTests : IDisposable
             source.SetLength(ArchiveLimits.MaxBookmarkBytes + 1L);
         var failure = await Assert.ThrowsAsync<BackupOperationException>(() => Create());
         Assert.Equal("source-size", failure.Code);
+        Assert.False(File.Exists(Destination));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!, "*.tmp"));
+    }
+
+    [Theory]
+    [InlineData(false, false, "none")] [InlineData(false, false, "fast")]
+    [InlineData(false, false, "balanced")] [InlineData(false, false, "high")]
+    [InlineData(true, false, "none")] [InlineData(true, false, "fast")]
+    [InlineData(true, false, "balanced")] [InlineData(true, false, "high")]
+    [InlineData(false, true, "none")] [InlineData(false, true, "fast")]
+    [InlineData(false, true, "balanced")] [InlineData(false, true, "high")]
+    [InlineData(true, true, "none")] [InlineData(true, true, "fast")]
+    [InlineData(true, true, "balanced")] [InlineData(true, true, "high")]
+    public async Task SettingsArchives_RoundTripSupportedValuesAcrossScopesAndModes(bool encrypted, bool bookmarks, string compression)
+    {
+        var prefs = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Preferences.settings.json"));
+        foreach (var profile in _selections.SelectMany(item => item.Profiles))
+        {
+            File.WriteAllBytes(Path.Combine(profile.ProfileDirectory, "Preferences"), prefs);
+            if (!bookmarks) File.Delete(profile.BookmarksPath);
+        }
+        var categories = bookmarks ? new[] { "settings", "bookmarks" } : new[] { "settings" };
+        var password = encrypted ? "settings-fixture-secret" : null;
+        var result = await Create(password, compression, categories: categories);
+        Assert.Contains("Stored supported settings: 14; absent keys: 0", result.SettingsSummary);
+        Assert.DoesNotContain("home.example", result.Report);
+        using var source = File.OpenRead(Destination);
+        var manifest = BraveSettingsBackup.ValidateArchive(source, password);
+        Assert.Equal(2, manifest.FormatVersion);
+        Assert.Equal(bookmarks ? new[] { "bookmarks-v1", "settings-v1" } : new[] { "settings-v1" }, manifest.RequiredCapabilities);
+        Assert.All(manifest.Installations.SelectMany(item => item.Profiles), profile =>
+            Assert.Equal(bookmarks ? 2 : 1, profile.Categories.Length));
+        source.Position = 0;
+        using var decrypted = encrypted ? ArchiveEncryption.OpenReader(source, password!) : null;
+        using var zip = new ZipArchive(decrypted ?? source, ZipArchiveMode.Read, leaveOpen: true);
+        var entries = zip.Entries.Where(entry => entry.FullName.EndsWith("allowlisted-v1.json")).ToArray();
+        Assert.Equal(2, entries.Length);
+        foreach (var entry in entries)
+        {
+            using var input = entry.Open(); using var bytes = new MemoryStream(); input.CopyTo(bytes);
+            Assert.Equal(7, BraveSettingsBackup.ValidatePayload(bytes.ToArray()));
+            Assert.DoesNotContain("unrelated", System.Text.Encoding.UTF8.GetString(bytes.ToArray()));
+        }
+        foreach (var profile in _selections.SelectMany(item => item.Profiles))
+            Assert.Equal(prefs, File.ReadAllBytes(Path.Combine(profile.ProfileDirectory, "Preferences")));
+    }
+
+    [Theory]
+    [InlineData("missing")] [InlineData("broken")] [InlineData("null-parent")] [InlineData("bad-type")]
+    public async Task SettingsFailure_PreservesExistingDestinationAndNeverSkipsAProfile(string fault)
+    {
+        foreach (var profile in _selections.SelectMany(item => item.Profiles))
+            File.WriteAllText(Path.Combine(profile.ProfileDirectory, "Preferences"), "{}");
+        var bad = Path.Combine(_selections[1].Profiles[0].ProfileDirectory, "Preferences");
+        if (fault == "missing") File.Delete(bad);
+        else File.WriteAllText(bad, fault switch
+        { "broken" => "{bad", "null-parent" => "{\"session\":null}", _ => "{\"homepage\":true}" });
+        Directory.CreateDirectory(Path.GetDirectoryName(Destination)!);
+        File.WriteAllText(Destination, "original");
+        var failure = await Assert.ThrowsAsync<BackupOperationException>(() => Create("fixture", categories: new[] { "settings" },
+            confirm: _ => Task.FromResult(true)));
+        Assert.Contains("Profile 2 of 2", failure.Message);
+        Assert.Equal("original", File.ReadAllText(Destination));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task NoStoredSettings_ReportsZeroWithoutClaimingCompleteBrowserSettings()
+    {
+        foreach (var profile in _selections.SelectMany(item => item.Profiles))
+            File.WriteAllText(Path.Combine(profile.ProfileDirectory, "Preferences"), "{}");
+        var result = await Create(categories: new[] { "settings" });
+        Assert.Contains("Stored supported settings: 0; absent keys: 14", result.SettingsSummary);
+        Assert.Contains("scope order): 0, 0", result.Report);
+    }
+
+    [Theory]
+    [InlineData("Reading settings")] [InlineData("Writing settings")] [InlineData("Verifying")]
+    public async Task SettingsCancellation_CleansUpAndDoesNotPublish(string stage)
+    {
+        foreach (var profile in _selections.SelectMany(item => item.Profiles))
+            File.WriteAllText(Path.Combine(profile.ProfileDirectory, "Preferences"), "{}");
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Create("fixture", categories: new[] { "settings" },
+            progress: new InlineProgress(value => { if (value.Stage == stage) cancellation.Cancel(); }), token: cancellation.Token));
         Assert.False(File.Exists(Destination));
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!, "*.tmp"));
     }

@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
-/// <summary>Writes and verifies archive-v1 ZIP content independently of any browser or UI.</summary>
+/// <summary>Writes and verifies archive-v1/v2 ZIP content independently of any browser or UI.</summary>
 public static class BackupArchive
 {
     /// <summary>Maps the four approved compression choices without adding package dependencies.</summary>
@@ -26,8 +26,10 @@ public static class BackupArchive
         {
             token.ThrowIfCancellationRequested();
             var take = Math.Min(64 * 1024, bytes.Length - offset);
-            stream.Write(bytes, offset, take); offset += take;
+            stream.Write(bytes, offset, take);
+            offset += take;
         }
+
         return new ArchiveFile(path, role, bytes.LongLength, Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
 
@@ -49,12 +51,14 @@ public static class BackupArchive
             throw new InvalidDataException("Archive exceeds its supported size.");
         source.Position = 0;
         using var decrypted = ArchiveEncryption.IsEncrypted(source)
-            ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token) : null;
+            ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token)
+            : null;
         var content = decrypted ?? source;
         if (content.Length > ArchiveLimits.MaxBytes) throw new InvalidDataException("Archive exceeds 100 GiB.");
         ArchiveZipGuard.Validate(content, token);
         using var zip = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
-        if (zip.Entries.Count is < 1 or > ArchiveLimits.MaxEntries) throw new InvalidDataException("Invalid archive entry count.");
+        if (zip.Entries.Count is < 1 or > ArchiveLimits.MaxEntries)
+            throw new InvalidDataException("Invalid archive entry count.");
         var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
         long expanded = 0;
         foreach (var entry in zip.Entries)
@@ -66,7 +70,9 @@ public static class BackupArchive
                 throw new InvalidDataException("Invalid or duplicate ZIP entry.");
             expanded += entry.Length;
         }
-        if (!entries.Remove("manifest.json", out var manifestEntry) || manifestEntry.Length > ArchiveLimits.MaxManifestBytes)
+
+        if (!entries.Remove("manifest.json", out var manifestEntry) ||
+            manifestEntry.Length > ArchiveLimits.MaxManifestBytes)
             throw new InvalidDataException("Missing or oversized manifest.");
         ArchiveManifest manifest;
         using (var input = manifestEntry.Open())
@@ -77,6 +83,7 @@ public static class BackupArchive
             manifest = json.Deserialize<ArchiveManifest>(ArchiveManifest.JsonOptions)
                        ?? throw new InvalidDataException("Missing archive manifest.");
         }
+
         ValidateManifest(manifest);
         var ids = new HashSet<Guid>();
         foreach (var installation in manifest.Installations)
@@ -87,67 +94,100 @@ public static class BackupArchive
                 installation.BrowserVersion is null) throw new InvalidDataException("Invalid installation metadata.");
             foreach (var profile in installation.Profiles)
             {
-                if (profile is null || profile.Id == Guid.Empty || !ids.Add(profile.Id) || profile.DisplayName is null ||
+                if (profile is null || profile.Id == Guid.Empty || !ids.Add(profile.Id) ||
+                    profile.DisplayName is null ||
                     string.IsNullOrEmpty(profile.DirectoryName) || profile.DirectoryName is "." or ".." ||
                     profile.DirectoryName.IndexOfAny(['/', '\\', ':']) >= 0 ||
-                    profile.Categories is null || profile.Categories.Length != 1)
+                    profile.Categories is null || profile.Categories.Length != manifest.RequiredCapabilities.Length)
                     throw new InvalidDataException("Invalid profile metadata.");
-                var category = profile.Categories[0];
-                if (category is null || category.Id != "bookmarks" || category.Version != 1 || category.Files is null || category.Files.Length != 2)
-                    throw new InvalidDataException("Unsupported archive category.");
-                var roles = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var file in category.Files)
+                var categoryIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var category in profile.Categories)
                 {
-                    token.ThrowIfCancellationRequested();
-                    if (file is null || file.Role is not ("native-source" or "portable-v1") || !roles.Add(file.Role))
-                        throw new InvalidDataException("Invalid bookmark payload role.");
-                    var name = file.Role == "native-source" ? "source.json" : "portable-v1.json";
-                    var expected = $"installations/{installation.Id:D}/profiles/{profile.Id:D}/bookmarks/{name}";
-                    if (file.Path != expected || file.Length < 0 || file.Length > ArchiveLimits.MaxBookmarkBytes ||
-                        file.Sha256 is null || file.Sha256.Length != 64 ||
-                        file.Sha256.Any(character => character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
-                        !entries.Remove(expected, out var entry) || entry.Length != file.Length)
-                        throw new InvalidDataException("Missing or invalid payload metadata.");
-                    using var stream = entry.Open();
-                    using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                    var buffer = new byte[64 * 1024];
-                    long read = 0;
-                    try
+                    if (category is null || !categoryIds.Add(category.Id) || category.Version != 1 ||
+                        category.Files is null ||
+                        !manifest.RequiredCapabilities.Contains(category.Id + "-v1", StringComparer.Ordinal))
+                        throw new InvalidDataException("Unsupported or duplicate archive category.");
+                    var settings = category.Id == "settings";
+                    if (category.Files.Length != (settings ? 1 : 2))
+                        throw new InvalidDataException("Invalid category payload count.");
+                    var roles = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var file in category.Files)
                     {
-                        int count;
-                        while ((count = stream.Read(buffer)) != 0)
+                        token.ThrowIfCancellationRequested();
+                        if (file is null || !roles.Add(file.Role) || (settings
+                                ? file.Role != "portable-settings"
+                                : file.Role is not ("native-source" or "portable-v1")))
+                            throw new InvalidDataException("Invalid category payload role.");
+                        var name = settings ? "allowlisted-v1.json" :
+                            file.Role == "native-source" ? "source.json" : "portable-v1.json";
+                        var expected =
+                            $"installations/{installation.Id:D}/profiles/{profile.Id:D}/{category.Id}/{name}";
+                        if (file.Path != expected || file.Length < 0 || file.Length >
+                            (settings ? ArchiveLimits.MaxSettingsBytes : ArchiveLimits.MaxBookmarkBytes) ||
+                            file.Sha256 is null || file.Sha256.Length != 64 ||
+                            file.Sha256.Any(character =>
+                                character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
+                            !entries.Remove(expected, out var entry) || entry.Length != file.Length)
+                            throw new InvalidDataException("Missing or invalid payload metadata.");
+                        using var stream = entry.Open();
+                        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                        var buffer = new byte[64 * 1024];
+                        long read = 0;
+                        try
                         {
-                            token.ThrowIfCancellationRequested();
-                            read += count;
-                            if (read > file.Length) throw new InvalidDataException("Payload exceeds declared length.");
-                            hash.AppendData(buffer, 0, count);
+                            int count;
+                            while ((count = stream.Read(buffer)) != 0)
+                            {
+                                token.ThrowIfCancellationRequested();
+                                read += count;
+                                if (read > file.Length)
+                                    throw new InvalidDataException("Payload exceeds declared length.");
+                                hash.AppendData(buffer, 0, count);
+                            }
+
+                            if (read != file.Length || Convert.ToHexStringLower(hash.GetHashAndReset()) != file.Sha256)
+                                throw new InvalidDataException("Payload integrity check failed.");
                         }
-                        if (read != file.Length || Convert.ToHexStringLower(hash.GetHashAndReset()) != file.Sha256)
-                            throw new InvalidDataException("Payload integrity check failed.");
-                    }
-                    finally { CryptographicOperations.ZeroMemory(buffer); }
-                    // Parse only after length/hash verification. Allocation is bounded by the category limit.
-                    using var jsonStream = entry.Open();
-                    var jsonBytes = ReadBounded(jsonStream, checked((int)file.Length), token);
-                    try
-                    {
-                        var jsonContent = jsonBytes.AsMemory();
-                        if (jsonContent.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) jsonContent = jsonContent[3..];
-                        using var payloadJson = JsonDocument.Parse(jsonContent);
-                        if (payloadJson.RootElement.ValueKind != JsonValueKind.Object)
-                            throw new InvalidDataException("Invalid JSON payload.");
-                        if (file.Role == "portable-v1")
+                        finally
                         {
-                            var model = payloadJson.Deserialize<BackupModel>(new JsonSerializerOptions { RespectRequiredConstructorParameters = true });
-                            if (model is null || model.SchemaVersion != 1 || model.Bookmarks is null)
-                                throw new InvalidDataException("Unsupported portable bookmark payload.");
-                            foreach (var bookmark in model.Bookmarks) ValidateBookmark(bookmark);
+                            CryptographicOperations.ZeroMemory(buffer);
+                        }
+
+                        // Parse only after length/hash verification. Allocation is bounded by the category limit.
+                        using var jsonStream = entry.Open();
+                        var jsonBytes = ReadBounded(jsonStream, checked((int)file.Length), token);
+                        try
+                        {
+                            var jsonContent = jsonBytes.AsMemory();
+                            if (jsonContent.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }))
+                                jsonContent = jsonContent[3..];
+                            using var payloadJson = JsonDocument.Parse(jsonContent);
+                            if (payloadJson.RootElement.ValueKind != JsonValueKind.Object)
+                                throw new InvalidDataException("Invalid JSON payload.");
+                            if (file.Role == "portable-settings")
+                            {
+                                RejectDuplicateProperties(payloadJson.RootElement);
+                                PortableSettings.Parse(payloadJson.RootElement);
+                            }
+
+                            if (file.Role == "portable-v1")
+                            {
+                                var model = payloadJson.Deserialize<BackupModel>(new JsonSerializerOptions
+                                    { RespectRequiredConstructorParameters = true });
+                                if (model is null || model.SchemaVersion != 1 || model.Bookmarks is null)
+                                    throw new InvalidDataException("Unsupported portable bookmark payload.");
+                                foreach (var bookmark in model.Bookmarks) ValidateBookmark(bookmark);
+                            }
+                        }
+                        finally
+                        {
+                            CryptographicOperations.ZeroMemory(jsonBytes);
                         }
                     }
-                    finally { CryptographicOperations.ZeroMemory(jsonBytes); }
                 }
             }
         }
+
         if (entries.Count != 0) throw new InvalidDataException("Undeclared archive payloads.");
         return manifest;
     }
@@ -164,10 +204,14 @@ public static class BackupArchive
 
     private static void ValidateManifest(ArchiveManifest manifest)
     {
-        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion != 1 || manifest.ArchiveId == Guid.Empty ||
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2) ||
+            manifest.ArchiveId == Guid.Empty ||
             manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
             string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
-            !manifest.RequiredCapabilities.SequenceEqual(new[] { "bookmarks-v1" }) ||
+            !(manifest.FormatVersion == 1
+                ? manifest.RequiredCapabilities.SequenceEqual(new[] { "bookmarks-v1" })
+                : manifest.RequiredCapabilities.SequenceEqual(new[] { "settings-v1" }) ||
+                  manifest.RequiredCapabilities.SequenceEqual(new[] { "bookmarks-v1", "settings-v1" })) ||
             manifest.Installations is null || manifest.Installations.Length == 0)
             throw new InvalidDataException("Unsupported or invalid archive manifest.");
         Compression(manifest.Compression);
@@ -185,7 +229,8 @@ public static class BackupArchive
             }
         }
         else if (element.ValueKind == JsonValueKind.Array)
-            foreach (var item in element.EnumerateArray()) RejectDuplicateProperties(item);
+            foreach (var item in element.EnumerateArray())
+                RejectDuplicateProperties(item);
     }
 
     private static byte[] ReadBounded(Stream stream, int length, CancellationToken token)
@@ -198,6 +243,7 @@ public static class BackupArchive
             if (read == 0) throw new InvalidDataException("Truncated manifest.");
             offset += read;
         }
+
         if (stream.ReadByte() != -1) throw new InvalidDataException("Manifest exceeds declared length.");
         return bytes;
     }

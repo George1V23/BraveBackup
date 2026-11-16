@@ -114,5 +114,27 @@ public sealed class ShellBackupTests : IDisposable
         Assert.Equal("original", File.ReadAllText(shell.Options.BackupPath));
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task SettingsSelection_CreatesRequestedCategoriesAndShowsStoredCounts(bool bookmarks)
+    {
+        using var shell = await Create();
+        File.Delete(_profile.BookmarksPath);
+        if (bookmarks) File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json"), _profile.BookmarksPath);
+        File.WriteAllText(Path.Combine(_profile.ProfileDirectory, "Preferences"), "{}");
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.EncryptBackup = false;
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = bookmarks;
+        shell.Options.Categories.Single(item => item.Id == "settings").IsSelected = true;
+        Assert.True(shell.CreateBackupCommand.CanExecute(null));
+        await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded);
+        Assert.Contains("Stored supported settings: 0; absent keys: 7", shell.BackupMessage);
+        Assert.Contains("settings", shell.BackupReport);
+        Assert.DoesNotContain("Private fixture profile", shell.BackupReport);
+        using var file = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(2, BraveSettingsBackup.ValidateArchive(file).FormatVersion);
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }

@@ -1,5 +1,8 @@
 # .bravebackup archive version 1
 
+Bookmark-only writes still use this version. Settings-only and mixed archives now use
+[manifest version 2](settings-backup.md); current validation preserves v1 support.
+
 Implemented for bookmarks-only creation and read-only verification. The detailed
 [format contract](archive-format-proposal.md) defines the manifest, entry layout and
 BBKENC1 envelope byte offsets. Its implementation was authorized by the user's

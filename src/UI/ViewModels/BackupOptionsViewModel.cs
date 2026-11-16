@@ -44,7 +44,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
         new("bookmarks", "Bookmarks", "Bookmark folders and URLs", true),
         new("passwords", "Passwords", "Saved logins; protection enabled by default"),
         new("extensions", "Extensions", "Installed extensions and supported settings/data"),
-        new("settings", "Settings", "Supported Brave profile preferences"),
+        new("settings", "Settings", "Bookmark-bar visibility, Home button/homepage, startup mode and addresses (stored values only)"),
         new("tabmanagerplus", "TabManagerPlus", "Supported saved windows, groups and extension data")
     };
 

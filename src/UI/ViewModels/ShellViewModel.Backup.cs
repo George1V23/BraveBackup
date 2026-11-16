@@ -21,34 +21,45 @@ public partial class ShellViewModel
 
     /// <summary>Gets whether one frozen archive request is currently running.</summary>
     [ObservableProperty] private bool _isBackupRunning;
+
     /// <summary>Gets actual stage/profile progress; no estimated byte percentage is fabricated.</summary>
     [ObservableProperty] private string _backupStage = string.Empty;
+
     /// <summary>Gets the current outcome or actionable validation error.</summary>
     [ObservableProperty] private string _backupMessage = string.Empty;
+
     /// <summary>Gets a report without credentials, bookmark contents, paths or profile names.</summary>
     [ObservableProperty] private string _backupReport = string.Empty;
+
     /// <summary>Gets whether the in-app report is expanded.</summary>
     [ObservableProperty] private bool _showBackupReport;
+
     /// <summary>Gets whether the latest operation published a verified archive.</summary>
     [ObservableProperty] private bool _backupSucceeded;
 
     /// <summary>Gets whether profile/navigation controls may change while no backup is running.</summary>
     public bool IsWorkspaceEnabled => !IsRefreshing && !IsBackupRunning;
+
     /// <summary>Gets whether operation feedback is present.</summary>
     public bool HasBackupFeedback => !string.IsNullOrEmpty(BackupMessage);
+
     /// <summary>Gets whether a sanitized report is available.</summary>
     public bool HasBackupReport => !string.IsNullOrEmpty(BackupReport);
 
-    /// <summary>Gets the validation result for the bookmarks-only archive action.</summary>
-    public string BackupAvailability => IsBackupRunning ? "Backup in progress; the current selection is frozen." :
-        !HasBackupScope || !BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected))
-            ? "Select at least one profile for backup." :
-        !Options.Categories.Any(item => item.IsSelected) ? "Select Bookmarks to create a backup." :
-        Options.Categories.Any(item => item.IsSelected && item.Id != "bookmarks")
-            ? "Only Bookmarks is currently supported. Deselect other categories to create an archive." :
-        Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation) ? Options.PasswordValidation :
-        !string.IsNullOrEmpty(BackupDestinationValidation) ? BackupDestinationValidation :
-        "Ready to create a bookmarks backup. Restore is not available yet.";
+    /// <summary>Gets the validation result for the supported-category archive action.</summary>
+    public string BackupAvailability => IsBackupRunning
+        ? "Backup in progress; the current selection is frozen."
+        : !HasBackupScope || !BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected))
+            ? "Select at least one profile for backup."
+            : !Options.Categories.Any(item => item.IsSelected)
+                ? "Select Bookmarks, supported Settings, or both."
+                : Options.Categories.Any(item => item.IsSelected && item.Id is not ("bookmarks" or "settings"))
+                    ? "Bookmarks and supported Settings are available. Deselect other categories to create an archive."
+                    : Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation)
+                        ? Options.PasswordValidation
+                        : !string.IsNullOrEmpty(BackupDestinationValidation)
+                            ? BackupDestinationValidation
+                            : "Ready to create a backup. Restore is not available yet.";
 
     private string BackupDestinationValidation
     {
@@ -63,15 +74,20 @@ public partial class ShellViewModel
                 return Directory.Exists(path) ? "Choose a filename, not a folder." : string.Empty;
             }
             catch (Exception error) when (error is ArgumentException or NotSupportedException or IOException)
-            { return "Enter a valid .bravebackup destination path."; }
+            {
+                return "Enter a valid .bravebackup destination path.";
+            }
         }
     }
 
     private bool CanCreateBackup() => !_disposed && IsWorkspaceEnabled &&
-        BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected)) &&
-        Options.Categories.Where(item => item.IsSelected).Select(item => item.Id).SequenceEqual(new[] { "bookmarks" }) &&
-        (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
-        string.IsNullOrEmpty(BackupDestinationValidation);
+                                      BackupInstallations.Any(item =>
+                                          item.Profiles.Any(profile => profile.IsSelected)) &&
+                                      Options.Categories.Any(item => item.IsSelected) &&
+                                      Options.Categories.All(item =>
+                                          !item.IsSelected || item.Id is "bookmarks" or "settings") &&
+                                      (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
+                                      string.IsNullOrEmpty(BackupDestinationValidation);
 
     private void NotifyBackupValidation()
     {
@@ -79,13 +95,13 @@ public partial class ShellViewModel
         CreateBackupCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Creates a verified bookmarks-only archive from an immutable copy of the current form choices.</summary>
+    /// <summary>Creates a verified supported-category archive from an immutable copy of the current form choices.</summary>
     [RelayCommand(CanExecute = nameof(CanCreateBackup))]
     public async Task CreateBackupAsync()
     {
         if (!CanCreateBackup()) return;
         var selections = BackupInstallations.Select(item => new BraveBackupSelection(item.AppInfo,
-            item.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.ProfileInfo).ToArray()))
+                item.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.ProfileInfo).ToArray()))
             .Where(item => item.Profiles.Count > 0).ToArray();
         var categories = Options.Categories.Where(item => item.IsSelected).Select(item => item.Id).ToArray();
         var destination = Options.BackupPath;
@@ -118,6 +134,8 @@ public partial class ShellViewModel
             _completedBackupPath = result.Destination;
             BackupSucceeded = true;
             BackupMessage = $"Backup created and verified: {result.Destination} ({result.Bytes:N0} bytes)";
+            if (categories.Contains("settings"))
+                BackupMessage += "\n" + result.SettingsSummary + "\nOnly the supported stored settings are included.";
             BackupReport = result.Report;
         }
         catch (OperationCanceledException)
@@ -125,20 +143,25 @@ public partial class ShellViewModel
             if (!_disposed)
             {
                 BackupMessage = "Backup cancelled. No new archive was published.";
-                BackupReport = FailureReport(start, "Cancelled", "cancelled", selections.Sum(item => item.Profiles.Count));
+                BackupReport = FailureReport(start, "Cancelled", "cancelled",
+                    selections.Sum(item => item.Profiles.Count), categories);
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or
-                                           InvalidOperationException or CryptographicException or System.Text.Json.JsonException)
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException
+                                          or ArgumentException or
+                                          InvalidOperationException or CryptographicException
+                                          or System.Text.Json.JsonException)
         {
             if (!_disposed)
             {
                 var code = error is BackupOperationException operation ? operation.Code :
                     error is UnauthorizedAccessException ? "access-denied" :
                     error is CryptographicException ? "authentication-failed" : "backup-failed";
-                BackupMessage = error is BackupOperationException known ? known.Message :
-                    "Backup could not be completed. Check destination permissions, free disk space and profile availability, then try again.";
-                BackupReport = FailureReport(start, "Failed", code, selections.Sum(item => item.Profiles.Count));
+                BackupMessage = error is BackupOperationException known
+                    ? known.Message
+                    : "Backup could not be completed. Check destination permissions, free disk space and profile availability, then try again.";
+                BackupReport = FailureReport(start, "Failed", code, selections.Sum(item => item.Profiles.Count),
+                    categories);
             }
         }
         finally
@@ -164,13 +187,20 @@ public partial class ShellViewModel
     public void OpenBackupFolder()
     {
         if (!BackupSucceeded || _completedBackupPath == null) return;
-        try { BackupFileOperations.OpenFolder(Path.GetDirectoryName(_completedBackupPath)!); }
-        catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
-        { BackupMessage = "The backup was saved, but its destination folder could not be opened."; }
+        try
+        {
+            BackupFileOperations.OpenFolder(Path.GetDirectoryName(_completedBackupPath)!);
+        }
+        catch (Exception error) when (error is IOException or System.ComponentModel.Win32Exception
+                                          or UnauthorizedAccessException)
+        {
+            BackupMessage = "The backup was saved, but its destination folder could not be opened.";
+        }
     }
 
-    private static string FailureReport(DateTimeOffset start, string state, string code, int requestedProfiles) =>
-        $"Started (UTC): {start:O}\nEnded (UTC): {DateTimeOffset.UtcNow:O}\nStatus: {state}\nError: {code}\nRequested profiles: {requestedProfiles}\nRequested category: bookmarks\nPublished: no";
+    private static string FailureReport(DateTimeOffset start, string state, string code, int requestedProfiles,
+        string[] categories) =>
+        $"Started (UTC): {start:O}\nEnded (UTC): {DateTimeOffset.UtcNow:O}\nStatus: {state}\nError: {code}\nRequested profiles: {requestedProfiles}\nRequested categories: {string.Join(", ", categories)}\nPublished: no";
 
     partial void OnIsBackupRunningChanged(bool value)
     {
@@ -178,11 +208,14 @@ public partial class ShellViewModel
         OnPropertyChanged(nameof(StatusText));
         NotifyBackupValidation();
     }
+
     partial void OnBackupStageChanged(string value) => OnPropertyChanged(nameof(StatusText));
+
     partial void OnBackupMessageChanged(string value)
     {
         OnPropertyChanged(nameof(HasBackupFeedback));
         OnPropertyChanged(nameof(StatusText));
     }
+
     partial void OnBackupReportChanged(string value) => OnPropertyChanged(nameof(HasBackupReport));
 }

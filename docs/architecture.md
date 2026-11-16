@@ -9,7 +9,7 @@ CLI ──┘     └────── Platform
 ```
 
 - **Core** contains platform-independent, browser-independent backup contracts (`BackupModel`,
-  `BackupBookmark`, `BackupBookmarkType`) and archive-v1 contracts, IO/verification and cryptography. It has no project or package dependencies.
+  `BackupBookmark`, `BackupBookmarkType`) and archive-v1/v2 contracts, generic portable Settings payloads, IO/verification and cryptography. It has no project or package dependencies.
 - **Backup** owns Brave installation definitions, profile discovery, appearance metadata,
   bookmark parsing/export, inspection and export destination policy. It references Core
   and Platform, never UI. Existing types retain the `BraveBackup.Core` namespace to avoid
@@ -75,3 +75,10 @@ bookmark-service and UI tests as well as contract/dependency regression checks.
   A native Windows test run is still required before claiming Windows runtime validation.
 - No real profile contents were modified. Existing discovery tests/UI-view-model tests
   may invoke read-only installation detection. No UI layout or deferred control was changed.
+
+## Settings category increment
+
+The Brave-specific seven-key allowlist, snapshot extraction and Settings policy verification
+belong to Backup (`BraveSettingsBackup`). Core validates generic Settings payload shape
+and archive-v1/v2 integrity without native preference names. Settings-only and mixed
+archives use manifest v2; bookmark-only writes retain v1. See [Settings backup](settings-backup.md).

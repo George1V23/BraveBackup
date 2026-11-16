@@ -129,7 +129,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         : "No data categories selected";
 
     /// <summary>Gets why a reliable archive size cannot yet be calculated.</summary>
-    public string BackupSizeEstimate => "Unavailable — compressed archive size depends on the captured bookmark data.";
+    public string BackupSizeEstimate => "Unavailable — compressed archive size depends on the captured profile data.";
 
     /// <summary>Gets actual discovery or export state without copying paths or secrets into the status bar.</summary>
     public string StatusText => IsBackupRunning ? BackupStage :
