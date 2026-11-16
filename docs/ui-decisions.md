@@ -20,6 +20,8 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Main workspace tabs: Backup, Restore, Export, Import, Profiles, Backups, Settings, About.
   Backup is for custom backup archives; Restore is for restoration from backup files.
   Export directly embeds the existing JSON exporter; Import is a distinct page for future import operations.
+  Export panel 2 shows the complete resolved destination path with wrapping; output must
+  be written to that displayed path with explicit success/error feedback.
   The former exporter-launcher row is removed from Backup; no separate window is opened from the shell.
   Merge/Sync belongs within Profiles. Unreviewed page contents remain undecided.
 - Refresh rescans installations/profiles and preserves active/checked entries that still exist.

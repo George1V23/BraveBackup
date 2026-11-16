@@ -19,6 +19,9 @@ public static class HostEnvironment
     /// <summary>Gets the host's application-data directory.</summary>
     public static string ApplicationData => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
+    /// <summary>Gets the user's configured Documents directory, or an empty value when unavailable.</summary>
+    public static string DocumentsDirectory => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
     /// <summary>Gets the current user's home directory.</summary>
     public static string UserProfile => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 

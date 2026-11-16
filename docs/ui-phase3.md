@@ -66,12 +66,21 @@ and profile highlight colors reuse the existing presentation behavior.
 **Backup** contains only the custom archive form. Its former exporter-launcher row is removed.
 **Restore** is reserved for restoring backup files; it does not combine import operations.
 **Export** directly embeds `BookmarkExportView`, with profile selection, destination text,
-native JSON Browse, export action and operation feedback. There is no separate exporter
+native JSON Browse, export action and operation feedback. Panel 2 includes a selectable,
+wrapping full destination path, so long paths and resolved relative input remain visible. There is no separate exporter
 window in the shell workflow. The selected sidebar installation supplies the profile list;
 no duplicate installation selector can diverge from the sidebar. Custom export paths and
 surviving profile selections are preserved through refresh; removed active installations
 clear the exporter and disable its action. There is no second installation scan on the UI
 thread: the embedded exporter consumes the shell's read-only discovery snapshot.
+
+The default destination is `Documents/BraveBackup/Exports/brave-bookmarks-<profile>.json`,
+falling back to `~/BraveBackup/Exports` when Documents is unavailable. The default is
+absolute. Relative filenames resolve against that same stable export directory, not the
+process launch directory. Selecting a profile or destination does not create files or
+folders. The Export action writes to the full path shown in panel 2 and reports it on
+success. Invalid destinations, folder paths, file-write failures and save-picker failures
+produce visible feedback. Custom paths are preserved when switching profiles or refreshing.
 
 The export action still writes schema-version-1, unencrypted bookmark-only JSON with
 phase-2 destination protections. The custom archive's filename, categories, encryption
@@ -103,7 +112,10 @@ when closed. This preserves the existing standalone type without duplicate form 
 - `BackupCategoryItem`: category identity, description and observable selection.
 - `MainViewModel`: the established JSON export behavior, now with an additional constructor
   accepting discovery delegates so the embedded host can share shell results. Existing
-  constructors retain native detection. Dispose and profile replacement release owned avatars.
+  constructors retain native detection. A further constructor accepts an explicit export
+  base for isolated tests/hosts. `FullDestinationPath` resolves input, validation explains
+  invalid input, and suggested filenames are tracked separately from custom user paths.
+  Dispose and profile replacement release owned avatars.
 - `MainWindow`: layout, native archive/JSON pickers and input routing.
   `BookmarkExportView`: reusable, host-supplied export controls without window creation.
   `BookmarkExportWindow`: compatibility host for that control.
@@ -118,13 +130,17 @@ queueing indefinitely on an idle dispatcher.
 
 ## Validation and review
 
-- All 124 tests passed (33 Brave.Tests, 72 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
+- All 132 tests passed (33 Brave.Tests, 80 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
   Command: `dotnet test BraveBackup.slnx --no-restore --verbosity minimal -m:1 -nr:false`.
   The build reported no warnings/errors. The existing regression tests remain covered.
 - The latest Linux desktop fixture run checked all eight tab labels/order, hidden tabs
   without activation, profile navigation, direct Export hosting, no secondary window,
   a successful fixture JSON export, installation switching and minimum-width navigation.
   It produced no binding errors or runtime warnings. Native Windows UI validation is pending.
+- A subsequent real-button check verified that a long destination wraps fully in panel 2,
+  that the default field is absolute, and that clicking Export creates valid schema-1 JSON
+  at exactly the displayed path while leaving the source fixture unchanged. See
+  [export destination fix](export-destination-fix.md) for the reproduction and regression details.
 - Earlier desktop checks covered Shift+Space bulk selection, scoped profile/category
   checkboxes, mixed selection and password field updates/clearing.
 - Review captures use synthetic names, versions, counts and directories, not personal

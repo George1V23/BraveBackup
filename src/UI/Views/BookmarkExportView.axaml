@@ -17,7 +17,7 @@
             <StackPanel Spacing="16">
                 <SelectableTextBlock Text="{Binding DataDirectoryText}" FontSize="12" Foreground="#B3ADC5"
                                      TextWrapping="Wrap" />
-                <!-- Step 2: Select Profile -->
+                <!-- Step 1: Select Profile -->
                 <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                         BorderThickness="1"
                         CornerRadius="6"
@@ -102,7 +102,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Step 3: Destination File -->
+                <!-- Step 2: Destination File -->
                 <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                         BorderThickness="1"
                         CornerRadius="6"
@@ -114,13 +114,20 @@
                         <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
                             <TextBox Grid.Column="0"
                                      Text="{Binding TargetFilePath}"
-                                     PlaceholderText="Enter destination file path (e.g. bookmarks.json)"
+                                     PlaceholderText="Enter a destination file path (e.g. bookmarks.json)"
+                                     ToolTip.Tip="{Binding FullDestinationPath}"
                                      Margin="0,0,8,0" />
                             <Button Grid.Column="1"
                                     Content="Browse..."
                                     Command="{Binding BrowseExportPathCommand}"
                                     Padding="14,6" />
                         </Grid>
+                        <TextBlock Text="Full destination path" FontSize="11" Foreground="#B3ADC5" />
+                        <SelectableTextBlock x:Name="FullExportDestination" Text="{Binding FullDestinationPath}"
+                                             TextWrapping="Wrap" FontSize="12" />
+                        <TextBlock Text="{Binding DestinationValidationMessage}" TextWrapping="Wrap"
+                                   Foreground="#F2A8B1"
+                                   IsVisible="{Binding DestinationValidationMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

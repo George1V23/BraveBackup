@@ -56,8 +56,9 @@ public partial class MainWindow : Window
     /// <summary>Chooses a JSON export file for the embedded Export tab without creating a backup archive.</summary>
     private async Task<IStorageFile?> PickExportFileAsync()
     {
-        if (!StorageProvider.CanSave) return null;
-        var path = (DataContext as ShellViewModel)?.ExportViewModel.TargetFilePath;
+        if (!StorageProvider.CanSave)
+            throw new NotSupportedException("A save dialog is not available. Enter a destination path directly.");
+        var path = (DataContext as ShellViewModel)?.ExportViewModel.FullDestinationPath;
         return await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Export Bookmarks as JSON",

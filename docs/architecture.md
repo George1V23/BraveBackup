@@ -15,7 +15,7 @@ CLI ──┘     └────── Platform
   and Platform, never UI. Existing types retain the `BraveBackup.Core` namespace to avoid
   unnecessary source API changes; they now belong to the Backup assembly. Consumers of
   browser services must reference Backup. This is not binary assembly compatibility.
-- **Platform** supplies host directories, PATH, path comparison, registry reads, executable
+- **Platform** supplies host directories (including configured Documents), PATH, path comparison, registry reads, executable
   product metadata and bounded command execution. It contains no Brave formats or paths.
 - **UI** and **CLI** consume Backup independently. UI-only avatars/presentation stay in UI.
 - TabManagerPlus will get its own project under Extensions when its approved feature is

@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using BraveBackup.Core;
+using BraveBackup.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -147,6 +148,8 @@ public sealed class ProfileItem
 public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly Func<Task<IStorageFile?>>? _saveFileDialogPicker;
+    private readonly string _exportDirectory;
+    private string? _suggestedExportPath;
     private readonly Func<IReadOnlyList<BraveAppInfo>> _detectInstalledApps;
     private readonly Func<BraveAppInfo, IReadOnlyList<BraveProfileInfo>> _findProfiles;
 
@@ -184,6 +187,31 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     /// Target file path where the backup will be saved.
     /// </summary>
     [ObservableProperty] private string _targetFilePath = string.Empty;
+
+    /// <summary>Gets the absolute destination used by export; relative input resolves against the stable export folder.</summary>
+    public string FullDestinationPath
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TargetFilePath)) return string.Empty;
+            try
+            {
+                return Path.GetFullPath(TargetFilePath, _exportDirectory);
+            }
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException
+                                                  or PathTooLongException)
+            {
+                return string.Empty;
+            }
+        }
+    }
+
+    /// <summary>Gets a visible explanation when the destination cannot be used.</summary>
+    public string DestinationValidationMessage => string.IsNullOrWhiteSpace(TargetFilePath)
+        ? "Choose a destination file."
+        : string.IsNullOrEmpty(FullDestinationPath)
+            ? "Enter a valid destination file path."
+            : string.Empty;
 
     /// <summary>
     /// User-facing status message.
@@ -223,11 +251,34 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public MainViewModel(Func<Task<IStorageFile?>>? saveFileDialogPicker,
         Func<IReadOnlyList<BraveAppInfo>> detectInstalledApps,
         Func<BraveAppInfo, IReadOnlyList<BraveProfileInfo>> findProfiles)
+        : this(saveFileDialogPicker, detectInstalledApps, findProfiles, GetDefaultExportDirectory())
     {
+    }
+
+    /// <summary>Creates an exporter with a stable destination base, independent of the process working directory.</summary>
+    /// <param name="saveFileDialogPicker">The optional native JSON save picker.</param>
+    /// <param name="detectInstalledApps">Returns the current installation snapshot.</param>
+    /// <param name="findProfiles">Returns read-only profiles for an installation.</param>
+    /// <param name="exportDirectory">The base for default filenames and relative destination input; created only when exporting.</param>
+    public MainViewModel(Func<Task<IStorageFile?>>? saveFileDialogPicker,
+        Func<IReadOnlyList<BraveAppInfo>> detectInstalledApps,
+        Func<BraveAppInfo, IReadOnlyList<BraveProfileInfo>> findProfiles, string exportDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exportDirectory);
+        _exportDirectory = Path.GetFullPath(exportDirectory);
         _saveFileDialogPicker = saveFileDialogPicker;
         _detectInstalledApps = detectInstalledApps ?? throw new ArgumentNullException(nameof(detectInstalledApps));
         _findProfiles = findProfiles ?? throw new ArgumentNullException(nameof(findProfiles));
         LoadInstalledApps();
+    }
+
+    /// <summary>Chooses Documents/BraveBackup/Exports, falling back to the home directory when Documents is unavailable.</summary>
+    private static string GetDefaultExportDirectory()
+    {
+        var root = HostEnvironment.DocumentsDirectory;
+        if (string.IsNullOrWhiteSpace(root)) root = HostEnvironment.UserProfile;
+        if (string.IsNullOrWhiteSpace(root)) root = Path.GetFullPath(".");
+        return Path.Combine(root, "BraveBackup", "Exports");
     }
 
     /// <summary>
@@ -288,9 +339,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             var safeProfileName = string.Join("_", value.ProfileInfo.ProfileName.Split(Path.GetInvalidFileNameChars()));
             if (string.IsNullOrWhiteSpace(TargetFilePath) ||
-                TargetFilePath.StartsWith("brave-bookmarks-", StringComparison.OrdinalIgnoreCase))
+                string.Equals(TargetFilePath, _suggestedExportPath, HostEnvironment.PathComparison))
             {
-                TargetFilePath = $"brave-bookmarks-{safeProfileName.ToLowerInvariant()}.json";
+                _suggestedExportPath = Path.Combine(_exportDirectory,
+                    $"brave-bookmarks-{safeProfileName.ToLowerInvariant()}.json");
+                TargetFilePath = _suggestedExportPath;
             }
         }
 
@@ -299,6 +352,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnTargetFilePathChanged(string value)
     {
+        OnPropertyChanged(nameof(FullDestinationPath));
+        OnPropertyChanged(nameof(DestinationValidationMessage));
         ExportBookmarksCommand.NotifyCanExecuteChanged();
     }
 
@@ -345,13 +400,31 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task BrowseExportPathAsync()
     {
-        if (_saveFileDialogPicker != null)
+        if (_saveFileDialogPicker == null) return;
+        try
         {
             var file = await _saveFileDialogPicker();
-            if (file != null)
+            if (file == null) return;
+            var localPath = file.TryGetLocalPath();
+            if (string.IsNullOrWhiteSpace(localPath))
             {
-                TargetFilePath = file.Path.LocalPath;
+                StatusMessage = "Choose a local destination file for the JSON export.";
+                IsStatusError = true;
+                return;
             }
+
+            TargetFilePath = Path.GetFullPath(localPath);
+            StatusMessage = string.Empty;
+            IsStatusError = false;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+                                              NotSupportedException or ArgumentException or InvalidOperationException)
+        {
+            StatusMessage = $"Could not choose an export destination: {exception.Message}";
+            IsStatusError = true;
         }
     }
 
@@ -366,7 +439,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                SelectedProfile.IsEnabled &&
                SelectedProfile.ProfileInfo != null &&
                SelectedProfile.HasBookmarks &&
-               !string.IsNullOrWhiteSpace(TargetFilePath);
+               !string.IsNullOrWhiteSpace(FullDestinationPath);
     }
 
     /// <summary>
@@ -375,12 +448,31 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanExportBookmarks))]
     public async Task ExportBookmarksAsync()
     {
-        if (SelectedProfile == null || SelectedProfile.ProfileInfo == null || string.IsNullOrWhiteSpace(TargetFilePath))
+        var profile = SelectedProfile?.ProfileInfo;
+        var destination = FullDestinationPath;
+        if (profile == null)
         {
+            StatusMessage = "Select a profile with bookmarks to export.";
+            IsStatusError = true;
             return;
         }
 
-        if (!File.Exists(SelectedProfile.ProfileInfo.BookmarksPath))
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            StatusMessage = DestinationValidationMessage;
+            IsStatusError = true;
+            return;
+        }
+
+        if (Directory.Exists(destination))
+        {
+            StatusMessage = "The destination is a folder. Choose a destination file name.";
+            IsStatusError = true;
+            return;
+        }
+
+        TargetFilePath = destination;
+        if (!File.Exists(profile.BookmarksPath))
         {
             StatusMessage = "Bookmarks file not found for selected profile.";
             IsStatusError = true;
@@ -394,8 +486,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var profile = SelectedProfile.ProfileInfo;
-            var destination = TargetFilePath;
             var protectedDirectories = new List<string> { profile.ProfileDirectory };
             foreach (var app in DetectedApps)
                 protectedDirectories.Add(app.AppInfo.UserDataDirectory);
