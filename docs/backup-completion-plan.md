@@ -86,6 +86,9 @@ Archive/UI integration is implemented for review: [TabManagerPlus backup and arc
 The existing category now creates verified supported saved-window backups. Passwords are
 the next category scope review; no password implementation starts from this checkpoint.
 
+The [Passwords scope proposal](passwords-backup-proposal.md) records the existing gaps,
+source/protection/CSV choices and phased checkpoints for user keep/edit/defer review.
+
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and
 user review accompany each category. TabManagerPlus belongs in its own project under
