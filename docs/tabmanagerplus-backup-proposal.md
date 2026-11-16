@@ -1,6 +1,8 @@
 # Tab Manager Plus backup: review checkpoint
 
-Status: proposed; no application implementation authorized by this document.
+Status: the user's continuation accepted the recommended automatic profile capture and
+proposed saved-window scope. Research/fixtures are the first implementation checkpoint;
+see [the storage research](tabmanagerplus-research.md). Application integration is pending.
 
 The existing Extensions category can preserve raw extension files and local/sync stores.
 It does not decode Tab Manager Plus saved windows. The dedicated category still blocks
@@ -43,7 +45,7 @@ the app cannot prove that an arbitrary JSON file came from that profile. This av
 the initial database reader but adds a manual step and is not automatic profile capture.
 Do not silently substitute this alternative for the recommended workflow.
 
-Either route needs user approval before implementation. A database-reader blocker is
+Automatic capture is selected. A database-reader blocker is
 reported for another decision, not replaced with raw-only success.
 
 ## Subsequent control and behavior choices
