@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:UI.ViewModels"
+        xmlns:views="using:UI.Views"
         x:Class="UI.Views.MainWindow" x:DataType="vm:ShellViewModel"
         Title="Brave browsers Backup &amp; Restore custom data"
         Icon="/Assets/avalonia-logo.ico"
@@ -178,7 +179,7 @@
         </Border>
         <Grid Grid.Column="1" Margin="26,12,26,14">
             <TabControl SelectedIndex="{Binding SelectedTabIndex}" IsVisible="{Binding HasActiveInstallation}">
-                <TabItem Header="Backup (Export)">
+                <TabItem Header="Backup">
                     <ScrollViewer x:Name="BackupScrollViewer" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Spacing="16" Margin="0,18,0,12" IsEnabled="{Binding !IsRefreshing}">
                             <Border Classes="card" IsVisible="{Binding !HasBackupScope}">
@@ -388,21 +389,24 @@
                                                Classes="muted" FontSize="12" TextWrapping="Wrap"
                                                VerticalAlignment="Center" Margin="16,0,0,0" />
                                 </Grid>
-                                <Border BorderBrush="#49415E" BorderThickness="0,1,0,0" Padding="0,14,0,0"
-                                        IsVisible="{Binding HasActiveInstallation}">
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <Button Content="Open bookmark JSON exporter" Click="OnOpenBookmarkExporter" />
-                                        <TextBlock Text="Existing bookmark export" Classes="muted" FontSize="11"
-                                                   VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </Border>
+
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
-                <TabItem Header="Restore (Import)">
+                <TabItem Header="Restore">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
-                        <TextBlock Text="Restore is not available yet." Classes="muted" />
+                        <TextBlock Text="Restoring from backup files is not available yet." Classes="muted" />
+                    </Border>
+                </TabItem>
+                <TabItem Header="Export">
+                    <Grid IsEnabled="{Binding !IsRefreshing}">
+                        <views:BookmarkExportView DataContext="{Binding ExportViewModel}" />
+                    </Grid>
+                </TabItem>
+                <TabItem Header="Import">
+                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="Import operations will be defined in a later review." Classes="muted" />
                     </Border>
                 </TabItem>
                 <TabItem Header="Profiles">

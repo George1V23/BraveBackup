@@ -6,7 +6,7 @@ using UI.ViewModels;
 namespace UI.Views;
 
 /// <summary>
-/// Interaction logic for BookmarkExportWindow view.
+/// Compatibility host for the reusable exporter; the shell now embeds the same controls in its Export tab.
 /// </summary>
 public partial class BookmarkExportWindow : Window
 {
@@ -24,6 +24,7 @@ public partial class BookmarkExportWindow : Window
         var viewModel = new MainViewModel(PickSaveFileAsync);
         if (initialApp != null) viewModel.SelectedApp = new AppChannelItem(initialApp);
         DataContext = viewModel;
+        Closed += (_, _) => viewModel.Dispose();
     }
 
     private async System.Threading.Tasks.Task<IStorageFile?> PickSaveFileAsync()

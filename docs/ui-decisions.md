@@ -17,7 +17,10 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Sidebar profiles show avatar/name; clicking one opens it in the Profiles tab.
 - Remove the static main-workspace title and description; place tabs at the top.
 - Main workspace tabs are hidden when no installation is active.
-- Main workspace tabs: Backup (Export), Restore (Import), Profiles, Backups, Settings, About.
+- Main workspace tabs: Backup, Restore, Export, Import, Profiles, Backups, Settings, About.
+  Backup is for custom backup archives; Restore is for restoration from backup files.
+  Export directly embeds the existing JSON exporter; Import is a distinct page for future import operations.
+  The former exporter-launcher row is removed from Backup; no separate window is opened from the shell.
   Merge/Sync belongs within Profiles. Unreviewed page contents remain undecided.
 - Refresh rescans installations/profiles and preserves active/checked entries that still exist.
 - Export All appears when at least one installation is checked. It opens profile and

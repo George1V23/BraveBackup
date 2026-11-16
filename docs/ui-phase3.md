@@ -9,7 +9,8 @@ It does not implement the future archive writer or the deferred review items.
   uses a dark theme, purple accents and a placeholder icon. The sidebar starts with
   installation controls; the static branding header was removed following user review.
 - Tabs are visible only while an installation is active, including after Refresh removes an active installation.
-- The main workspace begins with the tabs; its former title and description were removed following user review.
+- The main workspace begins with Backup, Restore, Export, Import, Profiles, Backups,
+  Settings and About. The former workspace title and description were removed following review.
 - Click an installation header to activate it. Double-click it to activate it and toggle
   its Export All checkmark. Shift+Space on the focused header is the keyboard equivalent.
 - The separate chevron expands installation details and profile navigation. Directory
@@ -62,24 +63,37 @@ and profile highlight colors reuse the existing presentation behavior.
 
 ## Existing export and deferred pages
 
-**Open bookmark JSON exporter** opens `BookmarkExportWindow` for the active installation.
-It preserves the existing selection, destination picker and schema-version-1 JSON export
-using `MainViewModel` and the phase-2 destination protections. The custom archive's
-filename, encryption and category controls are separate and do not affect this JSON export.
-The exporter remains unencrypted bookmark-only JSON, not a `.bravebackup` archive.
+**Backup** contains only the custom archive form. Its former exporter-launcher row is removed.
+**Restore** is reserved for restoring backup files; it does not combine import operations.
+**Export** directly embeds `BookmarkExportView`, with profile selection, destination text,
+native JSON Browse, export action and operation feedback. There is no separate exporter
+window in the shell workflow. The selected sidebar installation supplies the profile list;
+no duplicate installation selector can diverge from the sidebar. Custom export paths and
+surviving profile selections are preserved through refresh; removed active installations
+clear the exporter and disable its action. There is no second installation scan on the UI
+thread: the embedded exporter consumes the shell's read-only discovery snapshot.
 
-Restore, Backups, Settings and About have navigation shells only. Profiles provides
-read-only profile navigation/metadata and identifies where Merge/Sync will belong; no
-merge behavior has been invented. Summary, size estimates, Create Backup, progress,
-completion, status-bar behavior and illustration remain deferred. The bottom status-bar
-area is reserved without invented status data.
+The export action still writes schema-version-1, unencrypted bookmark-only JSON with
+phase-2 destination protections. The custom archive's filename, categories, encryption
+and compression do not affect this export. Other export formats remain unimplemented.
+
+**Import** is a separate navigation page for future import operations; its supported
+formats and behavior still require review. Restore, Import, Backups, Settings and About
+currently have navigation shells only. Profiles provides read-only navigation/metadata
+and identifies where Merge/Sync will belong. Summary, size estimates, Create Backup,
+progress, completion, status-bar behavior and illustration remain deferred. The bottom
+status-bar area is reserved without invented status data.
+
+`BookmarkExportWindow` remains a compatibility host for the same reusable control, but
+there is no launcher for it in the shell. Both hosts release their exporter-owned avatars
+when closed. This preserves the existing standalone type without duplicate form markup.
 
 ## View-model responsibilities
 
 - `ShellViewModel`: injectable discovery, activation, bulk scope, profile selection,
   refresh preservation, picker delegation and reset coordination. Construction does not
   scan the machine; the window calls RefreshAsync when opened. Dispose releases owned
-  avatar bitmaps and clears option secrets; a finishing scan cannot repopulate a closed shell.
+  avatar bitmaps, disposes the embedded exporter and clears option secrets; a finishing scan cannot repopulate a closed shell.
 - `InstallationViewModel`: independent active, expanded and bulk-check states; profile list
   and navigation commands. Dispose releases profile presentation resources.
 - `ProfileSelectionViewModel`: existing ProfileItem presentation plus count strings,
@@ -87,8 +101,13 @@ area is reserved without invented status data.
 - `BackupOptionsViewModel`: category aggregation, filename, compression and in-memory
   encryption choices. Reset and ClearSecrets manage defaults and secret references.
 - `BackupCategoryItem`: category identity, description and observable selection.
-- `MainWindow`: control layout, native destination dialog and input/window routing.
-  `BookmarkExportWindow`: preserved existing JSON workflow.
+- `MainViewModel`: the established JSON export behavior, now with an additional constructor
+  accepting discovery delegates so the embedded host can share shell results. Existing
+  constructors retain native detection. Dispose and profile replacement release owned avatars.
+- `MainWindow`: layout, native archive/JSON pickers and input routing.
+  `BookmarkExportView`: reusable, host-supplied export controls without window creation.
+  `BookmarkExportWindow`: compatibility host for that control.
+- Shell tab-position constants keep profile navigation correct after adding Export and Import.
 
 No NuGet package was added. Tests use injected discovery/clock/picker delegates and isolated
 files. `AvaloniaTestBootstrap` initializes Avalonia before parallel test classes run,
@@ -99,22 +118,20 @@ queueing indefinitely on an idle dispatcher.
 
 ## Validation and review
 
-- All 118 tests passed (33 Brave.Tests, 66 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
+- All 124 tests passed (33 Brave.Tests, 72 Core.Tests, 13 Linux.Tests, 6 Windows.Tests).
   Command: `dotnet test BraveBackup.slnx --no-restore --verbosity minimal -m:1 -nr:false`.
-  The build reported no warnings/errors. The 104 phase-2 tests remain covered.
-- A temporary Linux desktop runner rendered the real compiled windows with synthetic
-  discovery data. It verified header command binding, Shift+Space bulk selection,
-  profile/category checkbox bindings, mixed selection, password field updates/clearing,
-  opening the existing exporter and navigation visibility at 1060×680.
-- The final smoke run produced no binding errors. The desktop emitted a DBusMenu service
-  warning when the secondary test window closed; this was an unavailable desktop service,
-  not an application binding failure. Native Windows UI validation is still pending.
+  The build reported no warnings/errors. The existing regression tests remain covered.
+- The latest Linux desktop fixture run checked all eight tab labels/order, hidden tabs
+  without activation, profile navigation, direct Export hosting, no secondary window,
+  a successful fixture JSON export, installation switching and minimum-width navigation.
+  It produced no binding errors or runtime warnings. Native Windows UI validation is pending.
+- Earlier desktop checks covered Shift+Space bulk selection, scoped profile/category
+  checkboxes, mixed selection and password field updates/clearing.
 - Review captures use synthetic names, versions, counts and directories, not personal
-  browser data: [shell](screenshots/phase3-shell.png), [backup options](screenshots/phase3-options.png).
-  These initial review captures predate removal of the static sidebar branding header and
-  main-workspace title/description, and the resulting move of the tabs to the top.
+  browser data: [Backup](screenshots/phase3-shell.png),
+  [Export](screenshots/export-tab.png), [backup options](screenshots/phase3-options.png).
 - To review locally: `dotnet run --project src/UI/UI.csproj`. Select an installation,
-  exercise the sidebar/checkboxes, refresh and Reset, and use the existing JSON exporter
-  if needed. The future archive form never writes a `.bravebackup` file.
+  exercise the tabs, sidebar/checkboxes, refresh and Reset, and use Export for bookmark
+  JSON. The future archive form never writes a `.bravebackup` file.
 - Next checkpoint: user review of this implementation, then return to the deferred
   controls and unreviewed page behavior. No deferred workflow is implicitly approved.

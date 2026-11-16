@@ -113,7 +113,7 @@ public sealed class ShellViewModelTests : IDisposable
         profile.OpenDetailsCommand.Execute(null);
         Assert.Same(profile.Installation, shell.ActiveInstallation);
         Assert.Same(profile, shell.FocusedProfile);
-        Assert.Equal(2, shell.SelectedTabIndex);
+        Assert.Equal(ShellViewModel.ProfilesTabIndex, shell.SelectedTabIndex);
         Assert.False(profile.IsSelected);
         Assert.False(profile.Installation.IsChecked);
         Assert.Equal("3", profile.BookmarkCountText);

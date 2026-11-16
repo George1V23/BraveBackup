@@ -3,7 +3,6 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using UI.ViewModels;
 
@@ -16,7 +15,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new ShellViewModel(pickBackupPath: PickBackupPathAsync);
+        DataContext = new ShellViewModel(pickBackupPath: PickBackupPathAsync)
+        {
+            ExportFilePicker = PickExportFileAsync
+        };
         Opened += OnOpened;
         Closed += OnClosed;
     }
@@ -51,11 +53,23 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Opens the established JSON-only exporter without using the custom archive options.</summary>
-    private void OnOpenBookmarkExporter(object? sender, RoutedEventArgs args)
+    /// <summary>Chooses a JSON export file for the embedded Export tab without creating a backup archive.</summary>
+    private async Task<IStorageFile?> PickExportFileAsync()
     {
-        if (DataContext is ShellViewModel { ActiveInstallation: { } installation })
-            new BookmarkExportWindow(installation.AppInfo).Show(this);
+        if (!StorageProvider.CanSave) return null;
+        var path = (DataContext as ShellViewModel)?.ExportViewModel.TargetFilePath;
+        return await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Bookmarks as JSON",
+            DefaultExtension = "json",
+            SuggestedFileName =
+                string.IsNullOrWhiteSpace(path) ? "brave-bookmarks-export.json" : Path.GetFileName(path),
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("JSON files (*.json)")
+                    { Patterns = new[] { "*.json" }, MimeTypes = new[] { "application/json" } }
+            }
+        });
     }
 
     /// <summary>Chooses an archive destination without creating an archive.</summary>

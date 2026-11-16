@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Platform.Storage;
 using BraveBackup.Core;
 using BraveBackup.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,6 +24,21 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     private static StringComparer PathComparer =>
         HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    /// <summary>Gets the Backup tab position.</summary>
+    public const int BackupTabIndex = 0;
+
+    /// <summary>Gets the Export tab position.</summary>
+    public const int ExportTabIndex = 2;
+
+    /// <summary>Gets the Profiles tab position after the dedicated Export and Import tabs.</summary>
+    public const int ProfilesTabIndex = 4;
+
+    /// <summary>Gets the embedded JSON exporter, scoped to the active sidebar installation.</summary>
+    public MainViewModel ExportViewModel { get; }
+
+    /// <summary>Gets or sets the native JSON save-picker callback supplied by the shell view.</summary>
+    public Func<Task<IStorageFile?>>? ExportFilePicker { get; set; }
 
     /// <summary>Gets the application's approved display name.</summary>
     public string ApplicationName => "Brave browsers Backup & Restore custom data";
@@ -74,7 +90,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     public bool HasBackupProfiles => BackupInstallations.Any(item => item.Profiles.Count > 0);
 
     /// <summary>Gets a title showing the active installation or bulk scope.</summary>
-    public string WorkspaceTitle => IsBulkMode && SelectedTabIndex == 0
+    public string WorkspaceTitle => IsBulkMode && SelectedTabIndex == BackupTabIndex
         ? "Custom backup · checked installations"
         : ActiveInstallation?.DisplayName ?? "Choose a Brave installation";
 
@@ -112,6 +128,12 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         _summarize = summarize ?? BraveProfileSummaryReader.Read;
         _pickBackupPath = pickBackupPath;
         Options = new BackupOptionsViewModel(clock);
+        ExportViewModel = new MainViewModel(
+            () => ExportFilePicker?.Invoke() ?? Task.FromResult<IStorageFile?>(null),
+            () => Installations.Select(item => item.AppInfo).ToArray(),
+            app => Installations
+                .FirstOrDefault(item => PathComparer.Equals(InstallationKey(item.AppInfo), InstallationKey(app)))
+                ?.Profiles.Select(profile => profile.ProfileInfo).ToArray() ?? Array.Empty<BraveProfileInfo>());
     }
 
     /// <summary>Rescans off the UI thread, preserving matching active, expanded, bulk and profile selections.</summary>
@@ -180,6 +202,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
             ActiveInstallation = replacementActive;
             FocusedProfile = replacementFocus;
+            SynchronizeExportContext();
             if (!HasBulkSelection) IsBulkMode = false;
             UpdateBackupScope();
             foreach (var old in oldInstallations) old.Dispose();
@@ -202,8 +225,10 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     {
         if (!Installations.Contains(installation)) return;
         foreach (var item in Installations) item.IsActive = ReferenceEquals(item, installation);
-        if (!ReferenceEquals(ActiveInstallation, installation)) FocusedProfile = installation.Profiles.FirstOrDefault();
+        var changed = !ReferenceEquals(ActiveInstallation, installation);
+        if (changed) FocusedProfile = installation.Profiles.FirstOrDefault();
         ActiveInstallation = installation;
+        if (changed) SynchronizeExportContext();
         IsBulkMode = false;
         UpdateBackupScope();
     }
@@ -220,7 +245,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     {
         Activate(profile.Installation);
         FocusedProfile = profile;
-        SelectedTabIndex = 2;
+        SelectedTabIndex = ProfilesTabIndex;
     }
 
     /// <summary>Shows the approved bulk profile/category choices in the main workspace, without creating files.</summary>
@@ -230,7 +255,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         if (!HasBulkSelection) return;
         if (ActiveInstallation == null) Activate(Installations.First(item => item.IsChecked));
         IsBulkMode = true;
-        SelectedTabIndex = 0;
+        SelectedTabIndex = BackupTabIndex;
         UpdateBackupScope();
     }
 
@@ -257,10 +282,31 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
         Options.ClearSecrets();
+        ExportViewModel.Dispose();
+        ExportFilePicker = null;
         foreach (var item in Installations)
         {
             Unsubscribe(item);
             item.Dispose();
+        }
+    }
+
+    /// <summary>Keeps the embedded exporter on the active installation, preserving a surviving profile and custom output path.</summary>
+    private void SynchronizeExportContext()
+    {
+        var previousApp = ExportViewModel.SelectedApp?.AppInfo;
+        var previousProfile = ExportViewModel.SelectedProfile?.ProfileInfo?.ProfileDirectory;
+        ExportViewModel.LoadInstalledApps();
+        if (ActiveInstallation == null) return;
+        var app = ActiveInstallation.AppInfo;
+        ExportViewModel.SelectedApp = ExportViewModel.DetectedApps.FirstOrDefault(item =>
+            PathComparer.Equals(InstallationKey(item.AppInfo), InstallationKey(app)));
+        if (previousApp != null && previousProfile != null &&
+            PathComparer.Equals(InstallationKey(previousApp), InstallationKey(app)))
+        {
+            var matchingProfile = ExportViewModel.Profiles.FirstOrDefault(item =>
+                PathComparer.Equals(item.ProfileInfo?.ProfileDirectory, previousProfile));
+            if (matchingProfile != null) ExportViewModel.SelectedProfile = matchingProfile;
         }
     }
 

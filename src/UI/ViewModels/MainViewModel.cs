@@ -144,9 +144,11 @@ public sealed class ProfileItem
 /// <summary>
 /// Main view model managing application detection, profile selection, and bookmark export operations.
 /// </summary>
-public partial class MainViewModel : ViewModelBase
+public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly Func<Task<IStorageFile?>>? _saveFileDialogPicker;
+    private readonly Func<IReadOnlyList<BraveAppInfo>> _detectInstalledApps;
+    private readonly Func<BraveAppInfo, IReadOnlyList<BraveProfileInfo>> _findProfiles;
 
     /// <summary>
     /// Collection of detected Brave installations.
@@ -210,8 +212,21 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     /// <param name="saveFileDialogPicker">Optional delegate to invoke file save dialog.</param>
     public MainViewModel(Func<Task<IStorageFile?>>? saveFileDialogPicker)
+        : this(saveFileDialogPicker, BraveAppDetector.DetectInstalledApps, BraveProfileFinder.FindProfiles)
+    {
+    }
+
+    /// <summary>Creates an exporter using injected discovery, allowing an embedded view to share shell results.</summary>
+    /// <param name="saveFileDialogPicker">The view's optional native JSON save picker.</param>
+    /// <param name="detectInstalledApps">Returns the current read-only installation snapshot.</param>
+    /// <param name="findProfiles">Returns profiles for the chosen installation without changing browser data.</param>
+    public MainViewModel(Func<Task<IStorageFile?>>? saveFileDialogPicker,
+        Func<IReadOnlyList<BraveAppInfo>> detectInstalledApps,
+        Func<BraveAppInfo, IReadOnlyList<BraveProfileInfo>> findProfiles)
     {
         _saveFileDialogPicker = saveFileDialogPicker;
+        _detectInstalledApps = detectInstalledApps ?? throw new ArgumentNullException(nameof(detectInstalledApps));
+        _findProfiles = findProfiles ?? throw new ArgumentNullException(nameof(findProfiles));
         LoadInstalledApps();
     }
 
@@ -223,13 +238,13 @@ public partial class MainViewModel : ViewModelBase
         StatusMessage = string.Empty;
         IsStatusError = false;
         DetectedApps.Clear();
-        Profiles.Clear();
+        ClearProfiles();
         SelectedApp = null;
         SelectedProfile = null;
 
         try
         {
-            var apps = BraveAppDetector.DetectInstalledApps();
+            var apps = _detectInstalledApps();
             foreach (var app in apps)
             {
                 DetectedApps.Add(new AppChannelItem(app));
@@ -261,7 +276,7 @@ public partial class MainViewModel : ViewModelBase
         else
         {
             DataDirectoryText = $"Data directory: [installed on {DetectedApps.Count} paths]";
-            Profiles.Clear();
+            ClearProfiles();
             SelectedProfile = null;
             StatusMessage = string.Empty;
         }
@@ -289,7 +304,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void LoadProfilesForApp(BraveAppInfo? appInfo)
     {
-        Profiles.Clear();
+        ClearProfiles();
         SelectedProfile = null;
 
         if (appInfo == null)
@@ -299,7 +314,7 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
-            var discoveredProfiles = BraveProfileFinder.FindProfiles(appInfo);
+            var discoveredProfiles = _findProfiles(appInfo);
             foreach (var profile in discoveredProfiles)
             {
                 Profiles.Add(new ProfileItem(profile));
@@ -413,4 +428,15 @@ public partial class MainViewModel : ViewModelBase
     {
         LoadInstalledApps();
     }
+
+    /// <summary>Releases this exporter's owned avatar images and clears stale profile selections.</summary>
+    private void ClearProfiles()
+    {
+        SelectedProfile = null;
+        foreach (var profile in Profiles) profile.AvatarImage?.Dispose();
+        Profiles.Clear();
+    }
+
+    /// <summary>Releases profile presentation resources when the embedded exporter or compatibility window closes.</summary>
+    public void Dispose() => ClearProfiles();
 }

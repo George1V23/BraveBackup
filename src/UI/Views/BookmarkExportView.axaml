@@ -1,0 +1,142 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:UI.ViewModels"
+             x:Class="UI.Views.BookmarkExportView"
+             x:DataType="vm:MainViewModel">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.export-status">
+            <Setter Property="Foreground" Value="#B3ADC5" />
+        </Style>
+        <Style Selector="TextBlock.export-status.error">
+            <Setter Property="Foreground" Value="#F2A8B1" />
+        </Style>
+    </UserControl.Styles>
+    <Grid Margin="0,18,0,12" RowDefinitions="*,Auto">
+        <!-- Main Form Content -->
+        <ScrollViewer IsEnabled="{Binding !IsBusy}">
+            <StackPanel Spacing="16">
+                <SelectableTextBlock Text="{Binding DataDirectoryText}" FontSize="12" Foreground="#B3ADC5"
+                                     TextWrapping="Wrap" />
+                <!-- Step 2: Select Profile -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="1. Select Profile to Export"
+                                   FontWeight="SemiBold" />
+
+                        <ListBox ItemsSource="{Binding Profiles}"
+                                 SelectedItem="{Binding SelectedProfile}"
+                                 MinHeight="100"
+                                 MaxHeight="180">
+                            <ListBox.Styles>
+                                <Style Selector="ListBoxItem" x:DataType="vm:ProfileItem">
+                                    <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+                                </Style>
+                                <Style Selector="TextBlock.export-profile-name.highlighted" x:DataType="vm:ProfileItem">
+                                    <Setter Property="Foreground" Value="{Binding ProfileNameForeground}" />
+                                </Style>
+                            </ListBox.Styles>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="vm:ProfileItem">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,2">
+                                        <Grid Grid.Column="0"
+                                              Width="34"
+                                              Height="34"
+                                              Margin="0,0,10,0"
+                                              VerticalAlignment="Center"
+                                              IsVisible="{Binding ProfileInfo, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <Border Width="32"
+                                                    Height="32"
+                                                    CornerRadius="16"
+                                                    Background="{Binding AvatarFillBrush}"
+                                                    BorderBrush="{Binding AvatarStrokeBrush}"
+                                                    BorderThickness="1"
+                                                    IsVisible="{Binding IsPlaceholderAvatar}">
+                                                <Grid>
+                                                    <Ellipse Width="10"
+                                                             Height="10"
+                                                             Stroke="{Binding AvatarStrokeBrush}"
+                                                             StrokeThickness="1.5"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Top"
+                                                             Margin="0,6,0,0" />
+                                                    <Border Width="18"
+                                                            Height="10"
+                                                            CornerRadius="9,9,0,0"
+                                                            BorderBrush="{Binding AvatarStrokeBrush}"
+                                                            BorderThickness="1.5"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Bottom"
+                                                            Margin="0,0,0,5" />
+                                                </Grid>
+                                            </Border>
+                                            <Image Width="32"
+                                                   Height="32"
+                                                   Source="{Binding AvatarImage}"
+                                                   Stretch="UniformToFill"
+                                                   IsVisible="{Binding AvatarImage, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        </Grid>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontWeight="Medium"
+                                                       Classes="export-profile-name"
+                                                       Classes.highlighted="{Binding ProfileNameForeground, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            <TextBlock Text="{Binding ProfileDirectoryText}"
+                                                       FontSize="11"
+                                                       Foreground="Gray"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       IsVisible="{Binding ProfileInfo, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding StatusDescription}"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="12"
+                                                   Foreground="#B9A6DE"
+                                                   IsVisible="{Binding StatusDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step 3: Destination File -->
+                <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="2. Export Destination File"
+                                   FontWeight="SemiBold" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding TargetFilePath}"
+                                     PlaceholderText="Enter destination file path (e.g. bookmarks.json)"
+                                     Margin="0,0,8,0" />
+                            <Button Grid.Column="1"
+                                    Content="Browse..."
+                                    Command="{Binding BrowseExportPathCommand}"
+                                    Padding="14,6" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Export Action Button -->
+        <Grid Grid.Row="1" Margin="0,16,0,0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Margin="0,0,16,0" VerticalAlignment="Center"
+                       Classes="export-status" Classes.error="{Binding IsStatusError}" />
+            <Button Grid.Column="1" Content="Export Bookmarks as JSON"
+                    Command="{Binding ExportBookmarksCommand}"
+                    HorizontalAlignment="Right"
+                    Padding="20,10"
+                    FontWeight="SemiBold"
+                    Classes="accent" />
+        </Grid>
+    </Grid>
+
+</UserControl>
