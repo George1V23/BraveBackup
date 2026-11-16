@@ -9,7 +9,7 @@ CLI ──┘     └────── Platform
 ```
 
 - **Core** contains platform-independent, browser-independent backup contracts (`BackupModel`,
-  `BackupBookmark`, `BackupBookmarkType`). It has no project or package dependencies.
+  `BackupBookmark`, `BackupBookmarkType`) and archive-v1 contracts, IO/verification and cryptography. It has no project or package dependencies.
 - **Backup** owns Brave installation definitions, profile discovery, appearance metadata,
   bookmark parsing/export, inspection and export destination policy. It references Core
   and Platform, never UI. Existing types retain the `BraveBackup.Core` namespace to avoid
@@ -49,8 +49,10 @@ power-loss durability. Restore remains unimplemented and is not authorized by ex
 ## Compatibility and dependencies
 
 The existing bookmark-only JSON remains schema version 1. See [backup-format-v1.md](backup-format-v1.md).
-The future `.bravebackup` archive and password exception are approved requirements, not
-implemented features. Existing UI and CLI bookmark exports remain usable.
+Bookmarks-only `.bravebackup` creation and verification are implemented; see
+[archive v1](archive-format-v1.md). The password-data exception remains a later feature.
+Existing UI and CLI bookmark exports remain usable. Platform additionally owns private
+backup file creation and opening completed destination folders.
 
 No NuGet package was added. The existing xUnit Visual Studio adapter is pinned to 2.8.0,
 the version already resolved in the baseline, to eliminate NU1603 fallback warnings.

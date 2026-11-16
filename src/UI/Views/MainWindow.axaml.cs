@@ -17,10 +17,36 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = new ShellViewModel(pickBackupPath: PickBackupPathAsync)
         {
-            ExportFilePicker = PickExportFileAsync
+            ExportFilePicker = PickExportFileAsync,
+            ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync
         };
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Obtains explicit approval to replace the particular existing destination.</summary>
+    private async Task<bool> ConfirmBackupOverwriteAsync(string destination)
+    {
+        var dialog = new Window
+        {
+            Title = "Replace existing backup?", Width = 560, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel" };
+        var replace = new Button { Content = "Replace backup" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        replace.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24), Spacing = 16,
+            Children =
+            {
+                new TextBlock { Text = "Replace this existing file after the new backup is verified?", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, replace } }
+            }
+        };
+        return await dialog.ShowDialog<bool>(this);
     }
 
     /// <summary>Starts discovery without blocking construction or the dispatcher.</summary>

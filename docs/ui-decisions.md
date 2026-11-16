@@ -70,8 +70,8 @@ decided it was unnecessary. The first implementation increment was approved on 2
   when appropriate.
 - Create Backup: validate selections and destination, obtain the required confirmation
   for plaintext passwords, then create the `.bravebackup` file. Never silently omit
-  selected data. The summary and action layout are implemented; real size calculation
-  and archive creation await the archive engine.
+  selected data. The summary and bookmarks-only archive creation are implemented;
+  approximate archive size is currently shown as Unavailable.
 
 ## Approved backup feedback controls
 
@@ -85,7 +85,7 @@ decided it was unnecessary. The first implementation increment was approved on 2
 
 All five controls were kept during the subsequent review. The explanatory panel, status
 bar, decorative graphic and idle operation layouts are implemented. Actual progress,
-cancellation and completion actions await the archive engine.
+cancellation and completion actions are now connected to bookmarks-only archive creation.
 The Backup page's previously deferred controls have now been reviewed; this does not approve
 unreviewed behavior for Restore, Import, Backups, Settings, About or Merge/Sync.
 

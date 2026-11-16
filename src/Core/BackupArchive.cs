@@ -1,0 +1,204 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace BraveBackup.Core;
+
+/// <summary>Writes and verifies archive-v1 ZIP content independently of any browser or UI.</summary>
+public static class BackupArchive
+{
+    /// <summary>Maps the four approved compression choices without adding package dependencies.</summary>
+    public static CompressionLevel Compression(string choice) => choice switch
+    {
+        "none" => CompressionLevel.NoCompression, "fast" => CompressionLevel.Fastest,
+        "balanced" => CompressionLevel.Optimal, "high" => CompressionLevel.SmallestSize,
+        _ => throw new InvalidDataException("Unsupported compression choice.")
+    };
+
+    /// <summary>Writes a single bounded payload and returns its manifest descriptor.</summary>
+    public static ArchiveFile WriteFile(ZipArchive zip, string path, string role, byte[] bytes,
+        string compression, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        var entry = zip.CreateEntry(path, Compression(compression));
+        using var stream = entry.Open();
+        for (var offset = 0; offset < bytes.Length;)
+        {
+            token.ThrowIfCancellationRequested();
+            var take = Math.Min(64 * 1024, bytes.Length - offset);
+            stream.Write(bytes, offset, take); offset += take;
+        }
+        return new ArchiveFile(path, role, bytes.LongLength, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+    }
+
+    /// <summary>Writes the manifest after payloads have completed.</summary>
+    public static void WriteManifest(ZipArchive zip, ArchiveManifest manifest)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(manifest, ArchiveManifest.JsonOptions);
+        if (bytes.Length > ArchiveLimits.MaxManifestBytes) throw new InvalidDataException("Manifest exceeds 16 MiB.");
+        using var output = zip.CreateEntry("manifest.json", Compression(manifest.Compression)).Open();
+        output.Write(bytes);
+    }
+
+    /// <summary>Authenticates, checks structure and hashes all payloads without extracting files.</summary>
+    /// <remarks>Caller owns the seekable source. Legacy bookmark JSON remains a distinct format.</remarks>
+    public static ArchiveManifest Validate(Stream source, string? password = null, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
+            throw new InvalidDataException("Archive exceeds its supported size.");
+        source.Position = 0;
+        using var decrypted = ArchiveEncryption.IsEncrypted(source)
+            ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token) : null;
+        var content = decrypted ?? source;
+        if (content.Length > ArchiveLimits.MaxBytes) throw new InvalidDataException("Archive exceeds 100 GiB.");
+        ArchiveZipGuard.Validate(content, token);
+        using var zip = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
+        if (zip.Entries.Count is < 1 or > ArchiveLimits.MaxEntries) throw new InvalidDataException("Invalid archive entry count.");
+        var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        long expanded = 0;
+        foreach (var entry in zip.Entries)
+        {
+            token.ThrowIfCancellationRequested();
+            if (entry.Length < 0 || entry.Length > ArchiveLimits.MaxBytes - expanded ||
+                !entries.TryAdd(entry.FullName, entry) || entry.FullName.Contains('\\') ||
+                entry.FullName.StartsWith('/') || entry.FullName.Split('/').Any(part => part is "" or "." or ".."))
+                throw new InvalidDataException("Invalid or duplicate ZIP entry.");
+            expanded += entry.Length;
+        }
+        if (!entries.Remove("manifest.json", out var manifestEntry) || manifestEntry.Length > ArchiveLimits.MaxManifestBytes)
+            throw new InvalidDataException("Missing or oversized manifest.");
+        ArchiveManifest manifest;
+        using (var input = manifestEntry.Open())
+        {
+            var bytes = ReadBounded(input, (int)manifestEntry.Length, token);
+            using var json = JsonDocument.Parse(bytes);
+            RejectDuplicateProperties(json.RootElement);
+            manifest = json.Deserialize<ArchiveManifest>(ArchiveManifest.JsonOptions)
+                       ?? throw new InvalidDataException("Missing archive manifest.");
+        }
+        ValidateManifest(manifest);
+        var ids = new HashSet<Guid>();
+        foreach (var installation in manifest.Installations)
+        {
+            if (installation is null || installation.Id == Guid.Empty || !ids.Add(installation.Id) ||
+                installation.Profiles is null || installation.Profiles.Length == 0 ||
+                string.IsNullOrEmpty(installation.Product) || string.IsNullOrEmpty(installation.Channel) ||
+                installation.BrowserVersion is null) throw new InvalidDataException("Invalid installation metadata.");
+            foreach (var profile in installation.Profiles)
+            {
+                if (profile is null || profile.Id == Guid.Empty || !ids.Add(profile.Id) || profile.DisplayName is null ||
+                    string.IsNullOrEmpty(profile.DirectoryName) || profile.DirectoryName is "." or ".." ||
+                    profile.DirectoryName.IndexOfAny(['/', '\\', ':']) >= 0 ||
+                    profile.Categories is null || profile.Categories.Length != 1)
+                    throw new InvalidDataException("Invalid profile metadata.");
+                var category = profile.Categories[0];
+                if (category is null || category.Id != "bookmarks" || category.Version != 1 || category.Files is null || category.Files.Length != 2)
+                    throw new InvalidDataException("Unsupported archive category.");
+                var roles = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var file in category.Files)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (file is null || file.Role is not ("native-source" or "portable-v1") || !roles.Add(file.Role))
+                        throw new InvalidDataException("Invalid bookmark payload role.");
+                    var name = file.Role == "native-source" ? "source.json" : "portable-v1.json";
+                    var expected = $"installations/{installation.Id:D}/profiles/{profile.Id:D}/bookmarks/{name}";
+                    if (file.Path != expected || file.Length < 0 || file.Length > ArchiveLimits.MaxBookmarkBytes ||
+                        file.Sha256 is null || file.Sha256.Length != 64 ||
+                        file.Sha256.Any(character => character is not (>= '0' and <= '9') and not (>= 'a' and <= 'f')) ||
+                        !entries.Remove(expected, out var entry) || entry.Length != file.Length)
+                        throw new InvalidDataException("Missing or invalid payload metadata.");
+                    using var stream = entry.Open();
+                    using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                    var buffer = new byte[64 * 1024];
+                    long read = 0;
+                    try
+                    {
+                        int count;
+                        while ((count = stream.Read(buffer)) != 0)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            read += count;
+                            if (read > file.Length) throw new InvalidDataException("Payload exceeds declared length.");
+                            hash.AppendData(buffer, 0, count);
+                        }
+                        if (read != file.Length || Convert.ToHexStringLower(hash.GetHashAndReset()) != file.Sha256)
+                            throw new InvalidDataException("Payload integrity check failed.");
+                    }
+                    finally { CryptographicOperations.ZeroMemory(buffer); }
+                    // Parse only after length/hash verification. Allocation is bounded by the category limit.
+                    using var jsonStream = entry.Open();
+                    var jsonBytes = ReadBounded(jsonStream, checked((int)file.Length), token);
+                    try
+                    {
+                        var jsonContent = jsonBytes.AsMemory();
+                        if (jsonContent.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) jsonContent = jsonContent[3..];
+                        using var payloadJson = JsonDocument.Parse(jsonContent);
+                        if (payloadJson.RootElement.ValueKind != JsonValueKind.Object)
+                            throw new InvalidDataException("Invalid JSON payload.");
+                        if (file.Role == "portable-v1")
+                        {
+                            var model = payloadJson.Deserialize<BackupModel>(new JsonSerializerOptions { RespectRequiredConstructorParameters = true });
+                            if (model is null || model.SchemaVersion != 1 || model.Bookmarks is null)
+                                throw new InvalidDataException("Unsupported portable bookmark payload.");
+                            foreach (var bookmark in model.Bookmarks) ValidateBookmark(bookmark);
+                        }
+                    }
+                    finally { CryptographicOperations.ZeroMemory(jsonBytes); }
+                }
+            }
+        }
+        if (entries.Count != 0) throw new InvalidDataException("Undeclared archive payloads.");
+        return manifest;
+    }
+
+    private static void ValidateBookmark(BackupBookmark item)
+    {
+        if (item is null || item.Name is null || item.Children is null ||
+            item.Type is not (BackupBookmarkType.Folder or BackupBookmarkType.Url) ||
+            (item.Type == BackupBookmarkType.Url && (item.Url is null || item.Children.Count != 0)) ||
+            (item.Type == BackupBookmarkType.Folder && item.Url is not null))
+            throw new InvalidDataException("Invalid portable bookmark tree.");
+        foreach (var child in item.Children) ValidateBookmark(child);
+    }
+
+    private static void ValidateManifest(ArchiveManifest manifest)
+    {
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion != 1 || manifest.ArchiveId == Guid.Empty ||
+            manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
+            string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
+            !manifest.RequiredCapabilities.SequenceEqual(new[] { "bookmarks-v1" }) ||
+            manifest.Installations is null || manifest.Installations.Length == 0)
+            throw new InvalidDataException("Unsupported or invalid archive manifest.");
+        Compression(manifest.Compression);
+    }
+
+    private static void RejectDuplicateProperties(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new InvalidDataException("Duplicate manifest JSON property.");
+                RejectDuplicateProperties(property.Value);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+            foreach (var item in element.EnumerateArray()) RejectDuplicateProperties(item);
+    }
+
+    private static byte[] ReadBounded(Stream stream, int length, CancellationToken token)
+    {
+        var bytes = new byte[length];
+        for (var offset = 0; offset < length;)
+        {
+            token.ThrowIfCancellationRequested();
+            var read = stream.Read(bytes, offset, Math.Min(64 * 1024, length - offset));
+            if (read == 0) throw new InvalidDataException("Truncated manifest.");
+            offset += read;
+        }
+        if (stream.ReadByte() != -1) throw new InvalidDataException("Manifest exceeds declared length.");
+        return bytes;
+    }
+}

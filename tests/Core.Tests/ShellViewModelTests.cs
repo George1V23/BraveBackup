@@ -73,7 +73,7 @@ public sealed class ShellViewModelTests : IDisposable
         Assert.DoesNotContain("Personal", shell.BackupSelectionSummary);
         Assert.Equal("Bookmarks", shell.BackupCategorySummary);
         Assert.Contains("Unavailable", shell.BackupSizeEstimate);
-        Assert.Contains("unavailable", shell.BackupAvailability);
+        Assert.Contains("Select at least one profile", shell.BackupAvailability);
     }
 
     [Fact]

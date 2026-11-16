@@ -1,7 +1,8 @@
 # Phase 3: approved shell and selection form
 
 This increment implements the controls approved in [ui-decisions.md](ui-decisions.md).
-It does not implement the future archive writer or workflows on the unreviewed pages.
+The later [archive-v1 increment](archive-format-v1.md) now enables bookmarks-only backup
+creation. Workflows on unreviewed pages remain unavailable.
 
 ## Using the shell
 
@@ -95,8 +96,8 @@ currently have navigation shells only. Profiles provides read-only navigation/me
 and identifies where Merge/Sync will belong. The subsequent review approved the backup
 summary, size estimate and Create Backup action. The interface increment now includes these
 controls, the explanatory panel, placeholder-brand illustration and actual status bar.
-Create Backup stays disabled with its reason visible. Progress/cancel and completion
-layouts are hidden while idle and have no archive commands. No archive engine exists yet.
+Create Backup now enables for a valid bookmarks-only request. Progress/cancel and
+completion layouts are connected to actual archive work; other categories block creation.
 See [Backup interface completion](backup-interface-completion.md).
 
 `BookmarkExportWindow` remains a compatibility host for the same reusable control, but
@@ -157,6 +158,6 @@ queueing indefinitely on an idle dispatcher.
   [Export](screenshots/export-tab.png), [backup options](screenshots/phase3-options.png).
 - To review locally: `dotnet run --project src/UI/UI.csproj`. Select an installation,
   exercise the tabs, sidebar/checkboxes, refresh and Reset, and use Export for bookmark
-  HTML or JSON. The future archive form never writes a `.bravebackup` file.
-- Next checkpoint: user review of this interface increment, followed by the separate
-  archive-contract proposal. Unreviewed page workflows remain pending.
+  HTML or JSON. The Backup form now writes verified bookmarks-only `.bravebackup` files.
+- Next checkpoint: user review of bookmarks-only archive creation, then choose the next
+  category increment. Unreviewed page workflows remain pending.

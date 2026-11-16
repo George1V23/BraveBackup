@@ -83,7 +83,7 @@
                     <GradientStop Color="#1E1E2E" Offset="0" /><GradientStop Color="#211932" Offset="1" />
                 </LinearGradientBrush>
             </Border.Background>
-            <Grid Margin="14,22,14,18" RowDefinitions="Auto,*,Auto" IsEnabled="{Binding !IsRefreshing}">
+            <Grid Margin="14,22,14,18" RowDefinitions="Auto,*,Auto" IsEnabled="{Binding IsWorkspaceEnabled}">
                 <Grid ColumnDefinitions="*,Auto" Margin="6,0,0,12">
                     <TextBlock Text="INSTALLATIONS" Classes="muted" FontSize="11" FontWeight="SemiBold"
                                VerticalAlignment="Center" />
@@ -187,7 +187,7 @@
                                            Classes="muted" TextWrapping="Wrap" />
                             </Border>
                             <StackPanel Spacing="16" IsVisible="{Binding HasBackupScope}">
-                                <Border Classes="card">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="1   Select profiles" Classes="section" />
                                         <TextBlock Text="{Binding ScopeDescription}" Classes="muted" FontSize="12"
@@ -293,7 +293,7 @@
                                         </ItemsControl>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="2   Select data to include" Classes="section" />
                                         <CheckBox Content="Select all categories"
@@ -322,7 +322,7 @@
                                         </ItemsControl>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
                                     <StackPanel Spacing="14">
                                         <TextBlock Text="3   Backup options" Classes="section" />
                                         <Grid ColumnDefinitions="110,*,Auto">
@@ -385,7 +385,7 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="4   Backup summary" Classes="section" />
                                         <TextBlock Text="{Binding BackupSelectionSummary}" TextWrapping="Wrap" />
@@ -401,7 +401,7 @@
                                         <TextBlock Text="{Binding BackupSizeEstimate}" Classes="muted" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
                                     <Grid ColumnDefinitions="Auto,*">
                                         <!-- Decorative placeholder branding; contains no interactive controls. -->
                                         <Border Width="64" Height="72" CornerRadius="12" Background="#604184"
@@ -412,7 +412,7 @@
                                         <StackPanel Grid.Column="1" Spacing="8">
                                             <TextBlock Text="About the backup" Classes="section" />
                                             <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
-                                            <TextBlock Text="Selected data is a configuration only. Native sessions are intended for best-effort restoration; compatibility across devices or Brave versions is not guaranteed."
+                                            <TextBlock Text="Bookmarks backups are currently supported. Other selected categories block creation. Session backups and cross-device restore are not available yet."
                                                        TextWrapping="Wrap" Classes="muted" />
                                         </StackPanel>
                                     </Grid>
@@ -420,18 +420,21 @@
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="{Binding BackupAvailability}" TextWrapping="Wrap" Classes="muted" />
                                     <Grid ColumnDefinitions="Auto,*,Auto">
-                                        <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" />
-                                        <Button Grid.Column="2" Content="Create Backup" IsEnabled="False"
+                                        <Button Content="Reset" Command="{Binding ResetBackupFormCommand}" IsEnabled="{Binding !IsBackupRunning}" />
+                                        <Button Grid.Column="2" Content="Create Backup" Command="{Binding CreateBackupCommand}"
                                                 ToolTip.Tip="{Binding BackupAvailability}" />
                                     </Grid>
-                                    <!-- Idle operation layout. The future archive engine must supply real progress and outcomes. -->
-                                    <StackPanel x:Name="BackupProgressPanel" IsVisible="False" Spacing="8">
-                                        <ProgressBar Minimum="0" Maximum="100" Value="0" />
-                                        <Button Content="Cancel" IsEnabled="False" HorizontalAlignment="Right" />
+                                    <!-- Progress describes actual stages; work without a reliable total is indeterminate. -->
+                                    <StackPanel x:Name="BackupProgressPanel" IsVisible="{Binding IsBackupRunning}" Spacing="8">
+                                        <TextBlock Text="{Binding BackupStage}" TextWrapping="Wrap" />
+                                        <ProgressBar IsIndeterminate="True" />
+                                        <Button Content="Cancel" Command="{Binding CancelBackupCommand}" HorizontalAlignment="Right" />
                                     </StackPanel>
-                                    <StackPanel x:Name="BackupCompletionPanel" IsVisible="False" Spacing="8">
-                                        <Button Content="Open destination folder" IsEnabled="False" />
-                                        <Button Content="View operation report" IsEnabled="False" />
+                                    <StackPanel x:Name="BackupCompletionPanel" IsVisible="{Binding HasBackupFeedback}" Spacing="8">
+                                        <TextBlock Text="{Binding BackupMessage}" TextWrapping="Wrap" />
+                                        <Button Content="Open destination folder" Command="{Binding OpenBackupFolderCommand}" IsVisible="{Binding BackupSucceeded}" />
+                                        <Button Content="View operation report" Command="{Binding ToggleBackupReportCommand}" IsVisible="{Binding HasBackupReport}" />
+                                        <SelectableTextBlock Text="{Binding BackupReport}" IsVisible="{Binding ShowBackupReport}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </StackPanel>
 

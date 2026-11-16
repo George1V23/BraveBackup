@@ -31,7 +31,7 @@ public sealed class BackupOptionsViewModelTests
         var options = new BackupOptionsViewModel();
         options.BackupPath = "fixture.bravebackup";
         Assert.Equal(Path.GetFullPath(options.BackupPath), options.FullBackupPath);
-        Assert.Contains("Encryption is selected", options.ProtectionDescription);
+        Assert.Contains("will be encrypted", options.ProtectionDescription);
         options.EncryptBackup = false;
         Assert.Contains("Encryption is off", options.ProtectionDescription);
         options.BackupPath = "\0";

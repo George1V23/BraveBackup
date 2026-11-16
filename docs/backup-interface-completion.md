@@ -1,5 +1,8 @@
 # Backup interface completion
 
+Historical UI-only increment. The subsequent [archive-v1 implementation](archive-format-v1.md)
+now enables bookmarks-only creation; the controls below describe their earlier idle state.
+
 This is increment 1 of [the completion plan](backup-completion-plan.md). It adds no
 archive writer and never writes a browser profile. Existing bookmark HTML/JSON export
 continues through the independent Export tab. No packages or format versions changed.

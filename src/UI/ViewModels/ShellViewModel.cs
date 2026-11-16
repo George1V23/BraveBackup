@@ -129,13 +129,11 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         : "No data categories selected";
 
     /// <summary>Gets why a reliable archive size cannot yet be calculated.</summary>
-    public string BackupSizeEstimate => "Unavailable — archive format and category sizes are not defined yet.";
-
-    /// <summary>Gets the reason the archive action remains disabled in this interface increment.</summary>
-    public string BackupAvailability => "Archive creation is unavailable until the archive format and encryption contract are approved and implemented.";
+    public string BackupSizeEstimate => "Unavailable — compressed archive size depends on the captured bookmark data.";
 
     /// <summary>Gets actual discovery or export state without copying paths or secrets into the status bar.</summary>
-    public string StatusText => IsRefreshing ? "Searching for Brave installations…" :
+    public string StatusText => IsBackupRunning ? BackupStage :
+        HasBackupFeedback && !BackupSucceeded ? "Backup needs attention — see the Backup tab." : IsRefreshing ? "Searching for Brave installations…" :
         !string.IsNullOrEmpty(DiscoveryMessage) ? DiscoveryMessage :
         SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy ? "Exporting bookmarks…" :
         SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError ? "Export needs attention — see the Export tab." : "Ready";
@@ -151,11 +149,17 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(BackupSelectionSummary));
         OnPropertyChanged(nameof(BackupCategorySummary));
         OnPropertyChanged(nameof(ActiveVersionText));
+        NotifyBackupValidation();
     }
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs args) => NotifyBackupSummary();
     private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args) => OnPropertyChanged(nameof(StatusText));
-    partial void OnIsRefreshingChanged(bool value) => OnPropertyChanged(nameof(StatusText));
+    partial void OnIsRefreshingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsWorkspaceEnabled));
+        NotifyBackupValidation();
+    }
     partial void OnDiscoveryMessageChanged(string value) => OnPropertyChanged(nameof(StatusText));
 
     /// <summary>Creates a shell with injectable read-only discovery, clock and destination picker.</summary>
@@ -185,7 +189,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
-        if (_disposed || IsRefreshing) return;
+        if (_disposed || IsRefreshing || IsBackupRunning) return;
         IsRefreshing = true;
         DiscoveryMessage = "Searching for Brave installations…";
         try
@@ -267,7 +271,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates an installation and returns from bulk to its individual workspace.</summary>
     public void Activate(InstallationViewModel installation)
     {
-        if (!Installations.Contains(installation)) return;
+        if (IsBackupRunning || !Installations.Contains(installation)) return;
         foreach (var item in Installations) item.IsActive = ReferenceEquals(item, installation);
         var changed = !ReferenceEquals(ActiveInstallation, installation);
         if (changed) FocusedProfile = installation.Profiles.FirstOrDefault();
@@ -280,6 +284,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates the double-clicked installation and toggles only its bulk-export checkmark.</summary>
     public void ToggleBulkSelection(InstallationViewModel installation)
     {
+        if (IsBackupRunning) return;
         Activate(installation);
         installation.IsChecked = !installation.IsChecked;
     }
@@ -296,7 +301,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ExportAll()
     {
-        if (!HasBulkSelection) return;
+        if (IsBackupRunning || !HasBulkSelection) return;
         if (ActiveInstallation == null) Activate(Installations.First(item => item.IsChecked));
         IsBulkMode = true;
         SelectedTabIndex = BackupTabIndex;
@@ -307,6 +312,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ResetBackupForm()
     {
+        if (IsBackupRunning) return;
         Options.Reset();
         foreach (var profile in Installations.SelectMany(item => item.Profiles)) profile.IsSelected = false;
     }
@@ -315,7 +321,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task BrowseBackupPathAsync()
     {
-        if (_pickBackupPath == null) return;
+        if (IsBackupRunning || _pickBackupPath == null) return;
         var path = await _pickBackupPath(Options.BackupPath);
         if (!string.IsNullOrWhiteSpace(path)) Options.BackupPath = path;
     }
@@ -325,6 +331,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _backupCancellation?.Cancel();
+        ConfirmBackupOverwrite = null;
         Options.PropertyChanged -= OnOptionsChanged;
         ExportViewModel.PropertyChanged -= OnExportStateChanged;
         Options.ClearSecrets();

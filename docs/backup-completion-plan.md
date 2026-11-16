@@ -34,7 +34,7 @@ Acceptance:
 
 ## 2. Review the concrete archive contract
 
-Prepared for review: [archive-format proposal](archive-format-proposal.md). No writer is implemented.
+Accepted for implementation through user continuation. See [the archive contract](archive-format-proposal.md).
 
 Prepare a separate, reviewable format proposal before implementing the writer:
 
@@ -50,6 +50,8 @@ and tests. Undocumented browser structures require research notes and fixtures. 
 NuGet package needs its purpose explained. This contract gets its own user review.
 
 ## 3. Deliver working bookmark archive creation
+
+Implemented for user review: [archive-v1 behavior, limits and validation](archive-format-v1.md).
 
 After contract approval, implement a complete bookmarks-only archive workflow:
 

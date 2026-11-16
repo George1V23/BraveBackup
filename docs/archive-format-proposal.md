@@ -1,8 +1,9 @@
-# Proposed .bravebackup archive contract
+# .bravebackup archive contract
 
-Status: **proposal for user review; not implemented or frozen**. This is checkpoint 2
-of [the completion plan](backup-completion-plan.md). Approval covers the contract and
-bookmarks-only implementation increment, not restore or the remaining category readers.
+Status: **accepted for implementation by user continuation; archive v1 is implemented**.
+This is checkpoint 2 of [the completion plan](backup-completion-plan.md).
+See [implemented behavior and validation](archive-format-v1.md). Approval covers the
+contract and bookmarks-only increment, not restore or the remaining category readers.
 Existing HTML/JSON exports and their public APIs remain unchanged.
 
 ## 1. User-visible behavior
@@ -132,7 +133,7 @@ truncation, oversized lengths, short reads and malformed headers. Authentication
 cover the entire stream including its terminal record before accepting the archive.
 
 Proposed initial resource limits are 100 GiB of ZIP stream and 100 GiB total uncompressed
-payload, at most 100,000 ZIP entries, a 16 MiB manifest, and a 256 MiB bookmark source
+payload, at most 100,000 ZIP entries, a 64 MiB central directory, 1,024-byte entry names, a 16 MiB manifest, and a 256 MiB bookmark source
 snapshot per profile. These are explicit v1 implementation limits, not browser-format
 limits. Exceeding one fails with an actionable message, never partial success. They keep
 chunk count far below nonce exhaustion. Reader bounds must be checked before allocating.
@@ -250,5 +251,6 @@ protocols:
 - [Microsoft: compression choices](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.compressionlevel)
   and [ZIP/TAR safety](https://learn.microsoft.com/en-us/dotnet/standard/io/zip-tar-best-practices).
 
-Next checkpoint: approve or edit this proposal, then implement bookmarks-only archive
-creation with tests and documentation. No archive-writing code was added in this review.
+Next checkpoint: review the implemented bookmarks-only workflow, then choose the next
+category increment. Native Windows verification and independent cryptographic review
+remain release checks; no restore implementation is introduced.

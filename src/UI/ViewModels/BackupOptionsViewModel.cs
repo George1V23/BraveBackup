@@ -102,8 +102,8 @@ public partial class BackupOptionsViewModel : ViewModelBase
 
     /// <summary>Gets an accurate description of the proposed archive protection and current limits.</summary>
     public string ProtectionDescription => EncryptBackup
-        ? "Encryption is selected. No archive has been created. Archive encryption and restore are not available yet."
-        : "Encryption is off. A future archive would be readable by anyone with file access. Archive creation and restore are not available yet.";
+        ? "The entire archive, including profile names, will be encrypted. Keep the password safe; it cannot be recovered. Restore is not available yet."
+        : "Encryption is off. Anyone with file access can read this archive. Restore is not available yet.";
 
     /// <summary>Gets the combined state, or sets all categories; assigning mixed state does nothing.</summary>
     public bool? AllCategoriesSelected
