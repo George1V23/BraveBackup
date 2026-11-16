@@ -1,0 +1,19 @@
+{
+  "inspectedUtcDate": "2026-11-17",
+  "extensionId": "cnkdjjdmfiffagllbiiilooaoofcoeff",
+  "version": "7.0.0",
+  "manifestVersion": 3,
+  "sourceRevision": "3937a32841441b7349673dddf0be895d67e9ef99",
+  "packageSha256": "606e9e35add2a3efac716a627813b36ba4bce00ba95cb8d12743fb7581a2d51e",
+  "popupSha256": "496d3e998ebce593dac3677f7526a6ad54848421ee5c02700c28bceb4b4f694d",
+  "origin": "https://clients2.google.com/service/update2/crx",
+  "method": "Static ZIP/CRX header and JavaScript inspection only; no extension execution. Signed-header ID matched requested store ID; signature cryptography was not independently verified.",
+  "schemaEvidence": [
+    "storage.local sessions map",
+    "stored version key",
+    "tabs and windowsInfo saved-window fields",
+    "name/color/date/sessionStartTime/customName/incognito/id",
+    "stable order/date sorting",
+    "version-1 official sessions export"
+  ]
+}

@@ -28,7 +28,8 @@ Identity caveat: the official store ID is `cnkdjjdmfiffagllbiiilooaoofcoeff`, bu
 deriving the ID from the inspected repository manifest's embedded public key yields
 `jajkejgbojkolgjiimaebpgenkgnejfe`. Do not silently add that development identity or
 require its public key for store installs. A matching display name/version alone is
-not evidence of the same package; store-package schema verification remains pending.
+not evidence of the same package. Subsequent official store-package inspection confirmed
+7.0.0's schema; see [the capture checkpoint](tabmanagerplus-capture.md) for digests and limits.
 
 Google LevelDB revision `29465588d3dfdc80fba5e198037582b8fdb5dd60`:
 

@@ -7,7 +7,8 @@ versions 1–4 are unchanged.
 ## Project and API
 
 `src/Extensions/TabManagerPlus/TabManagerPlus.csproj` targets .NET 10 with no project or
-NuGet dependencies. UI and CLI do not yet reference it. Its namespace is
+NuGet dependencies. Backup now references it for the separate
+[saved-window capture component](tabmanagerplus-capture.md); archive/UI wiring remains pending. Its namespace is
 `BraveBackup.Extensions.TabManagerPlus`.
 
 `OfflineLevelDb.ReadValue(files, key, cancellationToken)` synchronously reads a map of
@@ -84,7 +85,7 @@ Solution validation on Linux: **453 tests passed** (386 Core, 48 Brave, 13 Linux
 6 Windows-labelled). Full solution including CLI builds with zero warnings/errors.
 These are not native Windows or real installed-Brave end-to-end results.
 
-Before enabling the category, finish store-package/schema verification, typed saved-window
-parsing, more multi-table/manifest-transition fixtures, stable stopped-browser capture,
-archive capability/version validation and UI feedback. The UI still blocks this category
-explicitly until integration is complete.
+The subsequent capture checkpoint implements store-package research, typed saved-window
+parsing and stable stopped-browser capture with additional tests. Archive capability/version
+validation, UI feedback and more multi-table/manifest-transition coverage remain pending.
+The UI still blocks this category explicitly until integration is complete.

@@ -8,7 +8,8 @@ see [the storage research](tabmanagerplus-research.md). The
 The existing Extensions category can preserve raw extension files and local/sync stores.
 It does not decode Tab Manager Plus saved windows. The dedicated category still blocks
 backup as unsupported. Its dedicated project now contains the tested storage reader;
-decoded saved-window capture and archive integration remain pending.
+decoded saved-window capture is now implemented as a tested component, while archive/UI
+integration remains pending. See [the capture checkpoint](tabmanagerplus-capture.md).
 
 ## Source findings
 

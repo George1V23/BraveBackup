@@ -6,6 +6,7 @@ The dependency direction is:
 UI  ──┐
       ├── Backup ── Core
 CLI ──┘     └────── Platform
+            └────── Extensions/TabManagerPlus
 ```
 
 - **Core** contains platform-independent, browser-independent backup contracts (`BackupModel`,
@@ -21,8 +22,8 @@ CLI ──┘     └────── Platform
   product metadata and bounded command execution. It contains no Brave formats or paths.
 - **UI** and **CLI** consume Backup independently. UI-only avatars/presentation stay in UI.
 - **Extensions/TabManagerPlus** is a dependency-free .NET 10 project containing a bounded
-  offline storage reader. It currently has test consumers only; UI/Backup/CLI integration
-  and decoded saved-window support remain pending. See [the reader checkpoint](tabmanagerplus-storage-reader.md).
+  offline storage reader and typed saved-window parser. Backup references it for version-gated
+  read-only capture; archive/UI wiring is pending. See [the capture checkpoint](tabmanagerplus-capture.md).
 
 `HostEnvironment` centralizes OS calls. Browser path conventions and launcher definitions
 remain in Backup, where injected filesystem/registry/version delegates allow existing
@@ -92,7 +93,8 @@ Core validates browser-independent raw snapshot inventory and binary payload int
 for manifest v3. Backup owns approved source paths, extension ID/manifest rules and
 source-stability/stopped-browser policy. Platform owns native file-type inspection, safe
 read flags and process observations. Old v1/v2 writes/reads stay compatible; see
-[Extensions backup](extensions-backup.md). TabManagerPlus-specific parsing is still deferred.
+[Extensions backup](extensions-backup.md). TabManagerPlus-specific saved-window parsing and
+read-only capture are now available as separate components; archive/UI integration is pending.
 
 ## Sessions category increment
 
