@@ -113,7 +113,7 @@ public sealed class BraveArchiveBackupTests : IDisposable
     }
 
     [Theory]
-    [InlineData("passwords")] [InlineData("sessions")] [InlineData("unknown")]
+    [InlineData("passwords")] [InlineData("future-session")] [InlineData("unknown")]
     [InlineData("future")] [InlineData("tabmanagerplus")]
     public async Task UnsupportedCategory_NeverSilentlyOmitsSelectedData(string category)
     {

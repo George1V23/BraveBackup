@@ -72,8 +72,9 @@ Settings scope was kept in full and is implemented for user review:
 Extensions scope was kept in full and is implemented for user review:
 [Extensions backup and archive v3](extensions-backup.md).
 
-Next scope for review: [Sessions backup proposal](sessions-backup-proposal.md).
-Session decoding/native-file capture has not been implemented.
+Sessions scope was kept in full. Tested unencrypted format-3 capture and optional raw
+files are implemented for review: [Sessions backup and archive v4](sessions-backup.md).
+Encrypted/legacy decoding remains unsupported and blocks capture explicitly.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and

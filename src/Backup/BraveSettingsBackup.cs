@@ -119,6 +119,11 @@ public static class BraveSettingsBackup
                      .SelectMany(item => item.Categories))
         {
             token.ThrowIfCancellationRequested();
+            if (category.Id == "sessions")
+            {
+                BraveSessionBackup.ValidateCategory(zip, category, token);
+                continue;
+            }
             if (category.Id == "extensions")
             {
                 BraveExtensionBackup.ValidateCategory(zip, category, token);

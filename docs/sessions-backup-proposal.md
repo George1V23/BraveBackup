@@ -1,6 +1,7 @@
 # Sessions backup: scope checkpoint
 
-Status: **proposal for keep/edit/defer review; not implemented**. Existing Bookmarks,
+Status: **all six choices approved with “keep all” and implemented for tested unencrypted format 3**.
+See [persisted Sessions backup and archive v4](sessions-backup.md). Existing Bookmarks,
 Settings, Extensions and Export behavior remain unchanged. Sessions is next in
 [the agreed category sequence](backup-completion-plan.md).
 
@@ -159,6 +160,6 @@ versions/commands, truncation, source churn, mixed-category stopped-state behavi
 confirmation, native inclusion/exclusion, limits, cancellation and unchanged sources.
 Preserve all existing archive, crypto and HTML/JSON regressions.
 
-Review the six choices above with keep/edit/defer before implementation. Restore, broader
+Next checkpoint: review the implemented supported-format Sessions slice before the next category. Restore, broader
 live capture, OS-encrypted session decoding, TabManagerPlus-specific data and Passwords
 remain separate work; no restoration or decryption bypass is introduced here.

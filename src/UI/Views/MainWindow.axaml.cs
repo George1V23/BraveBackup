@@ -19,7 +19,8 @@ public partial class MainWindow : Window
         {
             ExportFilePicker = PickExportFileAsync,
             ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync,
-            ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync
+            ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync,
+            ConfirmUnencryptedNativeSessions = ConfirmUnencryptedNativeSessionsAsync
         };
         Opened += OnOpened;
         Closed += OnClosed;
@@ -72,6 +73,31 @@ public partial class MainWindow : Window
                     Text = "Copied extension data may contain readable private information or authentication material. Anyone with access to this file can read its contents. Save this backup without encryption?",
                     TextWrapping = Avalonia.Media.TextWrapping.Wrap
                 },
+                new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+            }
+        };
+        return await dialog.ShowDialog<bool>(this);
+    }
+
+    /// <summary>Confirms readable private navigation metadata before this native-session file save.</summary>
+    private async Task<bool> ConfirmUnencryptedNativeSessionsAsync(string destination)
+    {
+        var dialog = new Window
+        {
+            Title = "Save native session files without encryption?", Width = 580, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel" };
+        var save = new Button { Content = "Save unencrypted" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        save.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24), Spacing = 16,
+            Children =
+            {
+                new TextBlock { Text = "Native session files contain browsing data beyond portable URLs and titles. Anyone with file access can read this unencrypted backup. Save these raw files without encryption?", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
             }

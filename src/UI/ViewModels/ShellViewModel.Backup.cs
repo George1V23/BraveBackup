@@ -25,6 +25,9 @@ public partial class ShellViewModel
     /// <summary>Gets or sets controlled process observation for alternate hosts/tests; null uses the actual host.</summary>
     public Func<ProcessPresence>? ExtensionBrowserState { get; set; }
 
+    /// <summary>Gets or sets explicit confirmation before each unencrypted native-session save.</summary>
+    public Func<string, Task<bool>>? ConfirmUnencryptedNativeSessions { get; set; }
+
     /// <summary>Gets whether one frozen archive request is currently running.</summary>
     [ObservableProperty] private bool _isBackupRunning;
 
@@ -58,10 +61,10 @@ public partial class ShellViewModel
         : !HasBackupScope || !BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected))
             ? "Select at least one profile for backup."
             : !Options.Categories.Any(item => item.IsSelected)
-                ? "Select Bookmarks, supported Settings and/or Extensions."
+                ? "Select supported Bookmarks, Settings, Extensions and/or Sessions."
                 : Options.Categories.Any(item =>
-                    item.IsSelected && item.Id is not ("bookmarks" or "settings" or "extensions"))
-                    ? "Bookmarks, supported Settings and Extensions are available. Deselect other categories to create an archive."
+                    item.IsSelected && item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions"))
+                    ? "Bookmarks, Settings, Extensions and persisted Sessions are available. Deselect other categories to create an archive."
                     : Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation)
                         ? Options.PasswordValidation
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
@@ -92,7 +95,8 @@ public partial class ShellViewModel
                                           item.Profiles.Any(profile => profile.IsSelected)) &&
                                       Options.Categories.Any(item => item.IsSelected) &&
                                       Options.Categories.All(item =>
-                                          !item.IsSelected || item.Id is "bookmarks" or "settings" or "extensions") &&
+                                          !item.IsSelected ||
+                                          item.Id is "bookmarks" or "settings" or "extensions" or "sessions") &&
                                       (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
                                       string.IsNullOrEmpty(BackupDestinationValidation);
 
@@ -111,6 +115,7 @@ public partial class ShellViewModel
                 item.Profiles.Where(profile => profile.IsSelected).Select(profile => profile.ProfileInfo).ToArray()))
             .Where(item => item.Profiles.Count > 0).ToArray();
         var categories = Options.Categories.Where(item => item.IsSelected).Select(item => item.Id).ToArray();
+        var includeNativeSessions = Options.IncludeNativeSessionFiles;
         var destination = Options.BackupPath;
         var password = Options.EncryptBackup ? Options.Password : null;
         var compression = Options.Compression.ToLowerInvariant();
@@ -142,6 +147,11 @@ public partial class ShellViewModel
                     ObserveBrowserState = ExtensionBrowserState,
                     ConfirmUnencryptedData = path =>
                         ConfirmUnencryptedExtensionData?.Invoke(path) ?? Task.FromResult(false)
+                }, new SessionBackupOptions
+                {
+                    IncludeNativeFiles = includeNativeSessions,
+                    ConfirmUnencryptedNativeFiles = path =>
+                        ConfirmUnencryptedNativeSessions?.Invoke(path) ?? Task.FromResult(false)
                 });
             if (_disposed) return;
             _completedBackupPath = result.Destination;
@@ -152,6 +162,7 @@ public partial class ShellViewModel
             if (categories.Contains("extensions"))
                 BackupMessage += "\n" + result.ExtensionsSummary +
                                  "\nRaw files were saved; extensions have not been installed or restored.";
+            if (categories.Contains("sessions")) BackupMessage += "\n" + result.SessionsSummary;
             BackupReport = result.Report;
         }
         catch (OperationCanceledException)

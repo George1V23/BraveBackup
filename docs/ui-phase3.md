@@ -184,3 +184,10 @@ The Extensions checkbox now enables raw version-file and local/sync storage back
 alone or with Bookmarks/Settings. The form discloses its limited storage scope and
 Brave-closed requirement. A per-operation warning confirms any unencrypted save;
 completion shows safe file/version/storage counts. See [Extensions backup](extensions-backup.md).
+
+## Persisted Sessions category
+
+The existing Sessions/native-file controls now create validated last-persisted session
+archives for supported format-3 sources. Feedback reports window/tab/group/native counts
+and persistence limits. Unencrypted native files require explicit confirmation; mixed
+Extensions still requires Brave closed. See [Sessions backup](sessions-backup.md).

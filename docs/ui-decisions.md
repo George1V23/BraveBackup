@@ -120,3 +120,11 @@ storage, Brave-closed capture and confirmation before unencrypted extension-data
 The implemented scope includes storage-only identities and explicit absent/empty areas,
 without claiming complete extension-data coverage or installation/restoration.
 See [Extensions backup and archive v3](extensions-backup.md).
+
+## Sessions scope review
+
+The user kept all six choices: last-persisted portable contents, stable read-only capture,
+explicit source/no stale fallback, optional native files, failure on unsupported/incomplete
+data and native plaintext confirmation. Tested unencrypted format 3 is implemented;
+legacy/encrypted formats remain explicit limitations. No real-time capture or restore is
+claimed. See [Sessions backup and archive v4](sessions-backup.md).

@@ -40,7 +40,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
     /// <summary>Gets the approved selectable categories; selection does not imply archive support.</summary>
     public ObservableCollection<BackupCategoryItem> Categories { get; } = new()
     {
-        new("sessions", "Sessions", "Open windows, tabs and tab groups"),
+        new("sessions", "Sessions", "Last persisted windows, tabs and supported groups; may lag live browser state"),
         new("bookmarks", "Bookmarks", "Bookmark folders and URLs", true),
         new("passwords", "Passwords", "Saved logins; protection enabled by default"),
         new("extensions", "Extensions", "All discovered version files and raw local/sync storage; Brave must be closed"),

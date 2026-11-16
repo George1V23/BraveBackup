@@ -34,7 +34,7 @@ public sealed class SettingsArchiveValidationTests
             var file = category["files"]![0]!;
             switch (fault)
             {
-                case "future-version": node["formatVersion"] = 4; break;
+                case "future-version": node["formatVersion"] = 5; break;
                 case "v1-settings": node["formatVersion"] = 1; break;
                 case "unknown-capability": node["requiredCapabilities"]![0] = "future-v1"; break;
                 case "missing-capability": node["requiredCapabilities"] = new JsonArray(); break;

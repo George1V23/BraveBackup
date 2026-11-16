@@ -176,5 +176,27 @@ public sealed class ShellBackupTests : IDisposable
         Assert.DoesNotContain(_root, shell.BackupReport); Assert.False(File.Exists(shell.Options.BackupPath));
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task SessionsUi_FreezesNativeChoiceAndDisplaysPersistedCounts(bool native)
+    {
+        using var shell = await Create();
+        var directory = Path.Combine(_profile.ProfileDirectory, "Sessions"); Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "Session_10"), BraveSessionDecoderTests.Fixture());
+        shell.Installations[0].Profiles[0].IsSelected = true; shell.Options.EncryptBackup = false;
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
+        shell.Options.Categories.Single(item => item.Id == "sessions").IsSelected = true;
+        shell.Options.IncludeNativeSessionFiles = native;
+        if (native)
+        {
+            await shell.CreateBackupAsync(); Assert.False(shell.BackupSucceeded); Assert.False(File.Exists(shell.Options.BackupPath));
+            shell.ConfirmUnencryptedNativeSessions = _ => Task.FromResult(true);
+        }
+        Assert.True(shell.CreateBackupCommand.CanExecute(null)); await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded); Assert.Contains("windows: 2; tabs: 3; groups: 1", shell.BackupMessage);
+        Assert.Contains("persisted", shell.BackupMessage); Assert.DoesNotContain("selected.example", shell.BackupReport);
+        using var source = File.OpenRead(shell.Options.BackupPath); Assert.Equal(4, BraveSettingsBackup.ValidateArchive(source).FormatVersion);
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }

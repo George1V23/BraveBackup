@@ -334,6 +334,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         _backupCancellation?.Cancel();
         ConfirmBackupOverwrite = null;
         ConfirmUnencryptedExtensionData = null;
+        ConfirmUnencryptedNativeSessions = null;
         ExtensionBrowserState = null;
         Options.PropertyChanged -= OnOptionsChanged;
         ExportViewModel.PropertyChanged -= OnExportStateChanged;

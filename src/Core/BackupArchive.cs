@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
-/// <summary>Writes and verifies archive-v1/v2/v3 ZIP content independently of any browser or UI.</summary>
+/// <summary>Writes and verifies archive-v1/v2/v3/v4 ZIP content independently of any browser or UI.</summary>
 public static class BackupArchive
 {
     /// <summary>Maps the four approved compression choices without adding package dependencies.</summary>
@@ -107,6 +107,13 @@ public static class BackupArchive
                         category.Files is null ||
                         !manifest.RequiredCapabilities.Contains(category.Id + "-v1", StringComparer.Ordinal))
                         throw new InvalidDataException("Unsupported or duplicate archive category.");
+                    if (category.Id == "sessions")
+                    {
+                        SessionArchiveFormat.ValidateCategory(zip, entries,
+                            $"installations/{installation.Id:D}/profiles/{profile.Id:D}/sessions/", category, token);
+                        continue;
+                    }
+
                     if (category.Id == "extensions")
                     {
                         ExtensionSnapshotFormat.ValidateCategory(zip, entries,
@@ -211,7 +218,7 @@ public static class BackupArchive
 
     private static void ValidateManifest(ArchiveManifest manifest)
     {
-        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3) ||
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4) ||
             manifest.ArchiveId == Guid.Empty ||
             manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
             string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
@@ -220,10 +227,15 @@ public static class BackupArchive
                 : manifest.FormatVersion == 2
                     ? manifest.RequiredCapabilities.SequenceEqual(new[] { "settings-v1" }) ||
                       manifest.RequiredCapabilities.SequenceEqual(new[] { "bookmarks-v1", "settings-v1" })
-                    : manifest.RequiredCapabilities.Contains("extensions-v1") &&
-                      manifest.RequiredCapabilities.SequenceEqual(
-                          new[] { "bookmarks-v1", "settings-v1", "extensions-v1" }
-                              .Where(manifest.RequiredCapabilities.Contains))) ||
+                    : manifest.FormatVersion == 3
+                        ? manifest.RequiredCapabilities.Contains("extensions-v1") &&
+                          manifest.RequiredCapabilities.SequenceEqual(
+                              new[] { "bookmarks-v1", "settings-v1", "extensions-v1" }.Where(manifest
+                                  .RequiredCapabilities.Contains))
+                        : manifest.RequiredCapabilities.Contains("sessions-v1") &&
+                          manifest.RequiredCapabilities.SequenceEqual(
+                              new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1" }.Where(
+                                  manifest.RequiredCapabilities.Contains))) ||
             manifest.Installations is null || manifest.Installations.Length == 0)
             throw new InvalidDataException("Unsupported or invalid archive manifest.");
         Compression(manifest.Compression);

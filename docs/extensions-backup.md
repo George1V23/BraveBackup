@@ -1,5 +1,8 @@
 # Extensions backup and archive v3
 
+Writes with Extensions and no Sessions retain v3. Adding Sessions now uses
+[manifest v4](sessions-backup.md), preserving the Extensions behavior below.
+
 All five [scope choices](extensions-backup-proposal.md) were kept by the user and are
 implemented. Extensions can be selected alone or with Bookmarks and/or supported Settings.
 This captures files, not an installed/enabled extension configuration or a restore workflow.

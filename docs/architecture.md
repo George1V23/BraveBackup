@@ -90,3 +90,11 @@ for manifest v3. Backup owns approved source paths, extension ID/manifest rules 
 source-stability/stopped-browser policy. Platform owns native file-type inspection, safe
 read flags and process observations. Old v1/v2 writes/reads stay compatible; see
 [Extensions backup](extensions-backup.md). TabManagerPlus-specific parsing is still deferred.
+
+## Sessions category increment
+
+Core owns generic portable-session/native-inventory models and manifest-v4 integrity
+validation. Backup owns pinned Chromium format-3 replay, source selection, bounded stable
+read-only capture and native/portable consistency checks. Platform file safety is reused;
+no native format decoder or OS API moved into Core. Earlier archive versions remain
+compatible. See [Sessions backup](sessions-backup.md).
