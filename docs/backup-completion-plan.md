@@ -72,6 +72,9 @@ Settings scope was kept in full and is implemented for user review:
 Extensions scope was kept in full and is implemented for user review:
 [Extensions backup and archive v3](extensions-backup.md).
 
+Next scope for review: [Sessions backup proposal](sessions-backup-proposal.md).
+Session decoding/native-file capture has not been implemented.
+
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and
 user review accompany each category. TabManagerPlus belongs in its own project under
