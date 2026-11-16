@@ -46,8 +46,9 @@ and profile highlight colors reuse the existing presentation behavior.
 
 - Default filename: `BraveBackup_yyyy-MM-dd_HHmmss.bravebackup`, using local time. The path
   is editable and Browse chooses a destination. These controls do not write files.
-- Bookmarks is initially selected; other categories start unchecked. Sessions and native
-  session files are omitted pending their deferred review.
+- Bookmarks is initially selected; other implemented categories start unchecked. The later
+  review approved Sessions (open windows, tabs and tab groups) and optional native session
+  files enabled only with Sessions. Their controls and data handling are not implemented yet.
 - Encryption starts checked. Password and confirmation are masked, with a shared reveal
   control, matching validation and a labelled heuristic strength estimate. The estimate
   considers length/character variety; it is not a cryptographic guarantee.
@@ -91,9 +92,11 @@ archive's filename, categories, encryption and compression do not affect these e
 **Import** is a separate navigation page for future import operations; its supported
 formats and behavior still require review. Restore, Import, Backups, Settings and About
 currently have navigation shells only. Profiles provides read-only navigation/metadata
-and identifies where Merge/Sync will belong. Summary, size estimates, Create Backup,
-progress, completion, status-bar behavior and illustration remain deferred. The bottom
-status-bar area is reserved without invented status data.
+and identifies where Merge/Sync will belong. The subsequent review approved the backup
+summary, size estimate and Create Backup action; their implementation is still pending.
+The explanatory panel, progress/cancellation, completion feedback, status-bar behavior
+and illustration were also approved in the subsequent review; implementation is pending.
+The currently empty bottom status-bar area remains reserved until that implementation.
 
 `BookmarkExportWindow` remains a compatibility host for the same reusable control, but
 there is no launcher for it in the shell. Both hosts release their exporter-owned avatars

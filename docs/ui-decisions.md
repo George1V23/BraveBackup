@@ -36,8 +36,10 @@ decided it was unnecessary. The first implementation increment was approved on 2
   extension counts, and last used. Unknown/unreliable values appear as Unavailable.
 - Categories: Bookmarks, Passwords, Extensions (including supported settings/data),
   Settings (supported profile preferences), TabManagerPlus (supported windows/groups/data).
-- Sessions and optional native-session-file handling remain deferred. The user's Keep
-  for the native-session option retained the proposed deferral, as explained afterward.
+- Sessions is approved: include open windows, tabs and tab groups from selected profiles.
+- Include native session files is approved as an optional additional inclusion for best-effort
+  restoration, enabled only when Sessions is selected. These two controls were explicitly
+  kept during the subsequent deferred-control review; implementation is still pending.
 - Select all categories supports a mixed state. Choices apply across selected profiles;
   differences are intended for the later summary.
 
@@ -59,13 +61,29 @@ decided it was unnecessary. The first implementation increment was approved on 2
 - Compression: None, Fast, Balanced (default), High.
 - Reset restores form defaults, preserving active installation and sidebar bulk selections.
 
-## Deferred until the preceding UI functionality is implemented
+## Approved backup summary and action
 
-All details of the summary, estimated size, About the backup panel, Create Backup action,
-progress/cancellation, completion feedback, bottom status-bar behavior and decorative
-illustration are deferred for a later user review. The shell's bottom status-bar placement
-was retained; its behavior remains deferred. No new behavior for these controls is implied
-by the accepted reference image.
+- Backup summary: show selected installations, profiles, categories, encryption,
+  compression and destination, updating when choices change.
+- Estimated size: show an approximate size, with Calculating or Unavailable states
+  when appropriate.
+- Create Backup: validate selections and destination, obtain the required confirmation
+  for plaintext passwords, then create the `.bravebackup` file. Never silently omit
+  selected data. These controls are approved; implementation is still pending.
+
+## Approved backup feedback controls
+
+- About the backup panel: explain the selected encryption state and supported restoration limits.
+- Progress/cancellation: show the current stage and progress; Cancel safely cleans up incomplete output.
+- Completion feedback: show success or actionable errors, with options to open the destination
+  folder and view an operation report containing no secrets.
+- Bottom status bar: show Ready/current operation/error, the active Brave version and OS.
+- Decorative illustration: keep a reference-style backup graphic adapted to placeholder branding;
+  it is decorative only.
+
+All five controls were kept during the subsequent review. Their implementation is pending.
+The Backup page's previously deferred controls have now been reviewed; this does not approve
+unreviewed behavior for Restore, Import, Backups, Settings, About or Merge/Sync.
 
 ## Delivery checkpoints
 
@@ -80,5 +98,6 @@ the unreviewed pages or promise cross-machine credential portability without val
 ## Phase 3 implementation
 
 The approved shell and selection form are implemented. See [ui-phase3.md](ui-phase3.md)
-for behavior, review screenshots, validation and remaining limits. Deferred decisions
-above remain deferred until the user reviews them.
+for behavior, review screenshots, validation and remaining limits. The previously deferred Backup-page controls have now been reviewed and kept.
+See [the next implementation checkpoints](backup-completion-plan.md); the remaining
+pages still require their own review.
