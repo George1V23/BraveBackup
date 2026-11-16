@@ -136,5 +136,45 @@ public sealed class ShellBackupTests : IDisposable
         Assert.Equal(2, BraveSettingsBackup.ValidateArchive(file).FormatVersion);
     }
 
+    [Fact]
+    public async Task ExtensionUi_RequiresConsentForPlaintextAndShowsActualOutcome()
+    {
+        using var shell = await Create();
+        shell.ExtensionBrowserState = () => BraveBackup.Platform.ProcessPresence.Stopped;
+        shell.Options.EncryptBackup = false;
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
+        shell.Options.Categories.Single(item => item.Id == "extensions").IsSelected = true;
+        Assert.True(shell.CreateBackupCommand.CanExecute(null));
+        await shell.CreateBackupAsync();
+        Assert.False(shell.BackupSucceeded); Assert.False(File.Exists(shell.Options.BackupPath));
+        var confirmations = 0;
+        shell.ConfirmUnencryptedExtensionData = path => { confirmations++; Assert.Equal(shell.Options.FullBackupPath, path); return Task.FromResult(true); };
+        await shell.CreateBackupAsync();
+        Assert.True(shell.BackupSucceeded); Assert.Equal(1, confirmations);
+        Assert.Contains("Extension packages: 0; versions: 0", shell.BackupMessage);
+        Assert.Contains("extensions (completed)", shell.BackupReport);
+        using var source = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(3, BraveSettingsBackup.ValidateArchive(source).FormatVersion);
+    }
+
+    [Theory]
+    [InlineData(BraveBackup.Platform.ProcessPresence.Running)]
+    [InlineData(BraveBackup.Platform.ProcessPresence.Unknown)]
+    public async Task ExtensionUi_BlocksLiveOrIndeterminateBrowserWithSafeFeedback(BraveBackup.Platform.ProcessPresence state)
+    {
+        using var shell = await Create();
+        shell.ExtensionBrowserState = () => state;
+        shell.Options.EncryptBackup = false;
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "bookmarks").IsSelected = false;
+        shell.Options.Categories.Single(item => item.Id == "extensions").IsSelected = true;
+        shell.ConfirmUnencryptedExtensionData = _ => throw new InvalidOperationException("Must not prompt before process check.");
+        await shell.CreateBackupAsync();
+        Assert.False(shell.BackupSucceeded); Assert.Contains("Brave", shell.BackupMessage);
+        Assert.Contains("extensions-browser-", shell.BackupReport);
+        Assert.DoesNotContain(_root, shell.BackupReport); Assert.False(File.Exists(shell.Options.BackupPath));
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }

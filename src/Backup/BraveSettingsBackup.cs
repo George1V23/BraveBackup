@@ -119,6 +119,11 @@ public static class BraveSettingsBackup
                      .SelectMany(item => item.Categories))
         {
             token.ThrowIfCancellationRequested();
+            if (category.Id == "extensions")
+            {
+                BraveExtensionBackup.ValidateCategory(zip, category, token);
+                continue;
+            }
             if (category.Id != "settings") continue;
             var descriptor = category.Files.Single();
             var bytes = new byte[checked((int)descriptor.Length)];

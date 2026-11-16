@@ -114,7 +114,7 @@ public sealed class BraveArchiveBackupTests : IDisposable
 
     [Theory]
     [InlineData("passwords")] [InlineData("sessions")] [InlineData("unknown")]
-    [InlineData("extensions")] [InlineData("tabmanagerplus")]
+    [InlineData("future")] [InlineData("tabmanagerplus")]
     public async Task UnsupportedCategory_NeverSilentlyOmitsSelectedData(string category)
     {
         var failure = await Assert.ThrowsAsync<BackupOperationException>(() => Create(categories: new[] { "bookmarks", category }));

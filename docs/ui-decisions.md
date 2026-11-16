@@ -112,3 +112,11 @@ The user kept all proposed groups: bookmark-bar visibility, Home button/homepage
 startup mode/addresses. Only approved stored preference keys are captured; absent values
 are explicit and full Preferences files are excluded. Settings-only and combined backups
 are implemented; see [Settings scope and archive-v2 details](settings-backup.md).
+
+## Extensions scope review
+
+The user kept all five choices: inventory, all discovered version files, raw local/sync
+storage, Brave-closed capture and confirmation before unencrypted extension-data saves.
+The implemented scope includes storage-only identities and explicit absent/empty areas,
+without claiming complete extension-data coverage or installation/restoration.
+See [Extensions backup and archive v3](extensions-backup.md).

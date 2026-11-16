@@ -18,7 +18,8 @@ public partial class MainWindow : Window
         DataContext = new ShellViewModel(pickBackupPath: PickBackupPathAsync)
         {
             ExportFilePicker = PickExportFileAsync,
-            ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync
+            ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync,
+            ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync
         };
         Opened += OnOpened;
         Closed += OnClosed;
@@ -44,6 +45,35 @@ public partial class MainWindow : Window
                 new TextBlock { Text = "Replace this existing file after the new backup is verified?", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, replace } }
+            }
+        };
+        return await dialog.ShowDialog<bool>(this);
+    }
+
+    /// <summary>Confirms the readable private-data risk for this specific unencrypted extension backup.</summary>
+    private async Task<bool> ConfirmUnencryptedExtensionDataAsync(string destination)
+    {
+        var dialog = new Window
+        {
+            Title = "Save extension data without encryption?", Width = 580, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel" };
+        var save = new Button { Content = "Save unencrypted" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        save.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24), Spacing = 16,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Copied extension data may contain readable private information or authentication material. Anyone with access to this file can read its contents. Save this backup without encryption?",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                },
+                new SelectableTextBlock { Text = destination, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
             }
         };
         return await dialog.ShowDialog<bool>(this);

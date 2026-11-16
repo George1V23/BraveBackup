@@ -82,3 +82,11 @@ The Brave-specific seven-key allowlist, snapshot extraction and Settings policy 
 belong to Backup (`BraveSettingsBackup`). Core validates generic Settings payload shape
 and archive-v1/v2 integrity without native preference names. Settings-only and mixed
 archives use manifest v2; bookmark-only writes retain v1. See [Settings backup](settings-backup.md).
+
+## Extensions category increment
+
+Core validates browser-independent raw snapshot inventory and binary payload integrity
+for manifest v3. Backup owns approved source paths, extension ID/manifest rules and
+source-stability/stopped-browser policy. Platform owns native file-type inspection, safe
+read flags and process observations. Old v1/v2 writes/reads stay compatible; see
+[Extensions backup](extensions-backup.md). TabManagerPlus-specific parsing is still deferred.

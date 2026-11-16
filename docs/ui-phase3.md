@@ -177,3 +177,10 @@ the matching XAML with `AvaloniaXamlLoader.Load(this)`. This avoids Rider failin
 resolve the generated `InitializeComponent` method while retaining the existing view
 and host-provided data context. The original error was reproduced in Rider even though
 the .NET UI build succeeded.
+
+## Extensions backup category
+
+The Extensions checkbox now enables raw version-file and local/sync storage backup,
+alone or with Bookmarks/Settings. The form discloses its limited storage scope and
+Brave-closed requirement. A per-operation warning confirms any unencrypted save;
+completion shows safe file/version/storage counts. See [Extensions backup](extensions-backup.md).

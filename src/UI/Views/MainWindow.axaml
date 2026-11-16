@@ -412,7 +412,7 @@
                                         <StackPanel Grid.Column="1" Spacing="8">
                                             <TextBlock Text="About the backup" Classes="section" />
                                             <TextBlock Text="{Binding Options.ProtectionDescription}" TextWrapping="Wrap" Classes="muted" />
-                                            <TextBlock Text="Bookmarks and supported Settings backups are available. Settings includes stored bookmark-bar visibility, Home button/homepage, and startup mode/addresses only. These addresses are readable when encryption is off. Other selected categories block creation. Restore is not available yet."
+                                            <TextBlock Text="Bookmarks, supported Settings and Extensions backups are available. Settings covers stored bookmark-bar, Home and startup choices. Extensions requires Brave closed and saves all discovered versions plus raw local/sync storage only; IndexedDB and other stores are not included. Unencrypted data is readable by anyone with file access. Restore is not available yet."
                                                        TextWrapping="Wrap" Classes="muted" />
                                         </StackPanel>
                                     </Grid>

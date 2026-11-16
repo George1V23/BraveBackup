@@ -19,6 +19,12 @@ public partial class ShellViewModel
     /// <summary>Gets or sets the host's explicit overwrite confirmation; no callback means replacement is declined.</summary>
     public Func<string, Task<bool>>? ConfirmBackupOverwrite { get; set; }
 
+    /// <summary>Gets or sets explicit per-operation confirmation before saving raw extension data unencrypted.</summary>
+    public Func<string, Task<bool>>? ConfirmUnencryptedExtensionData { get; set; }
+
+    /// <summary>Gets or sets controlled process observation for alternate hosts/tests; null uses the actual host.</summary>
+    public Func<ProcessPresence>? ExtensionBrowserState { get; set; }
+
     /// <summary>Gets whether one frozen archive request is currently running.</summary>
     [ObservableProperty] private bool _isBackupRunning;
 
@@ -52,14 +58,15 @@ public partial class ShellViewModel
         : !HasBackupScope || !BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected))
             ? "Select at least one profile for backup."
             : !Options.Categories.Any(item => item.IsSelected)
-                ? "Select Bookmarks, supported Settings, or both."
-                : Options.Categories.Any(item => item.IsSelected && item.Id is not ("bookmarks" or "settings"))
-                    ? "Bookmarks and supported Settings are available. Deselect other categories to create an archive."
+                ? "Select Bookmarks, supported Settings and/or Extensions."
+                : Options.Categories.Any(item =>
+                    item.IsSelected && item.Id is not ("bookmarks" or "settings" or "extensions"))
+                    ? "Bookmarks, supported Settings and Extensions are available. Deselect other categories to create an archive."
                     : Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation)
                         ? Options.PasswordValidation
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
                             ? BackupDestinationValidation
-                            : "Ready to create a backup. Restore is not available yet.";
+                            : "Ready to create a backup. Extensions requires Brave closed. Restore is not available yet.";
 
     private string BackupDestinationValidation
     {
@@ -85,7 +92,7 @@ public partial class ShellViewModel
                                           item.Profiles.Any(profile => profile.IsSelected)) &&
                                       Options.Categories.Any(item => item.IsSelected) &&
                                       Options.Categories.All(item =>
-                                          !item.IsSelected || item.Id is "bookmarks" or "settings") &&
+                                          !item.IsSelected || item.Id is "bookmarks" or "settings" or "extensions") &&
                                       (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
                                       string.IsNullOrEmpty(BackupDestinationValidation);
 
@@ -129,13 +136,22 @@ public partial class ShellViewModel
         {
             var result = await BraveArchiveBackup.CreateAsync(selections, categories, destination, password,
                 compression, roots, version,
-                path => ConfirmBackupOverwrite?.Invoke(path) ?? Task.FromResult(false), progress, token);
+                path => ConfirmBackupOverwrite?.Invoke(path) ?? Task.FromResult(false), progress, token,
+                new ExtensionBackupOptions
+                {
+                    ObserveBrowserState = ExtensionBrowserState,
+                    ConfirmUnencryptedData = path =>
+                        ConfirmUnencryptedExtensionData?.Invoke(path) ?? Task.FromResult(false)
+                });
             if (_disposed) return;
             _completedBackupPath = result.Destination;
             BackupSucceeded = true;
             BackupMessage = $"Backup created and verified: {result.Destination} ({result.Bytes:N0} bytes)";
             if (categories.Contains("settings"))
                 BackupMessage += "\n" + result.SettingsSummary + "\nOnly the supported stored settings are included.";
+            if (categories.Contains("extensions"))
+                BackupMessage += "\n" + result.ExtensionsSummary +
+                                 "\nRaw files were saved; extensions have not been installed or restored.";
             BackupReport = result.Report;
         }
         catch (OperationCanceledException)

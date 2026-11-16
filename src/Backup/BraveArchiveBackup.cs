@@ -17,6 +17,9 @@ public sealed record BackupResult(string Destination, string Report, long Bytes)
 {
     /// <summary>Gets stored/absent Settings counts for completion feedback, without preference values.</summary>
     public string SettingsSummary { get; init; } = string.Empty;
+
+    /// <summary>Gets extension file/version/storage counts without extension data values or identities.</summary>
+    public string ExtensionsSummary { get; init; } = string.Empty;
 }
 
 /// <summary>User-facing operation failure with a stable sanitized error code.</summary>
@@ -36,6 +39,17 @@ public static class BraveArchiveBackup
         Func<string, Task<bool>> confirmOverwrite, IProgress<BackupProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        return await CreateAsync(selections, categories, destination, password, compression, protectedDirectories,
+            applicationVersion, confirmOverwrite, progress, cancellationToken, new ExtensionBackupOptions());
+    }
+
+    /// <summary>Creates an archive with explicit host confirmation and injectable extension process observation.</summary>
+    public static async Task<BackupResult> CreateAsync(IReadOnlyList<BraveBackupSelection> selections,
+        IReadOnlyList<string> categories, string destination, string? password, string compression,
+        IReadOnlyList<string> protectedDirectories, string applicationVersion,
+        Func<string, Task<bool>> confirmOverwrite, IProgress<BackupProgress>? progress,
+        CancellationToken cancellationToken, ExtensionBackupOptions extensionOptions)
+    {
         // Freeze caller-owned collections before any await or worker-thread access.
         var scope = selections.Select(item => new BraveBackupSelection(item.Installation, item.Profiles.ToArray()))
             .ToArray();
@@ -45,9 +59,9 @@ public static class BraveArchiveBackup
         cancellationToken.ThrowIfCancellationRequested();
         if (selectedCategories.Length == 0 ||
             selectedCategories.Distinct(StringComparer.Ordinal).Count() != selectedCategories.Length ||
-            selectedCategories.Any(category => category is not ("bookmarks" or "settings")))
+            selectedCategories.Any(category => category is not ("bookmarks" or "settings" or "extensions")))
             throw new BackupOperationException("unsupported-category",
-                "Select Bookmarks, supported Settings, or both. Deselect other categories before creating a backup.");
+                "Select Bookmarks, supported Settings and/or Extensions. Deselect unfinished categories before creating a backup.");
         if (scope.Length == 0 || scope.Any(item => item.Profiles.Count == 0))
             throw new BackupOperationException("empty-scope",
                 "Select at least one profile for each installation included in the backup.");
@@ -61,16 +75,29 @@ public static class BraveArchiveBackup
         var target = ExportDestinationGuard.Validate(destination, roots);
         if (!string.Equals(Path.GetExtension(target), ".bravebackup", StringComparison.OrdinalIgnoreCase))
             throw new BackupOperationException("destination-extension", "Choose a destination ending in .bravebackup.");
+        ExtensionCaptureSession? extensionSession = null;
+        if (selectedCategories.Contains("extensions"))
+        {
+            extensionSession = new ExtensionCaptureSession(scope, extensionOptions, cancellationToken);
+            await Task.Run(() => extensionSession.EnsureStopped(true), cancellationToken);
+            if (password is null && (extensionOptions.ConfirmUnencryptedData is null ||
+                                     !await extensionOptions.ConfirmUnencryptedData(target)))
+                throw new OperationCanceledException(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Run(() => extensionSession.EnsureStopped(true), cancellationToken);
+        }
+
         var initial = await Task.Run(() => Fingerprint(target, cancellationToken), cancellationToken);
         if (initial != null && !await confirmOverwrite(target)) throw new OperationCanceledException(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return await Task.Run(() => Run(scope, target, password, compression, roots, applicationVersion,
-            initial, progress, cancellationToken, selectedCategories), cancellationToken);
+            initial, progress, cancellationToken, selectedCategories, extensionSession), cancellationToken);
     }
 
     private static BackupResult Run(BraveBackupSelection[] selections, string target, string? password,
         string compression, string[] roots, string applicationVersion, string? initialFingerprint,
-        IProgress<BackupProgress>? progress, CancellationToken token, string[] categories)
+        IProgress<BackupProgress>? progress, CancellationToken token, string[] categories,
+        ExtensionCaptureSession? extensions)
     {
         var start = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
@@ -81,9 +108,9 @@ public static class BraveArchiveBackup
         var settingsCounts = new List<int>();
         var hasBookmarks = categories.Contains("bookmarks", StringComparer.Ordinal);
         var hasSettings = categories.Contains("settings", StringComparer.Ordinal);
-        var capabilities = hasSettings
-            ? hasBookmarks ? new[] { "bookmarks-v1", "settings-v1" } : new[] { "settings-v1" }
-            : new[] { "bookmarks-v1" };
+        var capabilities = new[] { "bookmarks", "settings", "extensions" }
+            .Where(categories.Contains).Select(category => category + "-v1").ToArray();
+        var entryCount = 1;
         var temp = Path.Combine(Path.GetDirectoryName(target)!, $".bravebackup-{Guid.NewGuid():N}.tmp");
         var temporaryCreated = false;
         try
@@ -173,6 +200,18 @@ public static class BraveArchiveBackup
                                         CryptographicOperations.ZeroMemory(settings);
                                     }
                                 }
+
+                                if (extensions != null)
+                                {
+                                    progress?.Report(new BackupProgress("Reading/writing extensions", done, total));
+                                    extensions.EnsureStopped(true);
+                                    var category = extensions.Capture(profile.ProfileDirectory,
+                                        $"installations/{installationId:D}/profiles/{profileId:D}/extensions/", zip,
+                                        compression,
+                                        ArchiveLimits.MaxEntries - entryCount -
+                                        profileCategories.Sum(item => item.Files.Length));
+                                    profileCategories.Add(category);
+                                }
                             }
                             catch (BackupOperationException error)
                             {
@@ -180,6 +219,11 @@ public static class BraveArchiveBackup
                                     $"Profile {done + 1} of {total}: {error.Message}");
                             }
 
+                            entryCount += profileCategories.Sum(item => item.Files.Length);
+                            if (entryCount > ArchiveLimits.MaxEntries || expanded + (extensions?.RawBytes ?? 0) >
+                                ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
+                                throw new BackupOperationException("size-limit",
+                                    "Selected data exceeds archive resource limits.");
                             profiles.Add(new ArchiveProfile(profileId, profile.ProfileName,
                                 Path.GetFileName(Path.TrimEndingDirectorySeparator(profile.ProfileDirectory)),
                                 profileCategories.ToArray()));
@@ -192,7 +236,8 @@ public static class BraveArchiveBackup
                             profiles.ToArray()));
                     }
 
-                    BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive", hasSettings ? 2 : 1, id,
+                    BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive",
+                        extensions is not null ? 3 : hasSettings ? 2 : 1, id,
                         start,
                         applicationVersion, capabilities, compression, installations.ToArray()));
                 }
@@ -210,20 +255,23 @@ public static class BraveArchiveBackup
             if (Fingerprint(target, token) != initialFingerprint)
                 throw new BackupOperationException("destination-changed",
                     "The destination changed during backup. Start again to review replacement.");
+            extensions?.VerifySources();
             token.ThrowIfCancellationRequested();
+            extensions?.EnsureStopped(true);
             var bytes = new FileInfo(temp).Length;
             File.Move(temp, target, overwrite: initialFingerprint != null);
             var end = DateTimeOffset.UtcNow;
-            var categoryNames = string.Join(", ",
-                hasSettings
-                    ? hasBookmarks ? new[] { "bookmarks", "settings" } : new[] { "settings" }
-                    : new[] { "bookmarks" });
+            var categoryNames = string.Join(", ", capabilities.Select(value => value[..^3]));
+            var extensionsSummary = extensions is null
+                ? string.Empty
+                : $"Extension packages: {extensions.PackageCount}; versions: {extensions.VersionCount}; storage-only identities: {extensions.StorageOnlyCount}\nExtension files: {extensions.FileCount}; bytes: {extensions.RawBytes}\nSupported storage areas: {extensions.PresentAreas} present; {extensions.EmptyAreas} empty; {extensions.AbsentAreas} absent";
             var settingsSummary = hasSettings
                 ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
                 : string.Empty;
             var report =
-                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}";
-            return new BackupResult(target, report, bytes) { SettingsSummary = settingsSummary.TrimStart() };
+                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}{(extensionsSummary.Length == 0 ? "" : "\n" + extensionsSummary)}";
+            return new BackupResult(target, report, bytes)
+                { SettingsSummary = settingsSummary.TrimStart(), ExtensionsSummary = extensionsSummary };
         }
         finally
         {

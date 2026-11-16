@@ -1,5 +1,8 @@
 # Supported Settings backup and archive v2
 
+Settings-only and Bookmarks+Settings writes still use v2. Adding Extensions now uses
+[manifest v3](extensions-backup.md), while preserving the v2 behavior below.
+
 The user kept all three proposed Settings groups. The Backup tab now supports Settings
 alone or with Bookmarks. It retains the existing single Settings checkbox and describes
 its limited contents. It does not implement the separate Settings navigation page or
