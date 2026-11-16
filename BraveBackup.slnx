@@ -1,15 +1,16 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src\Backup\Backup.csproj" />
-    <Project Path="src\CLI\CLI.csproj" />
-    <Project Path="src\Core\Core.csproj" />
-    <Project Path="src\Platform\Platform.csproj" />
-    <Project Path="src\UI\UI.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests\Core.Tests\Core.Tests.csproj" />
-    <Project Path="tests\Brave.Tests\Brave.Tests.csproj" />
-    <Project Path="tests\Windows.Tests\Windows.Tests.csproj" />
-    <Project Path="tests\Linux.Tests\Linux.Tests.csproj" />
-  </Folder>
+    <Folder Name="/src/">
+        <Project Path="src\Backup\Backup.csproj"/>
+        <Project Path="src\CLI\CLI.csproj"/>
+        <Project Path="src\Core\Core.csproj"/>
+        <Project Path="src\Extensions\TabManagerPlus\TabManagerPlus.csproj"/>
+        <Project Path="src\Platform\Platform.csproj"/>
+        <Project Path="src\UI\UI.csproj"/>
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests\Core.Tests\Core.Tests.csproj"/>
+        <Project Path="tests\Brave.Tests\Brave.Tests.csproj"/>
+        <Project Path="tests\Windows.Tests\Windows.Tests.csproj"/>
+        <Project Path="tests\Linux.Tests\Linux.Tests.csproj"/>
+    </Folder>
 </Solution>

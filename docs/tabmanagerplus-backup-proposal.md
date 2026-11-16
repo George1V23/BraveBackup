@@ -2,11 +2,13 @@
 
 Status: the user's continuation accepted the recommended automatic profile capture and
 proposed saved-window scope. Research/fixtures are the first implementation checkpoint;
-see [the storage research](tabmanagerplus-research.md). Application integration is pending.
+see [the storage research](tabmanagerplus-research.md). The
+[offline reader](tabmanagerplus-storage-reader.md) is implemented; application integration is pending.
 
 The existing Extensions category can preserve raw extension files and local/sync stores.
 It does not decode Tab Manager Plus saved windows. The dedicated category still blocks
-backup as unsupported, and no dedicated project exists yet.
+backup as unsupported. Its dedicated project now contains the tested storage reader;
+decoded saved-window capture and archive integration remain pending.
 
 ## Source findings
 

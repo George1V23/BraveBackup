@@ -9,17 +9,20 @@ CLI ──┘     └────── Platform
 ```
 
 - **Core** contains platform-independent, browser-independent backup contracts (`BackupModel`,
-  `BackupBookmark`, `BackupBookmarkType`) and archive-v1/v2 contracts, generic portable Settings payloads, IO/verification and cryptography. It has no project or package dependencies.
+  `BackupBookmark`, `BackupBookmarkType`) and archive-v1/v2 contracts, generic portable Settings payloads,
+  IO/verification and cryptography. It has no project or package dependencies.
 - **Backup** owns Brave installation definitions, profile discovery, appearance metadata,
   bookmark parsing/export, inspection and export destination policy. It references Core
   and Platform, never UI. Existing types retain the `BraveBackup.Core` namespace to avoid
   unnecessary source API changes; they now belong to the Backup assembly. Consumers of
   browser services must reference Backup. This is not binary assembly compatibility.
-- **Platform** supplies host directories (including configured Documents), PATH, path comparison, registry reads, executable
+- **Platform** supplies host directories (including configured Documents), PATH, path comparison, registry reads,
+  executable
   product metadata and bounded command execution. It contains no Brave formats or paths.
 - **UI** and **CLI** consume Backup independently. UI-only avatars/presentation stay in UI.
-- TabManagerPlus will get its own project under Extensions when its approved feature is
-  implemented; there is no placeholder implementation claiming support.
+- **Extensions/TabManagerPlus** is a dependency-free .NET 10 project containing a bounded
+  offline storage reader. It currently has test consumers only; UI/Backup/CLI integration
+  and decoded saved-window support remain pending. See [the reader checkpoint](tabmanagerplus-storage-reader.md).
 
 `HostEnvironment` centralizes OS calls. Browser path conventions and launcher definitions
 remain in Backup, where injected filesystem/registry/version delegates allow existing

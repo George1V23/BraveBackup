@@ -79,8 +79,9 @@ Encrypted/legacy decoding remains unsupported and blocks capture explicitly.
 TabManagerPlus automatic profile capture and saved-window scope were accepted:
 [source findings and proposed choices](tabmanagerplus-backup-proposal.md).
 [Storage research and independent fixtures](tabmanagerplus-research.md) establish the
-first checkpoint. The bounded reader, package-schema verification and application
-integration remain pending; the category still blocks backup explicitly.
+first checkpoint. The [bounded storage reader](tabmanagerplus-storage-reader.md) is
+implemented and tested in its own extension project. Saved-window/schema verification,
+capture and application integration remain pending; the category still blocks backup explicitly.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and

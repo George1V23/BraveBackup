@@ -1,8 +1,9 @@
 # Tab Manager Plus: automatic-storage research checkpoint
 
 Inspected 2026-11-17. Scope: the accepted [saved-window proposal](tabmanagerplus-backup-proposal.md).
-No application reader, package dependency, archive capability or UI behavior has changed
-at this checkpoint. TabManagerPlus remains explicitly unsupported in backup creation.
+The subsequent [offline reader checkpoint](tabmanagerplus-storage-reader.md) implements
+storage decoding with tests. No package dependency, archive capability or UI behavior
+has changed. TabManagerPlus remains explicitly unsupported in backup creation.
 
 ## Primary sources and storage semantics
 
@@ -47,8 +48,9 @@ Google LevelDB revision `29465588d3dfdc80fba5e198037582b8fdb5dd60`:
 
 Use a bounded managed offline reader over immutable captured bytes, without a new
 NuGet dependency or native database open. Keep it in the dedicated extension project,
-with filesystem/process safety integration in Backup/Platform. This strategy needs
-implementation and tests; these source findings do not establish a working reader.
+with filesystem/process safety integration in Backup/Platform. The initial implementation
+and tests are documented in the reader checkpoint; installed-extension compatibility
+remains a separate task.
 
 Require a stopped-Brave observation and safe regular-file reads, then recheck shape,
 lengths and hashes before publication, following the existing Extensions capture gate.
@@ -77,12 +79,14 @@ removed after close; they are not part of the database state being tested.
   saved window exists only in the write-ahead log.
 - `deleted`: the table's sessions value is superseded by a WAL deletion.
 - `empty`: the table's sessions value is superseded by an explicit empty object.
+- `table-only`: a second compaction moves the current value into a table with an empty WAL.
+- `fragmented`: an 80,000-character synthetic value spans multiple WAL fragments.
 
 The producer emits matching `*.expected.json`; `storage.sha256.json` freezes file
 hashes. URLs use `example.invalid`. These are synthetic database fixtures, not captured
 Brave profiles or official extension exports. They establish binary interoperability
-targets, not full installed-extension compatibility. Adversarial, fragmented-record,
-multi-table and parser tests remain part of the next reader checkpoint.
+targets, not full installed-extension compatibility. The reader checkpoint adds parser,
+fragmentation and adversarial tests; further multi-table compatibility fixtures remain.
 
 Regenerate using the pinned source with Snappy development headers/library available:
 
@@ -100,5 +104,5 @@ The producer deliberately refuses an existing output directory. Generated manife
 identities/timing-dependent layout can vary between runs; check semantic results rather
 than expecting regenerated hashes to match frozen bytes. Upstream `leveldbutil dump`
 independently confirmed the newer value, deletion and explicit-empty WAL operations,
-and the manifest's live-table reference. No .NET test count is claimed for this
-research-only change; the existing application was not modified or retested here.
+and the manifest's live-table reference. See the reader checkpoint for subsequent
+.NET test results; fixture generation alone does not establish application compatibility.
