@@ -18,7 +18,9 @@ public sealed class BraveRestoreContext
         IReadOnlyList<(BraveAppInfo Installation, BraveProfileInfo Profile)> targets,
         Func<ProcessPresence>? observe = null, CancellationToken token = default)
     {
-        var frozen = targets.ToArray();
+        var frozen = targets.Select(target => (
+            Installation: target.Installation with { UserDataDirectory = Path.GetFullPath(target.Installation.UserDataDirectory) },
+            Profile: target.Profile with { ProfileDirectory = Path.GetFullPath(target.Profile.ProfileDirectory) })).ToArray();
         if (frozen.Length == 0) throw new InvalidDataException("Select restore destinations first.");
         var source = Path.GetFullPath(sourceArchive);
         var observer = observe ?? (() => ProcessPresenceProbe.Observe(["brave"], token));

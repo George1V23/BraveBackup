@@ -528,3 +528,14 @@ physical duplicate checking and production write integration remain pending.
 
 Latest full regression run: 1,094 passed, nine environment-dependent tests skipped
 (995 Core, 48 Brave, 37 Linux and 14 Windows-labelled tests passed).
+
+## Absolute path freezing
+
+Integration review found that expected-state tracking retained the caller's potentially
+relative directory string, and frozen context mappings could contain relative user-data/
+profile directories. Both now normalize those directory paths once during capture.
+Subsequent observations therefore do not intentionally re-resolve relative targets against
+a changed process working directory. The focused expected-state and restore-context tests
+pass after this change. Working-directory mutation was not exercised because it is global
+to concurrently running tests. Physical identity and publication protections remain separate;
+production replacement/deletion and UI execution remain pending.

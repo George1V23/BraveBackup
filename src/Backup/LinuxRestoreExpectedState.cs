@@ -10,8 +10,8 @@ public sealed class LinuxRestoreExpectedState : IDisposable
     private bool _disposed;
     public LinuxRestoreExpectedState(string directory, string name, CancellationToken token = default)
     {
-        _directory = directory; _name = name;
-        _current = LinuxRestoreTargetLease.Capture(directory, name, token);
+        _directory = Path.GetFullPath(directory); _name = name;
+        _current = LinuxRestoreTargetLease.Capture(_directory, name, token);
         try { _original = _current.CopyOriginal(); } catch { _current.Dispose(); throw; }
     }
     /// <summary>Returns the original recovery baseline; accepting applied state never replaces it.</summary>
