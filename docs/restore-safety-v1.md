@@ -220,3 +220,16 @@ not silently adopt/overwrite an existing journal. Two focused lease tests pass f
 contention, retained artifacts, repeated journal publication, directory replacement and
 disposal. No production target adapter or UI execution is connected yet. Windows parity,
 metadata recovery and noncooperating filesystem mutation remain pending.
+
+## Leased transaction integration
+
+Two synthetic integration cases now connect the real Linux `RestoreArtifactLease` to the
+Core transaction coordinator. A test-only target adapter writes ordinary fixture files;
+it is not a production profile writer. Tests verify exclusive ownership while paused,
+explicit resume, unchanged encrypted safety originals, rollback to original content,
+retained artifacts after disposal/reacquisition, and external journal edits blocking
+further transaction writes. Both integration cases pass. Browser-profile writes, platform
+metadata fidelity, Windows parity and production recovery/lifetime handling remain pending.
+
+Latest full regression run after lease integration: 1,068 passed, six environment-dependent
+tests skipped (992 Core, 48 Brave, 22 Linux and six Windows-labelled tests passed).
