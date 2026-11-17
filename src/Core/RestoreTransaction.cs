@@ -7,7 +7,7 @@ public enum RestoreTransactionState { New, Prepared, Running, Paused, Completed,
 public enum RestoreEntryState { Untouched, Intent, Applied, Recovered }
 /// <summary>Frozen mutation identity and proposed image; the transaction clones the image before using it.</summary>
 public sealed record RestoreMutation(Guid Id, Guid InstallationId, Guid ProfileId, string Category, RestoreFileImage Replacement);
-/// <summary>Value-free progress. Category completion requires all its file mutations to finish.</summary>
+/// <summary>Value-free progress. Apply counts published files; rollback counts recovered or untouched files as resolved.</summary>
 public sealed record RestoreTransactionProgress(RestoreTransactionState State, Guid InstallationId, Guid ProfileId,
     string Category, int CompletedFiles, int TotalFiles, bool CategoryCompleted);
 /// <summary>Encrypted storage and context boundary; adapters must implement private durable artifact publication and atomic target writes.</summary>
@@ -253,7 +253,8 @@ public sealed class RestoreTransaction : IDisposable
         var recovered = State == RestoreTransactionState.RollingBack;
         var wanted = recovered ? RestoreEntryState.Recovered : RestoreEntryState.Applied;
         Progress?.Invoke(new(State, mutation.InstallationId, mutation.ProfileId, mutation.Category,
-            _entries.Count(e => e == wanted), _entries.Length, group.All(i => _entries[i] == wanted)));
+            _entries.Count(e => e == wanted || recovered && e == RestoreEntryState.Untouched), _entries.Length,
+            group.All(i => _entries[i] == wanted || recovered && _entries[i] == RestoreEntryState.Untouched)));
     }
     private void Journal()
     {

@@ -439,3 +439,13 @@ remains unavailable. All inputs were synthetic.
 Latest full run: 1,088 passed, nine environment-dependent tests skipped (994 Core,
 48 Brave, 32 Linux and 14 Windows-labelled tests passed). Native Windows recovery
 validation and production restore integration remain pending.
+
+## Rollback progress for untouched work
+
+Rollback progress now counts untouched files as requiring no recovery when determining
+resolved totals and category completion. Their journal entries remain Untouched; they are
+not falsely labelled restored/recovered. This fixes a category staying incomplete after
+all changed files were successfully recovered when later files were never modified.
+The post-publication-failure test now checks complete recovery progress for that mixed
+Intent/Untouched case. All 12 focused transaction cases pass. Apply progress is unchanged;
+production UI execution remains disabled.

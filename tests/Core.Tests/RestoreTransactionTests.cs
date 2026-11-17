@@ -58,8 +58,11 @@ public sealed class RestoreTransactionTests : IDisposable
     {
         using var transaction = Create(); transaction.Prepare(); _store.ThrowAfterWrite = true;
         Assert.Throws<IOException>(() => transaction.Run()); Assert.Equal(RestoreEntryState.Intent, transaction.EntryStates[0]);
+        var recovery = new List<RestoreTransactionProgress>(); transaction.Progress = recovery.Add;
         _store.ThrowAfterWrite = false; transaction.Rollback(true);
         Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+        Assert.True(recovery[^1].CategoryCompleted);
+        Assert.Equal(recovery[^1].TotalFiles, recovery[^1].CompletedFiles);
         Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First())); Assert.False(File.Exists(_store.Paths.Values.Last()));
     }
     [Fact]
