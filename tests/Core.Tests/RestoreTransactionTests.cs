@@ -89,6 +89,53 @@ public sealed class RestoreTransactionTests : IDisposable
         Assert.Equal(RestoreTransactionState.Prepared, transaction.State);
     }
 
+    [Fact]
+    public void PauseDuringIntentJournalStopsBeforePublication()
+    {
+        using var transaction = Create(); transaction.Prepare();
+        _store.OnJournal = () =>
+        {
+            if (transaction.EntryStates.Contains(RestoreEntryState.Intent)) transaction.RequestPause();
+        };
+        transaction.Run();
+        Assert.Equal(RestoreTransactionState.Paused, transaction.State); Assert.Equal(0, _store.Writes);
+        Assert.Equal(RestoreEntryState.Intent, transaction.EntryStates[0]);
+        _store.OnJournal = null; transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RolledBack, transaction.State); Assert.Equal(0, _store.Writes);
+    }
+    [Fact]
+    public void LostPublicationIsNotReportedAsApplied()
+    {
+        using var transaction = Create(); transaction.Prepare(); _store.DropWrite = true;
+        Assert.Throws<IOException>(() => transaction.Run());
+        Assert.Equal(RestoreTransactionState.Failed, transaction.State);
+        Assert.Equal(RestoreEntryState.Intent, transaction.EntryStates[0]);
+        _store.DropWrite = false; transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+        Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
+    }
+    [Fact]
+    public void RollbackWriteFailureKeepsRecoveryIncompleteAndSupportsExplicitRetry()
+    {
+        using var transaction = Create(); transaction.Prepare(); transaction.Run();
+        _store.ThrowBeforeWrite = true; transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RecoveryIncomplete, transaction.State);
+        Assert.All(transaction.EntryStates, entry => Assert.Equal(RestoreEntryState.Applied, entry));
+        _store.ThrowBeforeWrite = false; transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+        Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
+        Assert.False(File.Exists(_store.Paths.Values.Last()));
+    }
+    [Fact]
+    public void UnsafeRollbackContextCannotModifyTargets()
+    {
+        using var transaction = Create(); transaction.Prepare(); transaction.Run(); var writes = _store.Writes;
+        _store.Unsafe = true; Assert.Throws<IOException>(() => transaction.Rollback(true));
+        Assert.Equal(RestoreTransactionState.RecoveryIncomplete, transaction.State); Assert.Equal(writes, _store.Writes);
+        _store.Unsafe = false; transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+    }
+
     public void Dispose() { foreach (var image in _images) image.Dispose(); _store.Dispose(); }
 
     // Synthetic file-only adapter: deliberately has no production destination/path or metadata guarantees.
@@ -98,6 +145,7 @@ public sealed class RestoreTransactionTests : IDisposable
         public Dictionary<Guid, string> Paths { get; } = [];
         public string Safety => Path.Combine(Root, "safety.encrypted");
         public string Journal => Path.Combine(Root, "journal.encrypted");
+        public Action? OnJournal; public bool DropWrite; public bool ThrowBeforeWrite;
         public int Writes; public bool Unsafe; public bool ThrowAfterWrite; public bool FailJournal; public string? Corrupt;
         public Store() => Directory.CreateDirectory(Root);
         public void VerifyContext(CancellationToken token) { token.ThrowIfCancellationRequested(); if (Unsafe) throw new IOException("Synthetic unsafe context."); }
@@ -105,7 +153,9 @@ public sealed class RestoreTransactionTests : IDisposable
         { token.ThrowIfCancellationRequested(); return File.Exists(Paths[id]) ? new(true, File.ReadAllBytes(Paths[id])) : new(false, []); }
         public void WriteTargetAtomic(Guid id, RestoreFileImage image)
         {
-            Assert.True(File.Exists(Safety)); Assert.True(File.Exists(Journal)); Writes++;
+            Assert.True(File.Exists(Safety)); Assert.True(File.Exists(Journal));
+            if (ThrowBeforeWrite) throw new IOException("Synthetic pre-publication failure.");
+            Writes++; if (DropWrite) return;
             if (!image.Exists) File.Delete(Paths[id]);
             else { var temp = Paths[id] + ".tmp"; File.WriteAllBytes(temp, image.Content.Bytes.ToArray()); File.Move(temp, Paths[id], true); }
             if (ThrowAfterWrite) throw new IOException("Synthetic failure after publish.");
@@ -118,7 +168,7 @@ public sealed class RestoreTransactionTests : IDisposable
         }
         public void SaveSafety(ReadOnlyMemory<byte> bytes) => Publish(Safety, bytes);
         public byte[] ReadSafety() => Corrupt == "safety" ? [0] : File.ReadAllBytes(Safety);
-        public void SaveJournal(ReadOnlyMemory<byte> bytes) { if (FailJournal) throw new IOException("Synthetic journal failure."); Publish(Journal, bytes); }
+        public void SaveJournal(ReadOnlyMemory<byte> bytes) { if (FailJournal) throw new IOException("Synthetic journal failure."); Publish(Journal, bytes); OnJournal?.Invoke(); }
         public byte[] ReadJournal() => Corrupt == "journal" ? [0] : File.ReadAllBytes(Journal);
         public void Dispose() => Directory.Delete(Root, true);
     }

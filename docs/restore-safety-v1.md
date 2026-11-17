@@ -91,3 +91,13 @@ unavailable; the existing Backup and Export paths are unchanged.
 
 Validation: the full solution run passed 1,046 tests with six environment-dependent
 native tests skipped. No real browser profile or credential store was modified.
+
+## Additional boundary coverage
+
+The focused transaction suite now passes 12 cases. Four added cases verify pausing during
+intent-journal publication before a target write begins, detecting a publication that
+returns without changing the target, recovering after rollback writes fail, and blocking
+rollback writes while context verification fails. Rollback requires an explicit retry
+when those failures are resolved. These additions use synthetic directories only; no
+production adapter or UI execution was enabled. The full solution suite was not rerun
+for this test-only increment; its previous 1,046-pass result remains the last full run.
