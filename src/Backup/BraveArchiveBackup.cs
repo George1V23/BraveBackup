@@ -26,6 +26,9 @@ public sealed record BackupResult(string Destination, string Report, long Bytes)
 
     /// <summary>Gets saved-window counts and capture limits without browsing content or source paths.</summary>
     public string TabManagerPlusSummary { get; init; } = string.Empty;
+
+    /// <summary>Portable credential/note counts only, without sites, usernames, secrets or source paths.</summary>
+    public string PasswordsSummary { get; init; } = string.Empty;
 }
 
 /// <summary>User-facing operation failure with a stable sanitized error code.</summary>
@@ -71,8 +74,19 @@ public static class BraveArchiveBackup
     {
         return await CreateAsync(selections, categories, destination, password, compression, protectedDirectories,
             applicationVersion, confirmOverwrite, progress, cancellationToken, extensionOptions, sessionOptions,
-            new TabManagerPlusBackupOptions());
+            new TabManagerPlusBackupOptions(), null);
     }
+
+    /// <summary>Preserves the existing archive API without enabling password access for existing callers.</summary>
+    public static Task<BackupResult> CreateAsync(IReadOnlyList<BraveBackupSelection> selections,
+        IReadOnlyList<string> categories, string destination, string? password, string compression,
+        IReadOnlyList<string> protectedDirectories, string applicationVersion,
+        Func<string, Task<bool>> confirmOverwrite, IProgress<BackupProgress>? progress,
+        CancellationToken cancellationToken, ExtensionBackupOptions extensionOptions,
+        SessionBackupOptions sessionOptions, TabManagerPlusBackupOptions tabManagerPlusOptions) =>
+        CreateAsync(selections, categories, destination, password, compression, protectedDirectories,
+            applicationVersion, confirmOverwrite, progress, cancellationToken, extensionOptions, sessionOptions,
+            tabManagerPlusOptions, null);
 
     /// <summary>Creates supported-category archives with saved-window consent and process observation supplied by the host.</summary>
     public static async Task<BackupResult> CreateAsync(IReadOnlyList<BraveBackupSelection> selections,
@@ -80,7 +94,8 @@ public static class BraveArchiveBackup
         IReadOnlyList<string> protectedDirectories, string applicationVersion,
         Func<string, Task<bool>> confirmOverwrite, IProgress<BackupProgress>? progress,
         CancellationToken cancellationToken, ExtensionBackupOptions extensionOptions,
-        SessionBackupOptions sessionOptions, TabManagerPlusBackupOptions tabManagerPlusOptions)
+        SessionBackupOptions sessionOptions, TabManagerPlusBackupOptions tabManagerPlusOptions,
+        PasswordBackupOptions? passwordOptions)
     {
         // Freeze caller-owned collections before any await or worker-thread access.
         var scope = selections.Select(item => new BraveBackupSelection(item.Installation, item.Profiles.ToArray()))
@@ -92,14 +107,25 @@ public static class BraveArchiveBackup
         if (selectedCategories.Length == 0 ||
             selectedCategories.Distinct(StringComparer.Ordinal).Count() != selectedCategories.Length ||
             selectedCategories.Any(category =>
-                category is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus")))
+                category is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus") &&
+                !(category == "passwords" && passwordOptions is not null)))
             throw new BackupOperationException("unsupported-category",
                 "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus. Passwords remain unavailable.");
+        if (selectedCategories.Contains("passwords"))
+        {
+            if (!passwordOptions!.ProtectPasswords)
+                throw new BackupOperationException("passwords-mode-unsupported", "This archive path supports protected portable passwords only; CSV and raw saving are not enabled.");
+            if (string.IsNullOrEmpty(password))
+                throw new BackupOperationException("passwords-protection-required", "Protected passwords require archive encryption. Disabling encryption does not choose CSV.");
+            if (passwordOptions.GetProvider is null)
+                throw new BackupOperationException("passwords-provider-required", "Establish the supported password provider/backend for each selected profile before capture.");
+        }
         if (scope.Length == 0 || scope.Any(item => item.Profiles.Count == 0))
             throw new BackupOperationException("empty-scope",
                 "Select at least one profile for each installation included in the backup.");
         if (scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("bookmarks") ? 2 : 0) +
-            scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("settings") ? 1 : 0) + 1 >
+            scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("settings") ? 1 : 0) +
+            scope.Sum(item => (long)item.Profiles.Count) * (selectedCategories.Contains("passwords") ? 1 : 0) + 1 >
             ArchiveLimits.MaxEntries)
             throw new BackupOperationException("entry-limit", "Too many selected profiles for one archive.");
         if (password is { Length: 0 })
@@ -148,7 +174,7 @@ public static class BraveArchiveBackup
         cancellationToken.ThrowIfCancellationRequested();
         return await Task.Run(() => Run(scope, target, password, compression, roots, applicationVersion,
                 initial, progress, cancellationToken, selectedCategories, extensionSession, sessionSession,
-                tabManagerPlus),
+                tabManagerPlus, selectedCategories.Contains("passwords") ? new PasswordCaptureSession(passwordOptions!, cancellationToken) : null),
             cancellationToken);
     }
 
@@ -156,7 +182,7 @@ public static class BraveArchiveBackup
         string compression, string[] roots, string applicationVersion, string? initialFingerprint,
         IProgress<BackupProgress>? progress, CancellationToken token, string[] categories,
         ExtensionCaptureSession? extensions, SessionCaptureSession? sessions,
-        TabManagerPlusCaptureSession? tabManagerPlus)
+        TabManagerPlusCaptureSession? tabManagerPlus, PasswordCaptureSession? passwords)
     {
         var start = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
@@ -167,7 +193,7 @@ public static class BraveArchiveBackup
         var settingsCounts = new List<int>();
         var hasBookmarks = categories.Contains("bookmarks", StringComparer.Ordinal);
         var hasSettings = categories.Contains("settings", StringComparer.Ordinal);
-        var capabilities = new[] { "bookmarks", "settings", "extensions", "sessions", "tabmanagerplus" }
+        var capabilities = new[] { "bookmarks", "settings", "extensions", "sessions", "tabmanagerplus", "passwords" }
             .Where(categories.Contains).Select(category => category + "-v1").ToArray();
         var entryCount = 1;
         var temp = Path.Combine(Path.GetDirectoryName(target)!, $".bravebackup-{Guid.NewGuid():N}.tmp");
@@ -293,6 +319,12 @@ public static class BraveArchiveBackup
                                         compression, ArchiveLimits.MaxEntries - entryCount -
                                                      profileCategories.Sum(item => item.Files.Length)));
                                 }
+                                if (passwords is not null)
+                                {
+                                    progress?.Report(new BackupProgress("Reading/writing protected passwords", done, total));
+                                    profileCategories.Add(passwords.Capture(selection.Installation, profile,
+                                        $"installations/{installationId:D}/profiles/{profileId:D}/passwords/", zip, compression));
+                                }
                             }
                             catch (BackupOperationException error)
                             {
@@ -303,7 +335,7 @@ public static class BraveArchiveBackup
                             entryCount += profileCategories.Sum(item => item.Files.Length);
                             if (entryCount > ArchiveLimits.MaxEntries ||
                                 expanded + (extensions?.RawBytes ?? 0) + (sessions?.Bytes ?? 0) +
-                                (tabManagerPlus?.Bytes ?? 0) >
+                                (tabManagerPlus?.Bytes ?? 0) + (passwords?.Bytes ?? 0) >
                                 ArchiveLimits.MaxBytes - ArchiveLimits.MaxManifestBytes)
                                 throw new BackupOperationException("size-limit",
                                     "Selected data exceeds archive resource limits.");
@@ -320,6 +352,7 @@ public static class BraveArchiveBackup
                     }
 
                     BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive",
+                        passwords is not null ? 6 :
                         tabManagerPlus is not null ? 5 :
                         sessions is not null ? 4 :
                         extensions is not null ? 3 :
@@ -344,10 +377,19 @@ public static class BraveArchiveBackup
             sessions?.VerifySources();
             extensions?.VerifySources();
             tabManagerPlus?.VerifySources();
+            passwords?.VerifySources();
             token.ThrowIfCancellationRequested();
             extensions?.EnsureStopped(true);
             var bytes = new FileInfo(temp).Length;
             tabManagerPlus?.EnsureStopped();
+            if (passwords is not null)
+            {
+                ExportDestinationGuard.Validate(target, roots);
+                if (Fingerprint(target, token) != initialFingerprint)
+                    throw new BackupOperationException("destination-changed", "The destination changed during source verification. Review replacement again.");
+            }
+            passwords?.EnsureStopped();
+            token.ThrowIfCancellationRequested();
             File.Move(temp, target, overwrite: initialFingerprint != null);
             var end = DateTimeOffset.UtcNow;
             var categoryNames = string.Join(", ", capabilities.Select(value => value[..^3]));
@@ -360,20 +402,23 @@ public static class BraveArchiveBackup
             var tabManagerPlusSummary = tabManagerPlus is null
                 ? string.Empty
                 : $"TabManagerPlus saved-window profiles: {tabManagerPlus.Profiles}; windows: {tabManagerPlus.WindowCount}; tabs: {tabManagerPlus.TabCount}\nSource: supported 7.0.0 stored saved windows, captured with Brave observed closed. Unsaved live windows, extension preferences and native tab-group metadata are not included. Restore is not available.";
+            var passwordsSummary = passwords is null ? string.Empty :
+                $"Protected password profiles: {passwords.Profiles}; credentials: {passwords.CredentialCount}; notes: {passwords.NoteCount}; excluded entries: {passwords.ExcludedCount}\nPortable capture completed inside an encrypted archive. Raw preservation and CSV were not used. Restore is not available.";
             var settingsSummary = hasSettings
                 ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
                 : string.Empty;
             var report =
-                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}{(extensionsSummary.Length == 0 ? "" : "\n" + extensionsSummary)}{(sessionsSummary.Length == 0 ? "" : "\n" + sessionsSummary)}{(tabManagerPlusSummary.Length == 0 ? "" : "\n" + tabManagerPlusSummary)}";
+                $"Archive: {id:D}\nStarted (UTC): {start:O}\nCompleted (UTC): {end:O}\nStatus: Succeeded\nProfiles: {done}/{total}\nCategories: {categoryNames} (completed)\nBytes: {bytes}{settingsSummary}{(extensionsSummary.Length == 0 ? "" : "\n" + extensionsSummary)}{(sessionsSummary.Length == 0 ? "" : "\n" + sessionsSummary)}{(tabManagerPlusSummary.Length == 0 ? "" : "\n" + tabManagerPlusSummary)}{(passwordsSummary.Length == 0 ? "" : "\n" + passwordsSummary)}";
             return new BackupResult(target, report, bytes)
             {
                 SettingsSummary = settingsSummary.TrimStart(), ExtensionsSummary = extensionsSummary,
-                SessionsSummary = sessionsSummary, TabManagerPlusSummary = tabManagerPlusSummary
+                SessionsSummary = sessionsSummary, TabManagerPlusSummary = tabManagerPlusSummary, PasswordsSummary = passwordsSummary
             };
         }
         finally
 
         {
+            passwords?.Dispose();
             tabManagerPlus?.Dispose();
             try
             {

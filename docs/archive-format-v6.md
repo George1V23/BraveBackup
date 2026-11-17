@@ -1,8 +1,8 @@
 # Archive v6: protected portable passwords
 
-This checkpoint adds **reader validation** for archive format version 6. Existing versions
-1–5 retain their contracts and remain readable. The application writer still emits those
-existing versions: password archive creation and UI controls are not enabled yet.
+Reader validation and [explicit protected password writing](passwords-protected-backup.md)
+support archive format version 6. Existing versions 1–5 retain their contracts and remain
+readable; password-free writing keeps those versions. Password UI controls remain disabled.
 No change is made to the BBKENC1 encryption envelope.
 
 ## Manifest and capability
@@ -64,7 +64,7 @@ missing/undeclared entries, invalid capabilities/version, wrong passwords and ca
 All archive generation is in memory using synthetic credentials. The full regression
 suite also exercises the existing categories and versions.
 
-Next work is protected password archive writing with frozen options, source revalidation,
-atomic publication and truthful counts; explicit raw-file archive contracts and CSV archive
-consent remain separate requirements. Browser CSV projection, actual UI wiring and real
+Protected writing now has frozen options, source revalidation, atomic publication and
+truthful counts. Explicit raw-file archive contracts and CSV archive consent remain
+separate requirements. Browser CSV projection, actual UI wiring and real
 native authentication validation remain pending. No restore operation is introduced.

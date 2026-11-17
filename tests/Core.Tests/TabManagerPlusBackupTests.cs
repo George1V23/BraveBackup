@@ -48,7 +48,7 @@ public sealed class TabManagerPlusBackupTests : IDisposable
             _scope.Select(item => item.Installation.UserDataDirectory).ToArray(), "fixture", _ => Task.FromResult(true), progress, token,
             new ExtensionBackupOptions { ObserveBrowserState = state ?? (() => ProcessPresence.Stopped), ConfirmUnencryptedData = _ => Task.FromResult(true) },
             new SessionBackupOptions(), new TabManagerPlusBackupOptions
-            { ObserveBrowserState = state ?? (() => ProcessPresence.Stopped), ConfirmUnencryptedData = consent });
+                { ObserveBrowserState = state ?? (() => ProcessPresence.Stopped), ConfirmUnencryptedData = consent }, null);
 
     [Theory]
     [InlineData(false, "none")]

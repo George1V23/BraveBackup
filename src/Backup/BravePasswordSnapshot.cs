@@ -22,6 +22,7 @@ public sealed class BravePasswordSnapshot : IDisposable
         : throw new ObjectDisposedException(nameof(BravePasswordSnapshot));
 
     public DateTimeOffset CapturedUtc { get; private set; }
+    internal long RetainedSourceBytes => _files.Values.Sum(bytes => (long)bytes.Length);
 
     private BravePasswordSnapshot(string profile, Func<ProcessPresence>? observe, CancellationToken token)
     {

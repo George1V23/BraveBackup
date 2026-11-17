@@ -162,7 +162,7 @@ public partial class ShellViewModel
                     ObserveBrowserState = ExtensionBrowserState,
                     ConfirmUnencryptedData = path =>
                         ConfirmUnencryptedTabManagerPlus?.Invoke(path) ?? Task.FromResult(false)
-                });
+                }, null);
             if (_disposed) return;
             _completedBackupPath = result.Destination;
             BackupSucceeded = true;

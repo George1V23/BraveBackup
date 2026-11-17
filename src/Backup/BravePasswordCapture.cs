@@ -19,6 +19,7 @@ public sealed class BravePasswordCapture : IDisposable
         ? new ReadOnlyDictionary<string, DecodedPasswordDatabase>(_databases)
         : throw new ObjectDisposedException(nameof(BravePasswordCapture));
     public DateTimeOffset CapturedUtc => _source.CapturedUtc;
+    internal long RetainedSourceBytes => _source.RetainedSourceBytes + (_localState?.Bytes.Length ?? 0);
 
     /// <summary>Captures both local stores, requests at most one key and decodes every eligible password and note.</summary>
     /// <remarks>
