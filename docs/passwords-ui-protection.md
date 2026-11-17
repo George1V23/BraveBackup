@@ -19,17 +19,18 @@ remains mandatory at the actual save. Protected data with encryption disabled di
 the protection error rather than claiming readable CSV was automatically selected.
 
 Shell availability surfaces these mode errors before the generic unsupported-category
-message. Password actions remain blocked in the UI while provider selection and host
-callbacks are not connected. Existing working categories, bookmark exports and archive
+message. Protected password actions now use the [approved explicit provider selector](passwords-ui-provider.md)
+and remain blocked until its required selection/protection conditions are satisfied. Existing working categories, bookmark exports and archive
 operations remain unchanged. No native credential UI was opened for this work.
 
-## User control review still pending
+## Provider control review completed
 
 The user asked to decide each visible control. The newly needed **Password source** selector
 was therefore presented for review, with two concrete alternatives: add an explicit
 supported-provider selector initially unselected, or show capability information and keep
-password operations blocked. No selector was added and no provider was inferred pending
-that answer. This is the user's phase-1 review requirement, not an AGENTS.md approval rule.
+password operations blocked. The user chose the initially unselected selector. It is now implemented and connected
+for protected backup: [provider UI checkpoint](passwords-ui-provider.md). No source is
+inferred automatically. This is the user's phase-1 review requirement, not an AGENTS.md approval rule.
 
 ## Validation
 

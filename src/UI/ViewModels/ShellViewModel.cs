@@ -413,12 +413,14 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Updates displayed groups without altering stored profile selections outside the current scope.</summary>
     private void UpdateBackupScope()
     {
+        var previousScope = BackupInstallations.ToArray();
         BackupInstallations.Clear();
         if (IsBulkMode)
         {
             foreach (var item in Installations.Where(item => item.IsChecked)) BackupInstallations.Add(item);
         }
         else if (ActiveInstallation != null) BackupInstallations.Add(ActiveInstallation);
+        if (!previousScope.SequenceEqual(BackupInstallations)) Options.SelectedPasswordSource = null;
 
         OnPropertyChanged(nameof(HasActiveInstallation));
         OnPropertyChanged(nameof(ActiveDataDirectory));

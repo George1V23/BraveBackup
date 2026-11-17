@@ -1,5 +1,6 @@
 using BraveBackup.Core;
 using UI.ViewModels;
+using BraveBackup.Platform;
 using Xunit;
 
 namespace BraveBackup.Core.Tests;
@@ -51,7 +52,7 @@ public sealed class ShellBackupTests : IDisposable
         shell.Options.BackupPath = validDestination;
         shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
-        Assert.Contains("Deselect other categories", shell.BackupAvailability);
+        Assert.Contains("Password source", shell.BackupAvailability);
         await shell.CreateBackupAsync();
         Assert.False(File.Exists(shell.Options.BackupPath));
     }
@@ -324,6 +325,59 @@ public sealed class ShellBackupTests : IDisposable
         Assert.Contains("CSV archive saving is not available", shell.BackupAvailability);
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
         Assert.False(File.Exists(shell.Options.BackupPath));
+    }
+
+    [Fact]
+    public async Task ExplicitPasswordSourceEnablesProtectedArchiveAndUsesHostAdapterOnlyOnStart()
+    {
+        using var shell = await Create();
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        shell.Options.Password = "Synthetic-archive-4827"; shell.Options.PasswordConfirmation = shell.Options.Password;
+        Assert.Null(shell.Options.SelectedPasswordSource); Assert.False(shell.CreateBackupCommand.CanExecute(null));
+        var source = Assert.Single(shell.Options.PasswordSources); shell.Options.SelectedPasswordSource = source;
+        var fixtureOs = source.Provider == PasswordEncryptionProvider.WindowsDpapiV10 ? "windows" : "linux";
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Passwords", "LoginData.v43." + fixtureOs + ".sqlite"), Path.Combine(_profile.ProfileDirectory, "Login Data"));
+        if (fixtureOs == "windows") File.WriteAllText(Path.Combine(_app.UserDataDirectory, "Local State"), "{\"os_crypt\":{\"encrypted_key\":\"" + Convert.ToBase64String("DPAPIsynthetic"u8) + "\"}}");
+        var calls = 0;
+        shell.PasswordBrowserState = () => ProcessPresence.Stopped;
+        shell.PasswordKeyUnlocker = (_, _, _) =>
+        {
+            calls++; using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Passwords", "Crypto.synthetic.json")));
+            return new PasswordKeyMaterial(source.Provider, Convert.FromHexString(json.RootElement.GetProperty(fixtureOs + "KeyHex").GetString()!));
+        };
+        Assert.Equal(0, calls); Assert.True(shell.CreateBackupCommand.CanExecute(null));
+        await shell.CreateBackupAsync(); Assert.Equal(1, calls); Assert.True(shell.BackupSucceeded);
+        Assert.Contains("Protected password profiles: 1", shell.BackupReport); Assert.DoesNotContain("fixture-user", shell.BackupReport);
+        using var file = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(6, BackupArchive.Validate(file, "Synthetic-archive-4827").FormatVersion);
+    }
+
+    [Fact]
+    public async Task PasswordRawFallbackIsExplicitThroughHostCallback()
+    {
+        using var shell = await Create(); shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        shell.Options.SelectedPasswordSource = Assert.Single(shell.Options.PasswordSources);
+        shell.Options.Password = "Synthetic-archive-4827"; shell.Options.PasswordConfirmation = shell.Options.Password;
+        shell.PasswordBrowserState = () => ProcessPresence.Stopped;
+        File.WriteAllText(Path.Combine(_profile.ProfileDirectory, "Login Data"), "synthetic corrupt database");
+        var choices = 0;
+        shell.ConfirmRawPasswordPreservation = (warning, _) =>
+        { choices++; Assert.Contains("corrupt", warning.ReasonDescription); return Task.FromResult(true); };
+        await shell.CreateBackupAsync(); Assert.Equal(1, choices); Assert.True(shell.BackupSucceeded);
+        Assert.Contains("Raw credential counts are unknown", shell.BackupReport);
+        using var file = File.OpenRead(shell.Options.BackupPath);
+        Assert.Equal(7, BackupArchive.Validate(file, "Synthetic-archive-4827").FormatVersion);
+    }
+
+    [Fact]
+    public async Task PasswordSourceSurvivesSameScopeButIsClearedByRediscovery()
+    {
+        using var shell = await Create();
+        var source = Assert.Single(shell.Options.PasswordSources); shell.Options.SelectedPasswordSource = source;
+        shell.Activate(shell.Installations[0]); Assert.Same(source, shell.Options.SelectedPasswordSource);
+        await shell.RefreshAsync(); Assert.Null(shell.Options.SelectedPasswordSource);
     }
 
 }

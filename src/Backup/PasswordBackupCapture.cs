@@ -10,7 +10,16 @@ public sealed class PasswordRawFallbackWarning
 {
     public string ProfileDirectory { get; }
     public string ReasonCode { get; }
-    public string Message => "Portable password capture did not complete. Available password-data files can instead be kept unchanged as raw/native data. " +
+    public string ReasonDescription => ReasonCode switch
+    {
+        "passwords-key-unlock-failed" or "passwords-key-source-invalid" => "The selected source could not unlock the existing password key.",
+        "passwords-encryption-unsupported" or "passwords-key-envelope-unsupported" => "The saved-password protection is unsupported for the selected source.",
+        "passwords-schema-unsupported" or "passwords-scheme-unsupported" => "The saved-password data format is unsupported.",
+        "passwords-journal-unsupported" => "The password database has a rollback journal that cannot be safely interpreted by this capture path.",
+        "passwords-capture-limit" => "The portable password data exceeds the supported capture limit.",
+        _ => "The password data is corrupt, unreadable or cannot be decoded completely."
+    };
+    public string Message => "Portable password capture did not complete. " + ReasonDescription + " Available password-data files can instead be kept unchanged as raw/native data. " +
         "They may be incomplete and are not guaranteed portable or recoverable. OS key stores and Local State will not be included. " +
         "Choose raw preservation or cancel. This choice does not authorize an unencrypted save.";
     internal PasswordRawFallbackWarning(string profileDirectory, string reasonCode)

@@ -147,3 +147,7 @@ researched-version gate. UI wiring, broader compatibility and CSV archive entrie
 [Approved password-protection UI](passwords-ui-protection.md) now preserves safe defaults
 and explains explicit CSV/container choices. The new provider-selector control is awaiting
 the user’s requested individual review; password UI actions remain blocked meanwhile.
+
+The user approved the initially unselected [Password source selector](passwords-ui-provider.md).
+Protected password backup now connects that explicit choice to v6 portable/v7 raw fallback
+archives with UI-thread consent. CSV Export controls and CSV archive support remain pending.

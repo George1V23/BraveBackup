@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using BraveBackup.Core;
+using BraveBackup.Platform;
 
 namespace UI.ViewModels;
 
@@ -74,6 +76,20 @@ public partial class BackupOptionsViewModel : ViewModelBase
     /// <summary>Gets whether the password mode controls apply to the selected categories.</summary>
     public bool PasswordsSelected => Categories.Any(item => item.Id == "passwords" && item.IsSelected);
 
+    /// <summary>Supported providers for this host. No source is selected or inspected automatically.</summary>
+    public IReadOnlyList<PasswordSourceOption> PasswordSources { get; } = HostEnvironment.IsWindows
+        ? new[] { new PasswordSourceOption("Windows DPAPI (v10)", "Uses the current Windows logon context; a fresh prompt is not guaranteed. App-bound protection is unsupported. Raw preservation can be chosen on capture failure.", PasswordEncryptionProvider.WindowsDpapiV10) }
+        : HostEnvironment.IsLinux
+            ? new[] { new PasswordSourceOption("Linux Secret Service (v11)", "Choose only if every selected browser uses Secret Service. The native keyring may prompt to unlock. Direct KWallet, basic and portal backends are unsupported; they are not tried automatically.", PasswordEncryptionProvider.LinuxKeyringV11) }
+            : Array.Empty<PasswordSourceOption>();
+
+    [ObservableProperty] private PasswordSourceOption? _selectedPasswordSource;
+    public string PasswordSourceDescription => SelectedPasswordSource?.Description ?? "Choose the actual supported password source for all selected browsers. Selecting it does not access credentials.";
+    partial void OnSelectedPasswordSourceChanged(PasswordSourceOption? value)
+    {
+        OnPropertyChanged(nameof(PasswordSourceDescription)); OnPropertyChanged(nameof(PasswordModeValidation));
+    }
+
     /// <summary>Approved safe default. Changing whole-archive encryption never changes this explicit choice.</summary>
     [ObservableProperty] private bool _protectPasswords = true;
 
@@ -86,6 +102,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
     public string PasswordModeValidation => !PasswordsSelected ? string.Empty : !ProtectPasswords
         ? "CSV archive saving is not available yet. Re-enable Protect passwords for the protected option."
         : !EncryptBackup ? "Protected passwords require archive encryption. Re-enable Encrypt backup; CSV is never selected automatically."
+        : SelectedPasswordSource is null || !PasswordSources.Contains(SelectedPasswordSource) ? "Choose a supported Password source before starting password backup."
         : string.Empty;
 
     /// <summary>Accurately distinguishes CSV inside an encrypted container from an unencrypted local save.</summary>
@@ -182,6 +199,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
         BackupPath = $"BraveBackup_{_clock():yyyy-MM-dd_HHmmss}.bravebackup";
         EncryptBackup = true;
         ProtectPasswords = true;
+        SelectedPasswordSource = null;
         Password = string.Empty;
         PasswordConfirmation = string.Empty;
         RevealPassword = false;

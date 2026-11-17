@@ -134,4 +134,15 @@ public sealed class BackupOptionsViewModelTests
         Assert.Empty(options.PasswordModeValidation); Assert.False(options.RequiresPlaintextConfirmation);
     }
 
+    [Fact]
+    public void ProviderIsInitiallyUnselectedMetadataOnlyAndResetClearsIt()
+    {
+        var options = new BackupOptionsViewModel(); Assert.Null(options.SelectedPasswordSource);
+        options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        Assert.Contains("Password source", options.PasswordModeValidation);
+        options.SelectedPasswordSource = Assert.Single(options.PasswordSources);
+        Assert.Empty(options.PasswordModeValidation); Assert.NotEmpty(options.PasswordSourceDescription);
+        options.Reset(); Assert.Null(options.SelectedPasswordSource); Assert.True(options.ProtectPasswords);
+    }
+
 }

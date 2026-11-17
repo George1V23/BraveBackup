@@ -31,6 +31,13 @@ public partial class ShellViewModel
     /// <summary>Gets per-save confirmation that unencrypted saved windows expose URLs, titles and private records.</summary>
     public Func<string, Task<bool>>? ConfirmUnencryptedTabManagerPlus { get; set; }
 
+    /// <summary>Fresh raw-or-cancel choice. Called from the archive worker; the host must dispatch its UI.</summary>
+    public Func<PasswordRawFallbackWarning, CancellationToken, Task<bool>>? ConfirmRawPasswordPreservation { get; set; }
+    /// <summary>Controlled host/test observation; null uses the native browser process probe.</summary>
+    public Func<ProcessPresence>? PasswordBrowserState { get; set; }
+    /// <summary>Optional host/test owned-key adapter; the UI's default uses native key access only on an explicit operation.</summary>
+    public Func<BraveProfileInfo, ReadOnlyMemory<byte>, CancellationToken, PasswordKeyMaterial>? PasswordKeyUnlocker { get; set; }
+
     /// <summary>Gets whether one frozen archive request is currently running.</summary>
     [ObservableProperty] private bool _isBackupRunning;
 
@@ -69,13 +76,13 @@ public partial class ShellViewModel
                     ? Options.PasswordModeValidation
                 : Options.Categories.Any(item =>
                     item.IsSelected &&
-                    item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus"))
+                    item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus" or "passwords"))
                     ? "Bookmarks, Settings, Extensions, persisted Sessions and supported TabManagerPlus saved windows are available. Deselect other categories to create an archive."
                     : Options.EncryptBackup && !string.IsNullOrEmpty(Options.PasswordValidation)
                         ? Options.PasswordValidation
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
                             ? BackupDestinationValidation
-                            : "Ready to create a backup. Extensions and TabManagerPlus require Brave closed. Restore is not available yet.";
+                            : "Ready to create a backup. Passwords, Extensions and TabManagerPlus require Brave closed. Restore is not available yet.";
 
     private string BackupDestinationValidation
     {
@@ -103,7 +110,8 @@ public partial class ShellViewModel
                                       Options.Categories.All(item =>
                                           !item.IsSelected ||
                                           item.Id is "bookmarks" or "settings" or "extensions" or "sessions"
-                                              or "tabmanagerplus") &&
+                                              or "tabmanagerplus" or "passwords") &&
+                                      string.IsNullOrEmpty(Options.PasswordModeValidation) &&
                                       (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
                                       string.IsNullOrEmpty(BackupDestinationValidation);
 
@@ -125,6 +133,19 @@ public partial class ShellViewModel
         var includeNativeSessions = Options.IncludeNativeSessionFiles;
         var destination = Options.BackupPath;
         var password = Options.EncryptBackup ? Options.Password : null;
+        var selectedPasswordSource = Options.SelectedPasswordSource;
+        var protectPasswords = Options.ProtectPasswords;
+        var rawChoice = ConfirmRawPasswordPreservation;
+        var passwordObserver = PasswordBrowserState;
+        var passwordUnlocker = PasswordKeyUnlocker;
+        var passwordOptions = categories.Contains("passwords") ? new PasswordBackupOptions
+        {
+            ProtectPasswords = protectPasswords,
+            GetProvider = (_, _) => selectedPasswordSource!.Provider,
+            ObserveBrowserState = passwordObserver,
+            Unlock = passwordUnlocker,
+            ChooseRawPreservation = rawChoice
+        } : null;
         var compression = Options.Compression.ToLowerInvariant();
         var roots = Installations.Select(item => item.AppInfo.UserDataDirectory).ToArray();
         var version = typeof(ShellViewModel).Assembly.GetName().Version?.ToString() ?? "Unknown";
@@ -164,7 +185,7 @@ public partial class ShellViewModel
                     ObserveBrowserState = ExtensionBrowserState,
                     ConfirmUnencryptedData = path =>
                         ConfirmUnencryptedTabManagerPlus?.Invoke(path) ?? Task.FromResult(false)
-                }, null);
+                }, passwordOptions);
             if (_disposed) return;
             _completedBackupPath = result.Destination;
             BackupSucceeded = true;

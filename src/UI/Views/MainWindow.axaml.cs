@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.Threading;
+using Avalonia.Threading;
+using BraveBackup.Core;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
@@ -21,10 +24,40 @@ public partial class MainWindow : Window
             ConfirmBackupOverwrite = ConfirmBackupOverwriteAsync,
             ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync,
             ConfirmUnencryptedNativeSessions = ConfirmUnencryptedNativeSessionsAsync,
-            ConfirmUnencryptedTabManagerPlus = ConfirmUnencryptedTabManagerPlusAsync
+            ConfirmUnencryptedTabManagerPlus = ConfirmUnencryptedTabManagerPlusAsync,
+            ConfirmRawPasswordPreservation = ConfirmRawPasswordPreservationAsync
         };
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Dispatches the approved raw-or-cancel choice to the UI; cancellation closes it without approval.</summary>
+    private async Task<bool> ConfirmRawPasswordPreservationAsync(PasswordRawFallbackWarning warning, CancellationToken token)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+            return await Dispatcher.UIThread.InvokeAsync(() => ConfirmRawPasswordPreservationAsync(warning, token));
+        token.ThrowIfCancellationRequested();
+        var dialog = new Window
+        {
+            Title = "Password capture could not complete", Width = 600, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel backup" };
+        var preserve = new Button { Content = "Preserve raw files" };
+        cancel.Click += (_, _) => dialog.Close(false); preserve.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24), Spacing = 16,
+            Children =
+            {
+                new TextBlock { Text = warning.Message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new SelectableTextBlock { Text = warning.ProfileDirectory, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new TextBlock { Text = "The backup remains encrypted. Raw files may not be recoverable on another system.", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, preserve } }
+            }
+        };
+        using var registration = token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(false)));
+        return await dialog.ShowDialog<bool>(this);
     }
 
     /// <summary>Obtains explicit approval to replace the particular existing destination.</summary>
