@@ -124,3 +124,13 @@ cannot clobber a plaintext or directory destination. Failed bounded reads clear 
 allocated buffers. All three focused artifact-storage tests pass. These checks still
 leave the final check/rename and ancestor races described above; physical identity and
 handle-relative production I/O remain pending, and restore execution is not enabled.
+
+## Frozen artifact-path authorization
+
+`RestoreArtifactScope` freezes caller-supplied browser roots, source archive and an operation
+GUID. It derives distinct safety/journal filenames in an existing chosen folder, rejects
+browser-root and source collisions, and repeats destination/link checks before each I/O.
+Construction is write-free. Safety publication never replaces an existing artifact; only
+journal revisions may replace their fixed journal path. Two focused scope tests pass.
+The wrapper still requires complete custom roots from discovery and does not solve bind
+mount aliases, physical directory identity or final path races. No profile writer is enabled.
