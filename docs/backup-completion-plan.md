@@ -100,8 +100,8 @@ has synthetic wrapper and isolated native D-Bus coverage.
 [Explicit capture orchestration](passwords-capture.md) is implemented with 24 synthetic
 integration tests. The [portable password payload codec](passwords-payload.md) now has
 independent synthetic fixture and capture-mapping coverage. The [CSV formatter](passwords-csv.md)
-has 17 tests against synthetic fixtures; browser row projection and save consent remain
-separate work. Real Windows/keyring validation, archive saving, raw-file fallback and
+has 17 tests against synthetic fixtures. [Confirmed standalone CSV saving](passwords-csv-save.md)
+is implemented with synthetic transaction coverage; browser row projection remains separate work. Real Windows/keyring validation, archive saving, raw-file fallback and
 UI wiring remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session

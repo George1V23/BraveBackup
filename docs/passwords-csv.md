@@ -50,8 +50,9 @@ Each local CSV save still requires an explicit CSV choice and fresh confirmation
 its actual destination. Standalone/unencrypted saves must warn that anyone with file
 access can read credentials. An encrypted-container warning must explain readability
 after decryption/extraction. Formatting bytes in memory does not grant save consent.
-Atomic destination handling, source revalidation, archive integration, reports and UI
-controls remain pending, as do real native authentication compatibility checks.
+[Confirmed standalone saving](passwords-csv-save.md) now implements destination handling
+and source revalidation as a separate component. Browser projection, archive integration,
+reports and UI controls remain pending, as do real native authentication checks.
 
 ## Tests
 
