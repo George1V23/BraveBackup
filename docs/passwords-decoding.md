@@ -40,6 +40,6 @@ SQLite stores, password/note ownership, altered GCM frames, unsupported provider
 truncation, authenticated invalid UTF-8, note failure, cancellation and disposal.
 
 This checkpoint performs no OS credential access, browser automation or local plaintext
-save. Native Windows key access and Linux keyring prompting remain unimplemented and
-untested. Passwords UI, archive integration, fresh CSV-save consent and explicit raw-file
+save. Subsequent [Windows](passwords-windows-key.md) and [Linux Secret Service](passwords-linux-key.md)
+adapters are implemented separately; real native authentication compatibility remains unverified. Passwords UI, archive integration, fresh CSV-save consent and explicit raw-file
 fallback remain pending. Existing archive versions and category behavior are unchanged.

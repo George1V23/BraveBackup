@@ -24,7 +24,8 @@ These APIs do not read files, create keys, launch Brave, save plaintext, or acce
 on discovery/navigation. The operation orchestrator still needs to capture and verify
 Local State, require the explicit password operation, explain authentication limits and
 handle cancellation/failure with the approved raw-file-or-cancel choice. App-bound v20
-and Linux keyring access remain unsupported. No attempt to bypass their protection occurs.
+remains unsupported; the subsequent [Linux Secret Service adapter](passwords-linux-key.md)
+is a separate component. No attempt to bypass their protection occurs.
 
 ## Validation
 

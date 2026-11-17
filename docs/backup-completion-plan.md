@@ -95,8 +95,9 @@ Six independent fixture checks pass. [Isolated encrypted-database capture and sc
 validation](passwords-snapshot.md) are implemented with 36 new tests, without enabling the
 UI category. [Provider-aware password and note decoding](passwords-decoding.md) is
 implemented with 20 synthetic tests. A [Windows DPAPI key adapter and envelope reader](passwords-windows-key.md)
-now have synthetic coverage; native Windows validation, Linux keyring access, operation
-integration and password saving remain pending. Live capture remains conditional; the initial path requests Brave closed.
+now have synthetic coverage. The [Linux Secret Service adapter](passwords-linux-key.md)
+has synthetic wrapper and isolated native D-Bus coverage. Real Windows/keyring validation,
+operation integration and password saving remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and
