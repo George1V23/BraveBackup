@@ -265,3 +265,15 @@ inaccessible to the caller to be omitted. Therefore an empty result is not proof
 privileged/hidden metadata exists. This gate is conservative evidence only; it does not
 establish full ACL/xattr fidelity or production target eligibility. Windows and production
 metadata recovery integration remain pending; no profile writes are enabled.
+
+## Linux effective-ownership restriction
+
+Metadata capture/application now requires handle-reported UID/GID to match the current
+effective UID/GID before any supported metadata changes. Unavailable ownership fails
+closed; no chown, privilege elevation or fallback occurs. This intentionally rejects
+other-group files even when supplementary group access exists. Five focused metadata
+cases pass: native mode/mtime and extended-attribute checks plus matching/foreign owner
+and group policy cases. Platform exposes the pure policy internally to Linux.Tests only.
+The native ownership fields follow the Linux statx layout already referenced above.
+This restriction is not a persisted ownership recovery contract; exact ownership restoration
+and context continuity across process restarts remain pending. No profile writer is enabled.

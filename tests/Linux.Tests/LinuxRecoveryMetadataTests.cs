@@ -3,6 +3,13 @@ using Xunit;
 namespace BraveBackup.Core.Tests;
 public sealed class LinuxRecoveryMetadataTests
 {
+    [Theory]
+    [InlineData(1000u, 1000u, true)]
+    [InlineData(0u, 1000u, false)]
+    [InlineData(1000u, 0u, false)]
+    public void RecoveryOwnershipRequiresBothEffectiveIdentities(uint owner, uint group, bool expected)
+        => Assert.Equal(expected, LinuxRecoveryMetadata.OwnershipMatches(owner, group, 1000, 1000));
+
     [Fact]
     public void PermissionsAndTimestampRoundTripThroughAuthorizedHandles()
     {
