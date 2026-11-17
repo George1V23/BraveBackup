@@ -139,3 +139,7 @@ construction and PSL/private-registry related-group merging remain unfinished.
 [Canonical facets and offline PSL/private-registry group merging](passwords-offline-groups.md)
 now resolve supported cache/singleton groups. The full CSV operation/UI and broader
 origin/version compatibility work remain pending.
+
+[Complete single-profile standalone CSV export](passwords-csv-operation.md) now connects
+capture, offline grouping, projection, fresh confirmation and atomic saving behind a
+researched-version gate. UI wiring, broader compatibility and CSV archive entries remain pending.

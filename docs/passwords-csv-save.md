@@ -59,7 +59,9 @@ changes during final source verification, invalid rows/destinations and temporar
 All files belong to disposable synthetic test folders; native Windows ACL validation
 remains pending.
 
-Browser CSV projection and credential grouping/affiliation semantics remain unfinished.
+The [complete supported-profile operation](passwords-csv-operation.md) now connects
+offline grouping and browser CSV projection to this confirmed save transaction. Broader
+URL/Android/version compatibility remains unfinished.
 The API accepts prepared rows so that file safety and consent can be verified independently;
 it does not claim that a raw database-row dump matches Brave's export. UI integration,
 encrypted-archive CSV consent, portable password archive saving, explicit raw-file fallback

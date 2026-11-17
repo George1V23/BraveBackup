@@ -74,7 +74,8 @@ stored overrides and unrequested returned-facet bridges, excluding unreturned gr
 IP/local hosts, unresolved lookups, ambiguous overlaps, Android nonparticipation and
 empty/cancelled scopes. All data/credentials are synthetic; no live profile was read.
 
-The full CSV capture/projection/save operation, browser-release compatibility gating,
+A [single-profile CSV capture/projection/save operation](passwords-csv-operation.md) now
+connects these components behind a conservative researched-version gate. Broader browser-release validation,
 broader origin/Android support, CSV archive contracts/consent and Passwords UI remain
 unfinished. Native real-keyring/Windows validation is still pending. Safe password and
 affiliation source verification must bracket the eventual confirmed save.
