@@ -388,3 +388,13 @@ has been verified. This prototype does not capture SACL, alternate streams, EAs 
 filesystem metadata, does not establish target file eligibility, and has no apply or
 publication path. It is disconnected from restore execution pending native validation,
 metadata policy and production adapter integration.
+
+## Windows opaque metadata framing validation
+
+Capture now requires the native security descriptor to advertise self-relative form before
+copying it. `WindowsRecoveryMetadata.Validate` checks exact magic/length, all timestamp
+ranges, descriptor revision/self-relative flag and aligned in-bounds owner/group/SACL/DACL
+offsets. Seven new cross-platform framing tests pass on Linux; the Windows-labelled project
+now passes 13 nonnative cases with five native cases skipped. These checks do not validate
+the full SID/ACL structures or authorize applying them. Native Windows capture and ACL
+application remain unverified/unimplemented; no profile writer is enabled.
