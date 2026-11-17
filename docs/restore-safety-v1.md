@@ -410,3 +410,19 @@ Windows-labelled project totals 14 passed and five native skips. Sources:
 [ACE_HEADER](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-ace_header).
 These are structural bounds only: ACE payload semantics, native ACL validity and recovery
 authorization are not established. Windows application/publication remains disabled.
+
+## Reviewed safety settings UI
+
+Restore now contains the approved mandatory encrypted safety-backup settings: existing
+folder Browse/text/full-path display and separate masked password/confirmation fields.
+Changing settings or choosing a folder creates no files. Source unlock passwords are
+never copied into these fields. Source changes, leaving Restore and disposal clear the
+safety secrets; pending picker results are invalidated. Folder validation checks recognized
+browser roots/links, while final custom-root authorization remains the frozen operation's
+responsibility. Final artifact filenames must be assigned and shown when an executable
+plan is available. No safety creation/restore action is exposed yet.
+
+Two focused view-model tests pass for independent password validation, clearing, no writes
+and stale picker rejection. The solution build passes with zero warnings/errors, including
+compiled Avalonia bindings. Native visual/picker validation of this new section remains
+pending. Production transaction integration and Windows recovery remain unfinished.

@@ -28,6 +28,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     public Func<Task<string?>>? PickSource { get; set; }
     /// <summary>Independent read-only source/target plan; no execution capability is exposed.</summary>
     public RestorePlanningViewModel Planning { get; } = new();
+    /// <summary>Independent safety password, never reused from archive unlock.</summary>
+    public RestoreSafetyOptionsViewModel Safety { get; } = new();
     public ObservableCollection<RestoreInstallationPreview> Installations { get; } = [];
     [ObservableProperty] private string _sourcePath = string.Empty;
     [ObservableProperty] private string _password = string.Empty;
@@ -83,7 +85,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         var generation = ++_generation;
         var source = SourcePath;
         var secret = unlock ? Password : null;
-        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); NeedsUnlock = false;
+        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false;
         if (string.IsNullOrWhiteSpace(source)) { IsBusy = false; Status = "Choose a backup to inspect. No browser files will be changed."; return; }
         using var cancellation = new CancellationTokenSource();
         _inspection = cancellation;
@@ -131,9 +133,9 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     public void Leave()
     {
         ++_generation; _inspection?.Cancel(); _inspection = null;
-        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); NeedsUnlock = false; IsBusy = false;
+        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false; IsBusy = false;
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
 }

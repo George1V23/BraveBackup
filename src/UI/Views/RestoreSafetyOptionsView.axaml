@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:UI.ViewModels" x:Class="UI.Views.RestoreSafetyOptionsView" x:DataType="vm:RestoreSafetyOptionsViewModel">
+    <Border Classes="card">
+        <StackPanel Spacing="10">
+            <TextBlock Text="Mandatory encrypted safety backup" Classes="section" />
+            <TextBlock Text="Restoration must save and verify original destination data first. A failed safety backup blocks restoration. These settings do not create files yet." TextWrapping="Wrap" Classes="muted" />
+            <TextBlock Text="Safety-backup folder" />
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Text="{Binding Folder}" PlaceholderText="Choose an existing folder outside browser data" />
+                <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseFolderCommand}" Margin="8,0,0,0" />
+            </Grid>
+            <SelectableTextBlock Text="{Binding FullFolder}" TextWrapping="Wrap" />
+            <TextBlock Text="Safety-backup encryption password" />
+            <TextBox Text="{Binding Password}" PasswordChar="●" />
+            <TextBlock Text="Confirm safety-backup password" />
+            <TextBox Text="{Binding Confirmation}" PasswordChar="●" />
+            <TextBlock Text="Use a separate password. It is never saved or logged, and cannot be recovered if lost. The source archive password is not reused automatically." TextWrapping="Wrap" Classes="muted" />
+            <TextBlock Text="{Binding Validation}" TextWrapping="Wrap" />
+        </StackPanel>
+    </Border>
+</UserControl>

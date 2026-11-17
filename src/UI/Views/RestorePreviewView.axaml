@@ -55,6 +55,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <views:RestorePlanningView DataContext="{Binding Planning}" />
+            <views:RestoreSafetyOptionsView DataContext="{Binding Safety}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

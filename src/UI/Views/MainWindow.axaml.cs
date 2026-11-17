@@ -29,11 +29,20 @@ public partial class MainWindow : Window
             ConfirmPasswordCsvArchiveSave = ConfirmPasswordCsvArchiveSaveAsync
         };
         ((ShellViewModel)DataContext).RestorePreview.PickSource = PickRestoreSourceAsync;
+        ((ShellViewModel)DataContext).RestorePreview.Safety.PickFolder = PickRestoreSafetyFolderAsync;
         var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
         csv.PickDestination = PickPasswordCsvPathAsync;
         csv.ConfirmPlaintextSave = ConfirmPasswordCsvSaveAsync;
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Selects a safety-backup folder without creating any artifact.</summary>
+    private async Task<string?> PickRestoreSafetyFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        { Title = "Choose safety-backup folder", AllowMultiple = false });
+        return folders.Count == 1 ? folders[0].TryGetLocalPath() : null;
     }
 
     /// <summary>Selects an existing local archive without creating files or touching browser profiles.</summary>
