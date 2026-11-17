@@ -1,8 +1,8 @@
 # Passwords: scope review
 
-Status: proposed; no password-reading, export, package or archive implementation has
-started. The user's protected default and explicitly confirmed optional plaintext CSV
-remain requirements. This checkpoint defines the remaining controls and source choice.
+Status: all seven scope items reviewed and accepted, with the revisions recorded below.
+No password-reading, export, package or archive implementation has started. The user's
+protected default and explicitly confirmed optional plaintext CSV remain requirements.
 
 ## Current implementation
 
@@ -46,7 +46,7 @@ have **not** yet been fully researched or tested. No universal decryption or cro
 restore claim is supported by this scope review. No real user credential database or
 keyring was opened during this review.
 
-## Item 1: user edits and open automation question
+## Item 1: user edits and approved automation investigation
 
 Review proceeds one item at a time. The user edited item 1: credential values may be
 read only after an explicit backup/export operation including Passwords, never during
@@ -57,8 +57,9 @@ credentials. Authentication cancellation/failure stops credential access. A succ
 OS login is not a guarantee that every browser encryption provider permits access.
 
 The user asked whether Selenium could instead launch Brave in the background and
-automate its official CSV export. This route is under consideration, not yet selected
-or implemented. [ChromeDriver profile/binary options](https://developer.chrome.com/docs/chromedriver/capabilities)
+automate its official CSV export. The user approved investigating this as a fallback,
+potentially with visible authentication; no implementation route is verified yet.
+[ChromeDriver profile/binary options](https://developer.chrome.com/docs/chromedriver/capabilities)
 and [Selenium's Chromium support](https://www.selenium.dev/documentation/webdriver/browsers/chrome/)
 establish browser automation capabilities, not a supported Brave password-export API.
 Chromium's [export delegate](https://chromium.googlesource.com/chromium/src/+/0a788fbaedd0baea22281a1733008144abb6634a/chrome/browser/extensions/api/passwords_private/passwords_private_delegate_impl.cc)
@@ -72,9 +73,35 @@ writes but is not guaranteed to retain access to OS/app-bound credentials. These
 design constraints to resolve before selecting a browser-assisted fallback. No browser
 was launched, profile copied, password read or automation package installed for this review.
 
-Items 2–7 below remain proposed, awaiting individual review.
+## Decisions recorded during individual review
 
-## Decisions to keep, edit or defer
+These decisions supersede conflicting wording in the original proposal table below.
+
+- **Item 2 kept:** Protect passwords is checked by default and requires archive encryption.
+  Disabling archive encryption does not silently select CSV; Reset restores protection.
+- **Item 3 kept:** explicitly selected CSV may be included inside encrypted or unencrypted
+  backups, or exported separately per profile, with a fresh destination-specific warning
+  and confirmation. The warning describes the actual encrypted/plaintext output.
+- **Item 4 kept:** saved login entries and supported notes are included. Cookies, passkeys,
+  OS keys, payment data, general autofill and cloud-only credentials are excluded.
+- **Item 5 revised and accepted:** allow direct capture while Brave is running when a
+  consistent read-only SQLite snapshot, including applicable WAL data, is possible.
+  Otherwise ask the user to close Brave and retry. Authentication remains separate.
+- **Item 6 edited:** if corruption, unsupported format/protection, failed unlocking or
+  unreadable credential contents prevent portable capture, explain the issue and offer
+  explicit preservation of available password-data files as-is in the backup store.
+  Do not silently substitute raw files: label the result as raw/native preservation,
+  record that portable password capture did not complete, and make no portability or
+  recoverability guarantee. Keep the protection setting and save consent requirements.
+  If the files themselves cannot be read/copied, explain that preservation is unavailable.
+  Research identifies required database companions; do not infer authorization to include
+  OS key stores. Missing files cannot be preserved. An inconsistent live source requires
+  the close-and-retry path. This fallback belongs to Backup, not a fabricated CSV export.
+- **Item 7 kept:** show profile/credential counts, capture results and any explicitly
+  selected raw-file fallback without sites, usernames, passwords, notes or keys in
+  reports. Cancellation/failure preserves existing destinations and cleans temporary output.
+
+## Original proposal table (subject to recorded revisions above)
 
 | Choice                                        | Proposed behavior                                                                                                                                                                                                                                                                                                                                                                                                 |
 |-----------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -126,5 +153,6 @@ not authorize a plaintext save. Existing approved unencrypted CSV permission is 
    unchanged profile data. Review actual UI controls and completion evidence.
 5. Return to the separately deferred restore/import, Backups and Profiles/Merge/Sync reviews.
 
-No password implementation begins until these scope choices are reviewed. Existing
-working backup categories and bookmark exports remain unchanged.
+Scope review is complete. The next phase is the research/fixture checkpoint above,
+including the approved browser-assisted fallback investigation and raw-file preservation
+requirements. Existing working backup categories and bookmark exports remain unchanged.
