@@ -36,6 +36,10 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets the embedded JSON exporter, scoped to the active sidebar installation.</summary>
     public MainViewModel ExportViewModel { get; }
+    /// <summary>Standalone CSV workflow, sharing the profile selected in the existing bookmark export section.</summary>
+    public PasswordCsvExportViewModel PasswordCsvExport { get; } = new();
+    public bool CanUseBookmarkExport => !IsRefreshing && !IsBackupRunning && !PasswordCsvExport.IsBusy;
+    public bool CanUsePasswordCsv => !IsRefreshing && !IsBackupRunning && !ExportViewModel.IsBusy;
 
     /// <summary>Gets or sets the native JSON save-picker callback supplied by the shell view.</summary>
     public Func<Task<IStorageFile?>>? ExportFilePicker { get; set; }
@@ -145,7 +149,9 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
                 !string.IsNullOrEmpty(DiscoveryMessage)
                     ? DiscoveryMessage
                     :
-                    SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy
+                    SelectedTabIndex == ExportTabIndex && PasswordCsvExport.IsBusy
+                        ? "Exporting password CSV…"
+                        : SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy
                         ? "Exporting bookmarks…"
                         :
                         SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError
@@ -169,14 +175,36 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs args) => NotifyBackupSummary();
 
-    private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args) =>
-        OnPropertyChanged(nameof(StatusText));
+    private void OnExportStateChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(MainViewModel.SelectedApp) or nameof(MainViewModel.SelectedProfile))
+            SynchronizePasswordCsvContext();
+        NotifyExportAvailability();
+    }
+    private void OnPasswordCsvStateChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(PasswordCsvExportViewModel.IsBusy))
+        {
+            if (!PasswordCsvExport.IsBusy) SynchronizePasswordCsvContext();
+            NotifyExportAvailability();
+        }
+    }
+    private void SynchronizePasswordCsvContext()
+    {
+        if (!PasswordCsvExport.IsBusy)
+            PasswordCsvExport.SetContext(ExportViewModel.SelectedApp?.AppInfo, ExportViewModel.SelectedProfile?.ProfileInfo);
+    }
+    private void NotifyExportAvailability()
+    {
+        PasswordCsvExport.IsHostAvailable = CanUsePasswordCsv;
+        OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(IsWorkspaceEnabled));
+        OnPropertyChanged(nameof(CanUseBookmarkExport)); OnPropertyChanged(nameof(CanUsePasswordCsv));
+        NotifyBackupValidation();
+    }
 
     partial void OnIsRefreshingChanged(bool value)
     {
-        OnPropertyChanged(nameof(StatusText));
-        OnPropertyChanged(nameof(IsWorkspaceEnabled));
-        NotifyBackupValidation();
+        NotifyExportAvailability();
     }
 
     partial void OnDiscoveryMessageChanged(string value) => OnPropertyChanged(nameof(StatusText));
@@ -201,6 +229,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
                 .FirstOrDefault(item => PathComparer.Equals(InstallationKey(item.AppInfo), InstallationKey(app)))
                 ?.Profiles.Select(profile => profile.ProfileInfo).ToArray() ?? Array.Empty<BraveProfileInfo>());
         ExportViewModel.PropertyChanged += OnExportStateChanged;
+        PasswordCsvExport.PropertyChanged += OnPasswordCsvStateChanged;
     }
 
     /// <summary>Rescans off the UI thread, preserving matching active, expanded, bulk and profile selections.</summary>
@@ -208,7 +237,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
-        if (_disposed || IsRefreshing || IsBackupRunning) return;
+        if (_disposed || IsRefreshing || IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
         IsRefreshing = true;
         DiscoveryMessage = "Searching for Brave installations…";
         try
@@ -290,7 +319,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates an installation and returns from bulk to its individual workspace.</summary>
     public void Activate(InstallationViewModel installation)
     {
-        if (IsBackupRunning || !Installations.Contains(installation)) return;
+        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || !Installations.Contains(installation)) return;
         foreach (var item in Installations) item.IsActive = ReferenceEquals(item, installation);
         var changed = !ReferenceEquals(ActiveInstallation, installation);
         if (changed) FocusedProfile = installation.Profiles.FirstOrDefault();
@@ -303,7 +332,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates the double-clicked installation and toggles only its bulk-export checkmark.</summary>
     public void ToggleBulkSelection(InstallationViewModel installation)
     {
-        if (IsBackupRunning) return;
+        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
         Activate(installation);
         installation.IsChecked = !installation.IsChecked;
     }
@@ -320,7 +349,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ExportAll()
     {
-        if (IsBackupRunning || !HasBulkSelection) return;
+        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || !HasBulkSelection) return;
         if (ActiveInstallation == null) Activate(Installations.First(item => item.IsChecked));
         IsBulkMode = true;
         SelectedTabIndex = BackupTabIndex;
@@ -331,7 +360,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ResetBackupForm()
     {
-        if (IsBackupRunning) return;
+        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
         Options.Reset();
         foreach (var profile in Installations.SelectMany(item => item.Profiles)) profile.IsSelected = false;
     }
@@ -340,7 +369,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task BrowseBackupPathAsync()
     {
-        if (IsBackupRunning || _pickBackupPath == null) return;
+        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || _pickBackupPath == null) return;
         var path = await _pickBackupPath(Options.BackupPath);
         if (!string.IsNullOrWhiteSpace(path)) Options.BackupPath = path;
     }
@@ -355,9 +384,12 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         ConfirmUnencryptedExtensionData = null;
         ConfirmUnencryptedNativeSessions = null;
         ConfirmUnencryptedTabManagerPlus = null;
+        ConfirmRawPasswordPreservation = null; PasswordKeyUnlocker = null; PasswordBrowserState = null;
         ExtensionBrowserState = null;
         Options.PropertyChanged -= OnOptionsChanged;
         ExportViewModel.PropertyChanged -= OnExportStateChanged;
+        PasswordCsvExport.PropertyChanged -= OnPasswordCsvStateChanged;
+        PasswordCsvExport.Dispose();
         Options.ClearSecrets();
         ExportViewModel.Dispose();
         ExportFilePicker = null;

@@ -20,11 +20,13 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
     private bool _disposed;
     private CancellationTokenSource? _operation;
     private readonly Dictionary<string, string> _destinations = new(HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private Func<string, Task<string?>>? _picker;
     private Func<PasswordCsvExportWarning, CancellationToken, Task<bool>>? _confirmation;
     public IReadOnlyList<PasswordSourceOption> PasswordSources { get; } = new BackupOptionsViewModel().PasswordSources;
     [ObservableProperty] private PasswordSourceOption? _selectedPasswordSource;
     [ObservableProperty] private string _destination = string.Empty;
     [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private bool _isHostAvailable = true;
     [ObservableProperty] private bool _succeeded;
     [ObservableProperty] private string _status = string.Empty;
     [ObservableProperty] private string _report = string.Empty;
@@ -32,6 +34,12 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
     public string FullDestination
     {
         get { try { return string.IsNullOrWhiteSpace(Destination) ? "Choose a CSV destination" : Path.GetFullPath(Destination); } catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException) { return "Invalid CSV destination"; } }
+    }
+    public string PasswordSourceDescription => SelectedPasswordSource?.Description ?? "Choose the actual supported source. Selection does not read credentials.";
+    public Func<string, Task<string?>>? PickDestination
+    {
+        get => _picker;
+        set { _picker = value; BrowseDestinationCommand.NotifyCanExecuteChanged(); }
     }
     public Func<ProcessPresence>? ObserveBrowserState { get; set; }
     public Func<ReadOnlyMemory<byte>, CancellationToken, PasswordKeyMaterial>? Unlock { get; set; }
@@ -42,6 +50,7 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
         set { _confirmation = value; NotifyAvailability(); }
     }
     public string Availability => IsBusy ? "Password CSV export is in progress." :
+        !IsHostAvailable ? "Another operation is in progress; wait before exporting password CSV." :
         _installation is null || _profile is null ? "Select an installation and one profile." :
         SelectedPasswordSource is null || !PasswordSources.Contains(SelectedPasswordSource) ? "Choose a supported Password source." :
         !BravePasswordCsvExport.SupportsVersion(_installation.Version) ? "CSV currently supports only the researched Brave 1.102.13 version profile; protected backup is available separately." :
@@ -70,6 +79,7 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsBusy) throw new InvalidOperationException("Cannot change the profile during CSV export.");
+        if (Equals(_installation, installation) && Equals(_profile, profile)) return;
         if (_profile is not null) _destinations[Path.GetFullPath(_profile.ProfileDirectory)] = Destination;
         var installationChanged = !Equals(_installation, installation);
         _installation = installation; _profile = profile;
@@ -79,10 +89,28 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
         NotifyAvailability();
     }
     partial void OnDestinationChanged(string value) { OnPropertyChanged(nameof(FullDestination)); NotifyAvailability(); }
-    partial void OnSelectedPasswordSourceChanged(PasswordSourceOption? value) => NotifyAvailability();
-    partial void OnIsBusyChanged(bool value) { NotifyAvailability(); CancelCommand.NotifyCanExecuteChanged(); }
-    private void NotifyAvailability() { OnPropertyChanged(nameof(Availability)); ExportCsvCommand.NotifyCanExecuteChanged(); }
-    private bool CanExportCsv() => !_disposed && !IsBusy && _installation is not null && _profile is not null &&
+    partial void OnSelectedPasswordSourceChanged(PasswordSourceOption? value) { OnPropertyChanged(nameof(PasswordSourceDescription)); NotifyAvailability(); }
+    partial void OnIsBusyChanged(bool value) { NotifyAvailability(); CancelCommand.NotifyCanExecuteChanged(); BrowseDestinationCommand.NotifyCanExecuteChanged(); }
+    partial void OnIsHostAvailableChanged(bool value) => NotifyAvailability();
+    private void NotifyAvailability() { OnPropertyChanged(nameof(Availability)); ExportCsvCommand.NotifyCanExecuteChanged(); BrowseDestinationCommand.NotifyCanExecuteChanged(); }
+    private bool CanBrowseDestination() => !_disposed && IsHostAvailable && !IsBusy && _installation is not null && _profile is not null && _picker is not null;
+    /// <summary>Uses the host save picker without creating a file; cancellation keeps the current profile destination.</summary>
+    [RelayCommand(CanExecute = nameof(CanBrowseDestination))]
+    public async Task BrowseDestinationAsync()
+    {
+        if (!CanBrowseDestination()) return;
+        var installation = _installation; var profile = _profile!; var picker = _picker!;
+        try
+        {
+            var path = await picker(Destination);
+            if (_disposed || string.IsNullOrWhiteSpace(path)) return;
+            if (Equals(_installation, installation) && Equals(_profile, profile)) Destination = path;
+            else _destinations[Path.GetFullPath(profile.ProfileDirectory)] = path;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or ArgumentException)
+        { if (!_disposed) Status = "The CSV save dialog is unavailable. Enter a local destination path directly."; }
+    }
+    private bool CanExportCsv() => !_disposed && IsHostAvailable && !IsBusy && _installation is not null && _profile is not null &&
         SelectedPasswordSource is not null && PasswordSources.Contains(SelectedPasswordSource) &&
         BravePasswordCsvExport.SupportsVersion(_installation.Version) && string.IsNullOrEmpty(DestinationValidation) && _confirmation is not null;
 
@@ -112,5 +140,11 @@ public partial class PasswordCsvExportViewModel : ViewModelBase, IDisposable
     [RelayCommand(CanExecute = nameof(CanCancel))]
     public void Cancel() => _operation?.Cancel();
     /// <summary>Cancels in-flight work; its operation finally block disposes resources after cancellation propagates.</summary>
-    public void Dispose() { if (_disposed) return; _disposed = true; _operation?.Cancel(); NotifyAvailability(); CancelCommand.NotifyCanExecuteChanged(); }
+    public void Dispose()
+    {
+        if (_disposed) return; _disposed = true; _operation?.Cancel();
+        _confirmation = null; _picker = null; Unlock = null; ObserveBrowserState = null;
+        _destinations.Clear(); _installation = null; _profile = null;
+        NotifyAvailability(); CancelCommand.NotifyCanExecuteChanged();
+    }
 }

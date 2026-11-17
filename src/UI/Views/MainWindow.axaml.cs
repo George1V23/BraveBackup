@@ -27,8 +27,43 @@ public partial class MainWindow : Window
             ConfirmUnencryptedTabManagerPlus = ConfirmUnencryptedTabManagerPlusAsync,
             ConfirmRawPasswordPreservation = ConfirmRawPasswordPreservationAsync
         };
+        var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
+        csv.PickDestination = PickPasswordCsvPathAsync;
+        csv.ConfirmPlaintextSave = ConfirmPasswordCsvSaveAsync;
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Shows fresh standalone plaintext-save/replacement consent, closing without approval on cancellation.</summary>
+    private async Task<bool> ConfirmPasswordCsvSaveAsync(PasswordCsvExportWarning warning, CancellationToken token)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+            return await Dispatcher.UIThread.InvokeAsync(() => ConfirmPasswordCsvSaveAsync(warning, token));
+        token.ThrowIfCancellationRequested();
+        var dialog = new Window { Title = "Save readable passwords?", Width = 600, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var cancel = new Button { Content = "Cancel" }; var save = new Button { Content = "Save plaintext CSV" };
+        cancel.Click += (_, _) => dialog.Close(false); save.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel { Margin = new Avalonia.Thickness(24), Spacing = 16, Children =
+        {
+            new TextBlock { Text = warning.Message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+            new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+        } };
+        using var registration = token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(false)));
+        return await dialog.ShowDialog<bool>(this);
+    }
+
+    /// <summary>Selects a standalone CSV destination without creating the file or accessing credentials.</summary>
+    private async Task<string?> PickPasswordCsvPathAsync(string currentPath)
+    {
+        if (!StorageProvider.CanSave) throw new NotSupportedException("A local save picker is unavailable.");
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Choose password CSV destination", DefaultExtension = "csv",
+            SuggestedFileName = string.IsNullOrWhiteSpace(currentPath) ? "brave-passwords.csv" : Path.GetFileName(currentPath),
+            FileTypeChoices = new[] { new FilePickerFileType("Password CSV (*.csv)") { Patterns = new[] { "*.csv" }, MimeTypes = new[] { "text/csv" } } }
+        });
+        return file?.TryGetLocalPath();
     }
 
     /// <summary>Dispatches the approved raw-or-cancel choice to the UI; cancellation closes it without approval.</summary>

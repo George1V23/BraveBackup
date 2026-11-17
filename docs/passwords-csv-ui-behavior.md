@@ -2,9 +2,9 @@
 
 `PasswordCsvExportViewModel` prepares the standalone CSV UI behavior without adding or
 changing an Export view. The user reserved visible-layout/control decisions for individual
-review. Placement is currently awaiting a choice between a separate Password CSV section
-below bookmark export and inner Bookmarks/Passwords tabs. Existing bookmark export is
-untouched. This class is not yet attached to live shell discovery or selection.
+review. The user chose a separate Password CSV section below bookmark export. The
+[section/host integration](passwords-csv-section.md) is now implemented; existing bookmark
+export is preserved and the class is connected to the selected export profile.
 
 ## Metadata context and readiness
 
@@ -52,7 +52,7 @@ dispose during confirmation, existing-file preservation, unexpected-message reda
 version rejection. Test credentials/keys/files are synthetic and disposable; no real keyring
 or profile was accessed. The full build compiles the new model without changing UI layout.
 
-After the layout choice, the host/view can connect the selected profile, approved provider
-selector, destination picker, explicit CSV action/cancel and warning dialog. Broader native
+The selected layout now connects the profile, provider selector, destination picker,
+CSV action/cancel and warning dialog through the host. Broader native
 compatibility, CSV-in-archive contracts/consent and real window interaction checks remain
 pending. No restore behavior or archive format changes were introduced.

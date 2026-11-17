@@ -124,5 +124,38 @@ public sealed class PasswordCsvExportViewModelTests : IDisposable
         await vm.ExportCsvAsync(); Assert.Equal(0, _unlocks);
     }
 
+    [Fact]
+    public async Task DestinationPickerOnlyChangesMetadataAndCancellationKeepsPath()
+    {
+        using var vm = Create(prepare: false); var original = vm.Destination;
+        vm.PickDestination = _ => Task.FromResult<string?>(null);
+        await vm.BrowseDestinationAsync(); Assert.Equal(original, vm.Destination);
+        var picked = Path.Combine(_root, "output", "picked.csv");
+        vm.PickDestination = _ => Task.FromResult<string?>(picked);
+        await vm.BrowseDestinationAsync(); Assert.Equal(picked, vm.FullDestination); Assert.Equal(0, _unlocks); Assert.False(File.Exists(picked));
+    }
+
+    [Fact]
+    public async Task HostInterlockPreventsStartingCsvWithoutAccessingCredentials()
+    {
+        using var vm = Create(prepare: false); vm.SelectedPasswordSource = Assert.Single(vm.PasswordSources);
+        vm.ConfirmPlaintextSave = (_, _) => throw new Exception("Must not prompt");
+        vm.IsHostAvailable = false; Assert.False(vm.ExportCsvCommand.CanExecute(null));
+        Assert.Contains("Another operation", vm.Availability); await vm.ExportCsvAsync(); Assert.Equal(0, _unlocks);
+    }
+
+    [Fact]
+    public async Task PickerResultStaysWithTheProfileThatOpenedIt()
+    {
+        using var vm = Create(prepare: false);
+        var choice = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.PickDestination = _ => choice.Task;
+        var browsing = vm.BrowseDestinationAsync();
+        vm.SetContext(App(), new BraveProfileInfo("Other", Path.Combine(Data, "Profile 1"), ""));
+        var picked = Path.Combine(_root, "output", "original-profile.csv"); choice.SetResult(picked);
+        await browsing; Assert.Empty(vm.Destination);
+        vm.SetContext(App(), ProfileInfo); Assert.Equal(picked, vm.Destination); Assert.Equal(0, _unlocks);
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

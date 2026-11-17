@@ -155,3 +155,7 @@ archives with UI-thread consent. CSV Export controls and CSV archive support rem
 [Standalone password CSV view-model behavior](passwords-csv-ui-behavior.md) now covers
 frozen requests, per-profile destinations, fresh consent and cancellation. Export layout
 placement is awaiting the user’s reserved visible-control review; no view was changed yet.
+
+The user approved the [Password CSV section below bookmark export](passwords-csv-section.md).
+Profile synchronization, native picker/consent callbacks, busy interlocks and cancellation
+are connected. Broader compatibility and CSV-in-archive support remain pending.

@@ -485,9 +485,16 @@
                     </Border>
                 </TabItem>
                 <TabItem Header="Export">
-                    <Grid IsEnabled="{Binding !IsRefreshing}">
-                        <views:BookmarkExportView DataContext="{Binding ExportViewModel}" />
-                    </Grid>
+                    <ScrollViewer>
+                        <StackPanel>
+                            <Border IsEnabled="{Binding CanUseBookmarkExport}">
+                                <views:BookmarkExportView DataContext="{Binding ExportViewModel}" />
+                            </Border>
+                            <Border IsEnabled="{Binding CanUsePasswordCsv}">
+                                <views:PasswordCsvExportView DataContext="{Binding PasswordCsvExport}" />
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
                 <TabItem Header="Import">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
