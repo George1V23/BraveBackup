@@ -347,3 +347,19 @@ This is a low-level new-file primitive, not a complete transaction writer. Autho
 closed-browser checks, existing-target compare/publication, deletion for original absence,
 concurrent same-user mutation handling and Windows support remain pending. No application
 restore command is connected to this primitive.
+
+## Windows directory identity primitive (native validation pending)
+
+`WindowsRecoveryDirectoryIdentity` opens a retained directory handle without delete
+sharing, checks directory/reparse attributes through that handle, and compares volume plus
+128-bit file ID on verification. It does not rely on the older 64-bit file index that may
+be insufficient on ReFS. Sources:
+[CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew),
+[FILE_ID_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info).
+
+The Windows test project compiles and its existing six nonnative tests pass on Linux;
+three native cases, including the new rename/retention case, are explicitly skipped.
+No native Windows behavior has been verified here. The primitive is not connected to
+artifact storage or target publication. Ancestor-handle retention, child operations,
+exclusive recovery ownership and metadata/ACL fidelity remain pending. No restore
+capability is enabled by this addition.
