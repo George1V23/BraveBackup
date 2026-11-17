@@ -25,4 +25,27 @@ public sealed class LinuxRecoveryMetadataTests
         }
         finally { File.Delete(path); }
     }
+    [Fact]
+    public void ExtendedAttributesBlockCaptureAndApplyWithoutChangingMetadata()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(Path.GetTempPath(), "RecoveryXattr_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+            var metadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle);
+            Assert.Equal(0, SetAttribute(file.SafeFileHandle, "user.bravebackup.synthetic", [1], 1, 0));
+            var beforeMode = File.GetUnixFileMode(file.SafeFileHandle);
+            var beforeTime = File.GetLastWriteTimeUtc(file.SafeFileHandle);
+            Assert.Throws<IOException>(() => LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+            Assert.Throws<IOException>(() => LinuxRecoveryMetadata.Apply(file.SafeFileHandle, metadata));
+            Assert.Equal(beforeMode, File.GetUnixFileMode(file.SafeFileHandle));
+            Assert.Equal(beforeTime, File.GetLastWriteTimeUtc(file.SafeFileHandle));
+        }
+        finally { File.Delete(path); }
+    }
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "fsetxattr", SetLastError = true)]
+    private static extern int SetAttribute(Microsoft.Win32.SafeHandles.SafeFileHandle handle,
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string name,
+        byte[] value, nuint size, int flags);
 }

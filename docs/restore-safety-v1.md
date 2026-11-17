@@ -251,3 +251,17 @@ xattrs, creation/access times, filesystem flags or directory metadata. A product
 adapter must establish its supported metadata policy and reject cases requiring unsupported
 recovery fidelity, rather than claiming this codec alone provides complete rollback.
 Windows metadata and production target integration remain pending.
+
+## Unsupported extended-metadata gate
+
+Linux metadata capture/application now calls handle-based `flistxattr` with a zero-size
+buffer before reading/applying supported metadata. Any visible extended attributes or an
+inspection error blocks the operation without reading attribute names/values. Two native
+metadata tests pass, including an explicitly added synthetic user attribute that prevents
+both capture and application without changing mode/mtime.
+
+The [API contract](https://man7.org/linux/man-pages/man2/listxattr.2.html) permits attributes
+inaccessible to the caller to be omitted. Therefore an empty result is not proof that no
+privileged/hidden metadata exists. This gate is conservative evidence only; it does not
+establish full ACL/xattr fidelity or production target eligibility. Windows and production
+metadata recovery integration remain pending; no profile writes are enabled.
