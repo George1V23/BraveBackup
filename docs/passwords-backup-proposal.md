@@ -1,6 +1,10 @@
 # Passwords: scope review
 
 Status: all seven scope items reviewed and accepted, with the revisions recorded below.
+The implementation has since reached [protected and CSV archive UI integration](passwords-csv-archive-ui.md),
+including fresh save consent and synthetic native-dialog coverage. The component notes
+below record earlier checkpoints; their pending-work statements are historical. Current
+compatibility limits remain explicit, and real native unlock/Windows validation is unfinished.
 The encrypted-source [snapshot component](passwords-snapshot.md) is implemented and tested;
 [provider-aware decryption](passwords-decoding.md), the [Windows key adapter](passwords-windows-key.md)
 and the [Linux Secret Service adapter](passwords-linux-key.md) are implemented as isolated
@@ -22,9 +26,13 @@ six passing fixture checks and unresolved native/live-capture/automation limits.
 
 ## Current implementation
 
-The Passwords category exists but correctly blocks archive creation. Encryption defaults
-on. The current warning appears when Passwords is selected and archive encryption is off;
-there is no independent Protect passwords control or CSV export operation yet.
+The Passwords category supports protected encrypted archives with explicit provider choice,
+optional encrypted raw preservation on eligible capture failures, and explicitly confirmed
+CSV archive entries. Protection and archive encryption default on. Unchecking protection
+chooses CSV without changing the encryption choice. Standalone CSV is available below
+bookmark export. CSV operations retain the researched Brave 1.102.13 compatibility gate;
+unsupported versions/data fail explicitly. See the linked implementation checkpoints for
+provider, source-consistency and projection limits.
 
 `BraveProfileDetailsReader.GetPasswordEntries` checks the presence of Login Data and
 optionally reads a companion test/mock `Login Data.json`. For a real database it returns

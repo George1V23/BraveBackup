@@ -1,5 +1,27 @@
 # Next Backup implementation checkpoints
 
+## Current status
+
+The reviewed Backup controls and category writers are implemented within their documented
+compatibility limits, including protected passwords and explicitly confirmed CSV entries
+in encrypted or unencrypted v8 archives. Standalone bookmark and password CSV exports are
+connected. The latest regression run passed 1,009 tests with six environment-dependent
+tests skipped; the synthetic Linux desktop runner passed 28 checks.
+
+Remaining password limitations include broader browser/provider/URL compatibility,
+conditional live capture, actual OS unlock prompts and Windows desktop validation. These
+are not represented as supported. Real credentials are not needed for the next UI review.
+
+The next planned phase is the separately deferred Restore review, one visible control at
+a time as requested by the user. The first proposal is a backup-file selector; no Restore
+implementation or profile modification is authorized by a continuation alone. Import,
+Backups management and Profiles/Merge/Sync retain their later reviews.
+
+The sections below record the implementation checkpoints chronologically. Statements
+that a component was pending describe that checkpoint; later entries supersede them.
+
+## Checkpoint history
+
 The user has kept all previously deferred Backup-page controls. These decisions are
 recorded in [ui-decisions.md](ui-decisions.md). This plan separates completing their UI
 from enabling real archive operations, following the originally approved phased sequence.
