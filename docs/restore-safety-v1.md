@@ -303,3 +303,17 @@ publication must still guard identity and concurrent link/metadata changes.
 Latest full regression run (2026-11-18): 1,075 passed, six environment-dependent tests
 skipped (992 Core, 48 Brave, 29 Linux and six Windows-labelled tests passed). Production
 target integration, Windows recovery support and full metadata fidelity remain pending.
+
+## Native metadata transaction integration
+
+A Linux integration test now combines the real encrypted artifact lease, Core coordinator
+and native metadata codec through a test-only synthetic target adapter. It passes a
+complete prepare/apply/rollback cycle with two file mutations, verifying original bytes,
+exact persisted permission/mtime/UID/GID metadata, original absence and retained encrypted
+artifacts. Staging metadata is applied before rename and verified by the coordinator's
+publication readback. The adapter deliberately does not implement production path-race,
+directory metadata or source/browser-state policy and is not used by the application.
+
+This is one focused integration case; the previous full run remains 1,075 passed with six
+skipped. Phase 3 remains open for production target adapters, Windows support, complete
+supported-metadata policy and lifecycle/recovery integration. No profile writes are enabled.
