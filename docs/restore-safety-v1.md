@@ -363,3 +363,13 @@ No native Windows behavior has been verified here. The primitive is not connecte
 artifact storage or target publication. Ancestor-handle retention, child operations,
 exclusive recovery ownership and metadata/ACL fidelity remain pending. No restore
 capability is enabled by this addition.
+
+## Windows ancestor-handle retention (native validation pending)
+
+`WindowsRecoveryDirectoryChain` opens local-drive ancestors root-to-leaf and retains all
+identity handles without delete sharing, then revalidates each. Disposal releases them
+leaf-to-root without deleting artifacts. UNC/device paths fail closed. A Windows-only
+parent-rename/disposal test was added. The Windows project compiles; six nonnative tests
+pass and four native cases are explicitly skipped on this Linux host. Native behavior,
+child-file publication, operation ownership and ACL recovery remain unverified/pending.
+The chain is not connected to artifact storage or target writers; no restore is enabled.
