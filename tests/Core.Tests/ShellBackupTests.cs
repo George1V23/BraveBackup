@@ -322,7 +322,7 @@ public sealed class ShellBackupTests : IDisposable
         Assert.Contains("require archive encryption", shell.BackupAvailability);
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
         shell.Options.ProtectPasswords = false;
-        Assert.Contains("CSV archive saving is not available", shell.BackupAvailability);
+        Assert.Contains("Password source", shell.BackupAvailability);
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
         Assert.False(File.Exists(shell.Options.BackupPath));
     }

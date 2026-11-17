@@ -7,9 +7,9 @@ categories or changing this control performs no credential, keyring or source-fi
 Checked means the protected portable option requires whole-archive encryption. Turning
 Encrypt backup off never unchecks protection or silently chooses CSV; an actionable
 validation message asks to re-enable encryption. Unchecking protection explicitly chooses
-the intended CSV representation. CSV-in-archive saving remains unimplemented, so that
-choice is clearly blocked with its own explanation rather than being reinterpreted as
-another output format.
+the CSV representation. The later [CSV archive UI integration](passwords-csv-archive-ui.md)
+connects that explicit choice to the v8 writer with fresh destination-specific consent,
+supported-source selection and researched-version checks.
 
 The existing CSV warning now uses the actual representation/container choice. When CSV
 is explicitly chosen it describes either readability after archive decryption/extraction,
@@ -20,7 +20,8 @@ the protection error rather than claiming readable CSV was automatically selecte
 
 Shell availability surfaces these mode errors before the generic unsupported-category
 message. Protected password actions now use the [approved explicit provider selector](passwords-ui-provider.md)
-and remain blocked until its required selection/protection conditions are satisfied. Existing working categories, bookmark exports and archive
+and remain blocked until its required selection/protection conditions are satisfied. Existing working categories,
+bookmark exports and archive
 operations remain unchanged. No native credential UI was opened for this work.
 
 ## Provider control review completed

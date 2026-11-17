@@ -31,16 +31,22 @@ The runner drives actual selector bindings and dialog button handlers, checking:
 - The real plaintext warning displays the full destination and readability warning.
 - Cancel publishes no CSV; a separate approval saves the synthetic CSV.
 - The completion report contains counts only and the source files remain unchanged.
+- The archive CSV dialog displays the actual destination and readability warning.
+- Cancel or window-close declines archive saving; approval saves valid v8 archives under
+  both encryption states; operation cancellation closes the pending dialog without saving.
+- Archive CSV operations also preserve all synthetic source bytes.
 - A deliberately corrupt synthetic password database prompts for raw preservation.
 - Explicit preservation creates a valid encrypted version-7 backup.
 
 It saves a rendered main-window image to
 [`screenshots/password-csv-section.png`](screenshots/password-csv-section.png).
 This screenshot contains synthetic metadata and paths, not credential values.
+The unencrypted archive warning is also captured in
+[`screenshots/password-csv-archive-confirmation.png`](screenshots/password-csv-archive-confirmation.png).
 
 ## Recorded result and limits
 
-On 2026-11-17, the runner passed all 14 assertions using Linux/X11 software rendering
+On 2026-11-17, the extended runner passed all 28 assertions using Linux/X11 software rendering
 at 1160 × 860. No Avalonia warning output was emitted. The section's destination,
 readiness, action and completion feedback were visible in the rendered image.
 
@@ -48,4 +54,4 @@ This validates native Avalonia layout, bindings and dialog interaction. It does 
 validate manual mouse/keyboard accessibility, other display scales/window sizes,
 the native file picker, actual OS unlock prompts, or execution on Windows. The
 existing unit/integration tests remain responsible for backend format and failure
-coverage. CSV entries inside backup archives remain unfinished.
+coverage. CSV archive UI integration is described in [its checkpoint](passwords-csv-archive-ui.md).

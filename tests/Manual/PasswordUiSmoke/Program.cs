@@ -94,6 +94,51 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 using (var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 { bitmap.Render(window); bitmap.Save(screenshot, PngBitmapEncoderOptions.Default); }
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "synthetic source bytes unchanged");
+                // Exercise real archive-CSV dialogs without native key access.
+                shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
+                shell.Installations[0].Profiles[0].IsSelected = true;
+                foreach (var category in shell.Options.Categories) category.IsSelected = category.Id == "passwords";
+                shell.Options.SelectedPasswordSource = shell.Options.PasswordSources[0];
+                shell.Options.ProtectPasswords = false; shell.Options.EncryptBackup = false;
+                shell.Options.BackupPath = Path.Combine(root, "output", "csv-cancel.bravebackup");
+                shell.PasswordBrowserState = () => ProcessPresence.Stopped;
+                shell.PasswordKeyUnlocker = (_, state, token) => csv.Unlock!(state, token);
+                shell.ConfirmPasswordCsvArchiveSave = (warning, token) => (Task<bool>)typeof(MainWindow)
+                    .GetMethod("ConfirmPasswordCsvArchiveSaveAsync", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, [warning, token])!;
+                var declinedArchive = shell.CreateBackupAsync();
+                dialog = await WaitDialog(desktop, "Save password CSV inside backup?");
+                Check(dialog.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains(shell.Options.BackupPath) == true), "archive CSV dialog shows full destination");
+                Check(dialog.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("readable by anyone with file access") == true), "archive CSV dialog states plaintext risk");
+                Click(dialog, "Cancel backup"); await declinedArchive;
+                Check(!shell.BackupSucceeded && !File.Exists(shell.Options.BackupPath), "archive CSV dialog Cancel publishes nothing");
+                var closedArchive = shell.CreateBackupAsync(); dialog = await WaitDialog(desktop, "Save password CSV inside backup?");
+                dialog.Close(); await closedArchive;
+                Check(!shell.BackupSucceeded && !File.Exists(shell.Options.BackupPath), "closing archive CSV dialog declines saving");
+                foreach (var encryptedCsv in new[] { false, true })
+                {
+                    shell.Options.EncryptBackup = encryptedCsv;
+                    shell.Options.Password = "Synthetic-archive-key-4827"; shell.Options.PasswordConfirmation = shell.Options.Password;
+                    shell.Options.BackupPath = Path.Combine(root, "output", encryptedCsv ? "csv-encrypted.bravebackup" : "csv-plain.bravebackup");
+                    var saveCsvArchive = shell.CreateBackupAsync(); dialog = await WaitDialog(desktop, "Save password CSV inside backup?");
+                    Check(dialog.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains(encryptedCsv ? "after decrypting" : "unencrypted archive") == true), "archive CSV dialog explains actual encryption state");
+                    if (!encryptedCsv)
+                    {
+                        using var warningBitmap = new RenderTargetBitmap(new PixelSize((int)dialog.Bounds.Width, (int)dialog.Bounds.Height), new Vector(96, 96));
+                        warningBitmap.Render(dialog);
+                        warningBitmap.Save(Path.Combine(repo, "docs", "screenshots", "password-csv-archive-confirmation.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    Click(dialog, "Save backup with CSV"); await saveCsvArchive;
+                    Check(shell.BackupSucceeded, "real archive CSV approval publishes backup");
+                    using var csvInput = File.OpenRead(shell.Options.BackupPath);
+                    Check(BackupArchive.Validate(csvInput, encryptedCsv ? "Synthetic-archive-key-4827" : null).FormatVersion == 8, "CSV archive validates as v8");
+                }
+                shell.Options.BackupPath = Path.Combine(root, "output", "csv-operation-cancel.bravebackup");
+                shell.Options.EncryptBackup = false;
+                var cancelledArchive = shell.CreateBackupAsync(); dialog = await WaitDialog(desktop, "Save password CSV inside backup?");
+                shell.CancelBackup(); await cancelledArchive;
+                Check(!dialog.IsVisible && !File.Exists(shell.Options.BackupPath), "operation cancellation closes CSV archive dialog without saving");
+                foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "CSV archive source bytes unchanged");
+                shell.Options.ProtectPasswords = true; shell.Options.EncryptBackup = true;
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;

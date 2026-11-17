@@ -78,7 +78,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
 
     /// <summary>Supported providers for this host. No source is selected or inspected automatically.</summary>
     public IReadOnlyList<PasswordSourceOption> PasswordSources { get; } = HostEnvironment.IsWindows
-        ? new[] { new PasswordSourceOption("Windows DPAPI (v10)", "Uses the current Windows logon context; a fresh prompt is not guaranteed. App-bound protection is unsupported. Raw preservation can be chosen on capture failure.", PasswordEncryptionProvider.WindowsDpapiV10) }
+        ? new[] { new PasswordSourceOption("Windows DPAPI (v10)", "Uses the current Windows logon context; a fresh prompt is not guaranteed. App-bound protection is unsupported. Protected backup can offer raw preservation on capture failure.", PasswordEncryptionProvider.WindowsDpapiV10) }
         : HostEnvironment.IsLinux
             ? new[] { new PasswordSourceOption("Linux Secret Service (v11)", "Choose only if every selected browser uses Secret Service. The native keyring may prompt to unlock. Direct KWallet, basic and portal backends are unsupported; they are not tried automatically.", PasswordEncryptionProvider.LinuxKeyringV11) }
             : Array.Empty<PasswordSourceOption>();
@@ -93,15 +93,13 @@ public partial class BackupOptionsViewModel : ViewModelBase
     /// <summary>Approved safe default. Changing whole-archive encryption never changes this explicit choice.</summary>
     [ObservableProperty] private bool _protectPasswords = true;
 
-    /// <summary>Describes the explicit password representation without claiming unsupported CSV archive saving works.</summary>
+    /// <summary>Describes the explicit password representation and fresh-save consent requirement.</summary>
     public string PasswordModeDescription => ProtectPasswords
         ? "Protect passwords: portable credentials require an encrypted backup. Native unlock may be required when the operation starts."
-        : "CSV chosen explicitly. CSV inside backups is not available yet; a fresh destination-specific warning and confirmation will be required.";
+        : "CSV chosen explicitly. Each selected profile gets a password CSV entry. A fresh destination-specific warning and confirmation is required before saving. Unsupported CSV data stops the backup; protected backup can offer raw-file preservation.";
 
     /// <summary>Blocks an incompatible protection/container choice without silently selecting CSV.</summary>
-    public string PasswordModeValidation => !PasswordsSelected ? string.Empty : !ProtectPasswords
-        ? "CSV archive saving is not available yet. Re-enable Protect passwords for the protected option."
-        : !EncryptBackup ? "Protected passwords require archive encryption. Re-enable Encrypt backup; CSV is never selected automatically."
+    public string PasswordModeValidation => !PasswordsSelected ? string.Empty : ProtectPasswords && !EncryptBackup ? "Protected passwords require archive encryption. Re-enable Encrypt backup; CSV is never selected automatically."
         : SelectedPasswordSource is null || !PasswordSources.Contains(SelectedPasswordSource) ? "Choose a supported Password source before starting password backup."
         : string.Empty;
 

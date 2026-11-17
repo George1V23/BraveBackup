@@ -114,7 +114,7 @@ public sealed class BackupOptionsViewModelTests
         options.EncryptBackup = true;
         Assert.False(options.ProtectPasswords); Assert.True(options.RequiresPlaintextConfirmation);
         Assert.Contains("after archive decryption", options.PasswordCsvWarning);
-        Assert.Contains("not available yet", options.PasswordModeValidation);
+        Assert.Contains("Password source", options.PasswordModeValidation);
         options.Reset(); Assert.True(options.ProtectPasswords); Assert.True(options.EncryptBackup);
         Assert.False(options.PasswordsSelected); Assert.False(options.RequiresPlaintextConfirmation);
     }

@@ -25,7 +25,8 @@ public partial class MainWindow : Window
             ConfirmUnencryptedExtensionData = ConfirmUnencryptedExtensionDataAsync,
             ConfirmUnencryptedNativeSessions = ConfirmUnencryptedNativeSessionsAsync,
             ConfirmUnencryptedTabManagerPlus = ConfirmUnencryptedTabManagerPlusAsync,
-            ConfirmRawPasswordPreservation = ConfirmRawPasswordPreservationAsync
+            ConfirmRawPasswordPreservation = ConfirmRawPasswordPreservationAsync,
+            ConfirmPasswordCsvArchiveSave = ConfirmPasswordCsvArchiveSaveAsync
         };
         var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
         csv.PickDestination = PickPasswordCsvPathAsync;
@@ -43,6 +44,25 @@ public partial class MainWindow : Window
         var dialog = new Window { Title = "Save readable passwords?", Width = 600, SizeToContent = SizeToContent.Height,
             CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var cancel = new Button { Content = "Cancel" }; var save = new Button { Content = "Save plaintext CSV" };
+        cancel.Click += (_, _) => dialog.Close(false); save.Click += (_, _) => dialog.Close(true);
+        dialog.Content = new StackPanel { Margin = new Avalonia.Thickness(24), Spacing = 16, Children =
+        {
+            new TextBlock { Text = warning.Message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+            new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12, Children = { cancel, save } }
+        } };
+        using var registration = token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(false)));
+        return await dialog.ShowDialog<bool>(this);
+    }
+
+    /// <summary>Obtains fresh CSV archive consent on the UI thread; cancellation or closing declines.</summary>
+    private async Task<bool> ConfirmPasswordCsvArchiveSaveAsync(PasswordCsvArchiveWarning warning, CancellationToken token)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+            return await Dispatcher.UIThread.InvokeAsync(() => ConfirmPasswordCsvArchiveSaveAsync(warning, token));
+        token.ThrowIfCancellationRequested();
+        var dialog = new Window { Title = "Save password CSV inside backup?", Width = 600, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var cancel = new Button { Content = "Cancel backup" }; var save = new Button { Content = "Save backup with CSV" };
         cancel.Click += (_, _) => dialog.Close(false); save.Click += (_, _) => dialog.Close(true);
         dialog.Content = new StackPanel { Margin = new Avalonia.Thickness(24), Spacing = 16, Children =
         {

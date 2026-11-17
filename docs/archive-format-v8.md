@@ -78,8 +78,8 @@ processes with sufficient filesystem privileges.
 
 ## Checkpoint and coverage
 
-This checkpoint implements the backend/API and validators. The existing UI still blocks
-CSV-in-backup operations until the fresh dialog is connected. No restore/import is added.
+The backend/API and validators are now connected to the
+[approved Backup UI and fresh consent dialog](passwords-csv-archive-ui.md). No restore/import is added.
 Standalone CSV UI behavior remains unchanged. Backend tests cover both envelope states,
 source preservation, fresh consent, cancellation, source/cache/destination changes, cleanup,
 and malformed CSV/manifest/category rejection. Protected v6/v7 regression tests remain in

@@ -384,6 +384,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         ConfirmUnencryptedExtensionData = null;
         ConfirmUnencryptedNativeSessions = null;
         ConfirmUnencryptedTabManagerPlus = null;
+        ConfirmPasswordCsvArchiveSave = null;
         ConfirmRawPasswordPreservation = null; PasswordKeyUnlocker = null; PasswordBrowserState = null;
         ExtensionBrowserState = null;
         Options.PropertyChanged -= OnOptionsChanged;

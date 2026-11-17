@@ -33,6 +33,13 @@ public partial class ShellViewModel
 
     /// <summary>Fresh raw-or-cancel choice. Called from the archive worker; the host must dispatch its UI.</summary>
     public Func<PasswordRawFallbackWarning, CancellationToken, Task<bool>>? ConfirmRawPasswordPreservation { get; set; }
+    private Func<PasswordCsvArchiveWarning, CancellationToken, Task<bool>>? _confirmPasswordCsvArchiveSave;
+    /// <summary>Fresh destination-specific approval for CSV entries, including encrypted archives. Missing host consent blocks CSV.</summary>
+    public Func<PasswordCsvArchiveWarning, CancellationToken, Task<bool>>? ConfirmPasswordCsvArchiveSave
+    {
+        get => _confirmPasswordCsvArchiveSave;
+        set { _confirmPasswordCsvArchiveSave = value; NotifyBackupValidation(); }
+    }
     /// <summary>Controlled host/test observation; null uses the native browser process probe.</summary>
     public Func<ProcessPresence>? PasswordBrowserState { get; set; }
     /// <summary>Optional host/test owned-key adapter; the UI's default uses native key access only on an explicit operation.</summary>
@@ -74,6 +81,8 @@ public partial class ShellViewModel
                 ? "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus."
                 : !string.IsNullOrEmpty(Options.PasswordModeValidation)
                     ? Options.PasswordModeValidation
+                : !string.IsNullOrEmpty(PasswordCsvArchiveValidation)
+                    ? PasswordCsvArchiveValidation
                 : Options.Categories.Any(item =>
                     item.IsSelected &&
                     item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus" or "passwords"))
@@ -83,6 +92,14 @@ public partial class ShellViewModel
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
                             ? BackupDestinationValidation
                             : "Ready to create a backup. Passwords, Extensions and TabManagerPlus require Brave closed. Restore is not available yet.";
+
+    /// <summary>Checks metadata and host consent availability only; never probes password sources.</summary>
+    private string PasswordCsvArchiveValidation => !Options.PasswordsSelected || Options.ProtectPasswords ? string.Empty
+        : BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected) &&
+            !BravePasswordCsvExport.SupportsVersion(item.AppInfo.Version))
+            ? "Password CSV backup supports only the researched Brave 1.102.13 version profile. Use Protect passwords for other versions."
+        : ConfirmPasswordCsvArchiveSave is null ? "A plaintext password CSV confirmation dialog is required before backup."
+        : string.Empty;
 
     private string BackupDestinationValidation
     {
@@ -112,6 +129,7 @@ public partial class ShellViewModel
                                           item.Id is "bookmarks" or "settings" or "extensions" or "sessions"
                                               or "tabmanagerplus" or "passwords") &&
                                       string.IsNullOrEmpty(Options.PasswordModeValidation) &&
+                                      string.IsNullOrEmpty(PasswordCsvArchiveValidation) &&
                                       (!Options.EncryptBackup || string.IsNullOrEmpty(Options.PasswordValidation)) &&
                                       string.IsNullOrEmpty(BackupDestinationValidation);
 
@@ -136,11 +154,14 @@ public partial class ShellViewModel
         var selectedPasswordSource = Options.SelectedPasswordSource;
         var protectPasswords = Options.ProtectPasswords;
         var rawChoice = ConfirmRawPasswordPreservation;
+        var csvChoice = ConfirmPasswordCsvArchiveSave;
         var passwordObserver = PasswordBrowserState;
         var passwordUnlocker = PasswordKeyUnlocker;
         var passwordOptions = categories.Contains("passwords") ? new PasswordBackupOptions
         {
             ProtectPasswords = protectPasswords,
+            ConfirmCsvArchiveSave = csvChoice,
+            CsvLineEnding = HostEnvironment.IsWindows ? PasswordCsvLineEnding.WindowsCrLf : PasswordCsvLineEnding.LinuxLf,
             GetProvider = (_, _) => selectedPasswordSource!.Provider,
             ObserveBrowserState = passwordObserver,
             Unlock = passwordUnlocker,
@@ -195,6 +216,7 @@ public partial class ShellViewModel
             if (categories.Contains("extensions"))
                 BackupMessage += "\n" + result.ExtensionsSummary +
                                  "\nRaw files were saved; extensions have not been installed or restored.";
+            if (categories.Contains("passwords")) BackupMessage += "\n" + result.PasswordsSummary;
             if (categories.Contains("sessions")) BackupMessage += "\n" + result.SessionsSummary;
             if (categories.Contains("tabmanagerplus")) BackupMessage += "\n" + result.TabManagerPlusSummary;
             BackupReport = result.Report;

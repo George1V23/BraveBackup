@@ -173,3 +173,9 @@ and a backend writer for encrypted or unencrypted archives, with mandatory fresh
 before staging/unlock, source revalidation and atomic publication. Versions 1–7 remain
 compatible. The UI still blocks CSV-in-backup pending its destination-specific dialog wiring;
 broader browser compatibility and native OS validation also remain pending.
+
+The [CSV archive UI](passwords-csv-archive-ui.md) now connects the approved explicit
+protection choice to v8 archives with fresh destination-specific consent. It supports
+encrypted and unencrypted containers, blocks unsupported versions/missing consent hosts,
+freezes requests and releases callbacks on disposal. Synthetic native-dialog and regression
+tests cover the integration. Broader browser compatibility and native OS validation remain pending.
