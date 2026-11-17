@@ -1,7 +1,7 @@
 # Restore control review
 
-Restore remains in control-by-control review. These decisions do not yet authorize
-implementing the whole page or changing browser profiles.
+The control-by-control review is complete. These decisions define the proposed behavior;
+the phased implementation plan is awaiting approval before application code changes.
 
 ## Accepted controls
 
@@ -80,8 +80,6 @@ implementing the whole page or changing browser profiles.
     destinations and browser state and create/verify safety backups before modification.
     Material scope changes require a new review and confirmation.
 
-## Next proposed control
-
 12. **Restore progress and cancellation — edited by user.** Show a progress bar and
     a hierarchical completion list identifying Brave installations, profiles and the
     categories within each profile whose restoration has finished. Report actual progress;
@@ -126,5 +124,6 @@ implementing the whole page or changing browser profiles.
 ## Review status
 
 All fifteen items are reviewed, including the user's revised pause/rollback/resume flow.
-The next step is a phased Restore implementation plan. The future diff/merge tool remains
+The [phased Restore implementation plan](restore-completion-plan.md) is proposed for approval. The future diff/merge
+tool remains
 separate from replacement restore; see [its scope and KDiff3 investigation](diff-merge-future.md).
