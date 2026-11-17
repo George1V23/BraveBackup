@@ -1,0 +1,39 @@
+{
+  "braveRevision": "a9f619b0c086e98678e89caf332b5badb1be1cea",
+  "braveSourceVersion": "1.102.13",
+  "braveChromiumTag": "158.0.8127.37",
+  "matchedChromiumRevision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "upstreamSchemaFixtureSha256": "e87a53b058df2db9722c4bc742f4210b5ec807ba37edf25487bd3af5cbc3e445",
+  "notes": "Pinned source research and synthetic data only; not a runtime support declaration or user key access. Original upstream INSERT rows are excluded from generated fixtures.",
+  "sources": {
+    "matched_chrome_VERSION": "cad3816ec196f61ea824c0474cca7118ee4b00de14428b0afeb60e4af8948082",
+    "matched_chrome_browser_browser_process_impl.cc": "d1fc130bfd4b46bb4975fccb4aa1bd82cb7990f94858e2012984c9d129332ffb",
+    "matched_chrome_browser_extensions_api_passwords_private_passwords_private_delegate_impl.cc": "6f90a06ae1608d8fd112160a0a3498f1a59fe5f55d2d1372afc5318b75609d96",
+    "matched_chrome_browser_os_crypt_app_bound_encryption_provider_win.cc": "cecb69b3d74dc5e20326ede164d1608573318744a5ff81b90c28e2df8836f0f7",
+    "matched_chrome_browser_os_crypt_app_bound_encryption_provider_win.h": "338fcc9571f9ae75b9dca78308651050c0d3a36b916ef7712631defad929f23a",
+    "matched_chrome_browser_os_crypt_app_bound_encryption_win.cc": "3fdf88ac86e930edc59bf2810a03bdf2590f48860f29154f44643488decd0098",
+    "matched_chrome_common_chrome_constants.cc": "31acb1832e0ab5f0c2c0f2df6d403589baeb2b1a553b982edf17e395d13d9672",
+    "matched_components_os_crypt_async_browser_dpapi_key_provider.cc": "31ac01753481296c03f5c26950c20e0dd3bfa0f597a522998c898e983205ddad",
+    "matched_components_os_crypt_async_browser_freedesktop_secret_key_provider.cc": "f70bdefbe468bb36940413cbbcf5a43ae66582a6d792400151de9820560b3449",
+    "matched_components_os_crypt_async_browser_freedesktop_secret_key_provider.h": "87ae5cbd54c5297c7f37c49391a8be9ba28b8a4decdc9e2fe68a99e32e3ce865",
+    "matched_components_os_crypt_async_browser_posix_key_provider.cc": "993b632cf8f7341ff052eec5a9c69f77562a0bba9fa05b3d5c798283f26feba9",
+    "matched_components_os_crypt_async_browser_secret_portal_key_provider.cc": "e54d1b2c96a1da8a9d9277e509b9fe2ac4a7cc99cb2559f24ff2243afcbb50e8",
+    "matched_components_os_crypt_async_browser_secret_portal_key_provider.h": "02a6c5e9b095a34e50614ebf5f9e3d90113239925e1333ea3a2a8862c7e0e0f8",
+    "matched_components_os_crypt_async_common_encryptor.cc": "3d58a27499e97d059e57ffdbd127e865282986d8e6197b39725b75e99d6ef3d0",
+    "matched_components_password_manager_core_browser_export_csv_writer.cc": "75dc8e38d353951119d153eba93b05f476c7eb63bc3399e6d4d171073e29f0c0",
+    "matched_components_password_manager_core_browser_export_password_csv_writer.cc": "c5691b28c25da4e9575a2f15c5ce5ed835b92e5eef94ee5c4fdb2cb3da5fea40",
+    "matched_components_password_manager_core_browser_password_manager_constants.cc": "f535aaf5f3dfed468a03ede710d8cbffd268f5587411caa583c584087b162ca9",
+    "matched_components_password_manager_core_browser_password_store_factory_util.cc": "2fe8d877de8a6ea1006ae99cc5acbed7512b4c55168bb781091b4e62b2503ad4",
+    "matched_components_password_manager_core_browser_password_store_login_database.cc": "875539cee95c4d4eb64a507e33b9a04c1b6ecc99eefc8376db8def060b87a9ab",
+    "matched_components_password_manager_core_browser_password_store_password_notes_table.cc": "a33b44ba82983484d18912b3e2712e1911d24c8a6dca4b8a663323349532c0d9",
+    "matched_components_password_manager_core_browser_ui_credential_ui_entry.cc": "776e9ee99f9a70c66a5bb8ac1acb7b1af7f3b0526e2e09cb70b6ac8024c26d8e",
+    "matched_components_test_data_password_manager_login_db_v43.sql": "e87a53b058df2db9722c4bc742f4210b5ec807ba37edf25487bd3af5cbc3e445"
+  },
+  "bravePatchSources": {
+    "brave_chromium_src_components_password_manager_core_browser_password_store_factory_util.cc": "a195074e42db9da32035895cd982ce29c5ee46c0bcb30916f14989b71332daa3",
+    "brave_patches_components-os_crypt-async-browser-freedesktop_secret_key_provider.h.patch": "9f7e010c52d4695064257e8a94f2fcf45f50e2b4711c41739b71d01f73b1af3d",
+    "brave_patches_components-password_manager-core-browser-password_store-login_database_posix.cc.patch": "7b00502ab960c3923ae1706e77989931daae69903cb1950cd84348fbe262e00c",
+    "brave_patches_components-password_manager-core-browser-password_store_factory_util.cc.patch": "1a61b2e30c37fc0db5461491880c9b72502358f352d49c732f6f683d74796c87",
+    "brave_patches_components-password_manager-core-browser-password_store_factory_util.h.patch": "1ebe29e382ab447d246ea053df45d7e8e2c737d8fd326c7b7ba8061f76663b40"
+  }
+}

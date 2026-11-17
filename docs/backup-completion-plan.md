@@ -90,7 +90,9 @@ The [Passwords scope decisions](passwords-backup-proposal.md) are accepted after
 review of all seven items. They include on-demand access, protected defaults, optional CSV,
 consistent live capture where possible, browser-assisted fallback investigation and an
 explicit raw-file preservation choice on portable-capture failure. Research and fixtures
-are the next checkpoint; password implementation has not started.
+checkpoint is complete: [Passwords sources, compatibility limits and synthetic fixtures](passwords-research.md).
+Six independent fixture checks pass. Safe SQLite capture and provider adapters are next;
+application password implementation and native OS/browser integration remain pending.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and

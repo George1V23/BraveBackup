@@ -1,0 +1,17 @@
+{
+  "Crypto.synthetic.json": "b7d1b2577fc382cbb2b6c0b0faf6f40ddf888871e0c2663ecc802f6fbaa4e9dd",
+  "LoginData.corrupt.bin": "2c71adf31e2ed91ae5f104df7f6bbdd972aa235ac747c5713cceb36041788d25",
+  "LoginData.unsupported.sqlite": "8ccc9db94edc55fc2eb7fbb1b1550c3c99e3ac5e46cc3c4f8eec1c4487417601",
+  "LoginData.v43.empty.sqlite": "e79d6f0dbf663400fb884dfff8d39497cf0279af8efd272aff3e9af345f51ec5",
+  "LoginData.v43.linux.sqlite": "928c2c52c33760bc9d7d3e3023ea8d3fcabeff0bfd12691faff6761ba1bc72b7",
+  "LoginData.v43.windows.sqlite": "24f1db34e7d68e88970b0db7e23ee095beb0442e402f9af0af9e48d08ebe4e3f",
+  "Passwords.synthetic.linux.csv": "103592bb20cea012090322ae0f09eec81be1a729adfb6bafbad8f9fda80aa8ce",
+  "Passwords.synthetic.windows.csv": "745321e4e93e4cbf6ee9a6a2b4622ccc5a7a661e51ca757a17d082bb7a493a13",
+  "Wal/Login Data": "d398b63c1404e5a01af26a09668425f63aadd16f4001c1e003a009098a7b2f14",
+  "Wal/Login Data-shm": "7763da178d82bf4b6fa0bd4b6766f1dd05199202a4e2fee86db7ef9a6a0af7d6",
+  "Wal/Login Data-wal": "d0bc9bae0a4e970ac7b9d2f0536d7b919f77c2e08537bdd214b037fe6a25358c",
+  "Wal.experiment.json": "256dcaec8e9d4b98771004ce282f9f0a29b19bbbb155f82c25961df9708d25e0",
+  "Source-evidence.json": "e7096dc9c8c6ab3a26effa9090d9c4660b422e2c53b07076694bdc79af902611",
+  "schema-v43.sql": "57d3d3e4470e14ed5c1aa6c2008296efa4915f6dbee7cf0aaa3ac56abd5464d2",
+  "UPSTREAM-LICENSE.txt": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b"
+}

@@ -1,0 +1,9 @@
+{
+  "sqliteVersion": "3.53.4",
+  "pinnedReadTransactionSawOldValue": true,
+  "newSnapshotSawCommittedWalValue": true,
+  "databaseBytesUnchangedByRead": true,
+  "walBytesUnchangedByRead": true,
+  "shmBytesUnchangedByRead": false,
+  "limitations": "Synthetic Linux observation only; not a source-write guarantee for every VFS/backend."
+}

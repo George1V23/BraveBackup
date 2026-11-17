@@ -1,0 +1,14 @@
+{
+  "testOnly": true,
+  "windowsKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "linuxKeyHex": "a65b8db08f85527dd428d5326b7e5d0b",
+  "syntheticLinuxSecret": "synthetic-keyring-secret-not-real",
+  "passwordUtf8": "fixture-password, \"quoted\"\n☃",
+  "noteUtf8": "fixture-note\r\nsecond line, \"quoted\"",
+  "valuesHex": {
+    "windows-v10-password": "763130000102030405060708090a0b216bae6fb097a736fd20e4f8c6860a09aff6a54585142b195c45ef6785eaee2f0406ecacf2e3176931cb2efbadce",
+    "windows-v10-note": "7631300c0d0e0f1011121314151617fe9711ac0a04997e59453cb09c815582366c838ad61152c4fe8edac295d5af8e4993482c73131bcf584bdb0931e3333c10ddff",
+    "linux-v11-password": "763131e9998b832904f0fcac9af956639a3a39cd9e2412c609b2b80326396c44149332",
+    "linux-v11-note": "763131fa388723f5133b9c1158f3d564b7bc836befbd6eba1a34c0a277fb9a699f74cbd51312fe3458d6e6a47a338d6e86bbf6"
+  }
+}

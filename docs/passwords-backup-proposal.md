@@ -3,6 +3,8 @@
 Status: all seven scope items reviewed and accepted, with the revisions recorded below.
 No password-reading, export, package or archive implementation has started. The user's
 protected default and explicitly confirmed optional plaintext CSV remain requirements.
+The subsequent [research/fixture checkpoint](passwords-research.md) records pinned sources,
+six passing fixture checks and unresolved native/live-capture/automation limits.
 
 ## Current implementation
 
