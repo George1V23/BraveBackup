@@ -146,3 +146,18 @@ This primitive is not connected to artifact publication yet. Handle-relative I/O
 publication race handling remain pending; path rechecking alone is not a race-free write.
 Windows implementation is pending and this primitive fails closed on unsupported hosts.
 No restore/profile writes are enabled by adding it.
+
+## Handle-relative Linux artifact operations
+
+Linux artifact storage now opens children and stages/publishes/cleans them relative to a
+retained directory handle (`openat`, `renameat2`, `unlinkat`). New-artifact publication uses
+RENAME_NOREPLACE. Reads reject final links and nonregular files using the opened handle.
+Directory identity is checked before/after operations; detected replacement fails rather
+than redirecting operations to a new directory. Four native directory tests and five
+artifact/scope tests pass. Sources: [openat](https://man7.org/linux/man-pages/man2/open.2.html),
+[renameat2](https://man7.org/linux/man-pages/man2/rename.2.html).
+
+This does not establish complete production race safety: opening the initial ancestor
+chain, concurrent changes to child names/staging files, same-type replacement before an
+overwriting rename, artifact ownership and directory durability still require protection.
+Windows remains on the earlier path-based helper. No profile writer is enabled.

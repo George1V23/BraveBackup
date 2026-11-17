@@ -30,6 +30,53 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         if (Identity(current) != _identity || Identity(_handle) != _identity)
             throw new IOException("Recovery directory identity changed.");
     }
+    /// <summary>Opens a regular child relative to the retained directory; links and special files are rejected.</summary>
+    public FileStream OpenReadChild(string name)
+    {
+        Verify(); CheckName(name);
+        var descriptor = OpenAt(_handle, name, 0x80000 | 0x20000 | 0x800, 0);
+        if (descriptor < 0) throw new IOException("Cannot open recovery artifact.");
+        var handle = new SafeFileHandle((IntPtr)descriptor, true);
+        try
+        {
+            if (Statx(handle, "", 0x1000, 1, out var status) != 0 || (status.Mask & 1) == 0 || (status.Mode & 0xF000) != 0x8000)
+                throw new IOException("Recovery artifact is not a regular file.");
+            Verify(); return new FileStream(handle, FileAccess.Read);
+        }
+        catch { handle.Dispose(); throw; }
+    }
+    /// <summary>Publishes a private staged child using directory-relative syscalls, so directory replacement cannot redirect writes.</summary>
+    public void PublishChild(string name, ReadOnlyMemory<byte> bytes, bool replace)
+    {
+        Verify(); CheckName(name);
+        var staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
+        var descriptor = OpenAt(_handle, staging, 1 | 0x40 | 0x80 | 0x20000 | 0x80000, 0x180);
+        if (descriptor < 0) throw new IOException("Cannot create private recovery staging.");
+        try
+        {
+            using (var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.Write))
+            { output.Write(bytes.Span); output.Flush(true); }
+            Verify();
+            // RENAME_NOREPLACE prevents a new artifact from replacing a concurrently created child.
+            if (RenameAt(_handle, staging, _handle, name, replace ? 0u : 1u) != 0)
+                throw new IOException("Cannot publish recovery artifact.");
+            Verify();
+        }
+        finally { UnlinkAt(_handle, staging, 0); }
+    }
+    private static void CheckName(string name)
+    {
+        if (string.IsNullOrEmpty(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0']) >= 0)
+            throw new ArgumentException("A single artifact filename is required.");
+    }
+    [DllImport("libc", EntryPoint = "openat", SetLastError = true)]
+    private static extern int OpenAt(SafeFileHandle directory, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int flags, uint mode);
+    [DllImport("libc", EntryPoint = "renameat2", SetLastError = true)]
+    private static extern int RenameAt(SafeFileHandle oldDirectory, [MarshalAs(UnmanagedType.LPUTF8Str)] string oldName,
+        SafeFileHandle newDirectory, [MarshalAs(UnmanagedType.LPUTF8Str)] string newName, uint flags);
+    [DllImport("libc", EntryPoint = "unlinkat", SetLastError = true)]
+    private static extern int UnlinkAt(SafeFileHandle directory, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int flags);
+
     private static void CheckAncestors(string path)
     {
         for (string? directory = path; directory is not null; directory = Path.GetDirectoryName(directory))

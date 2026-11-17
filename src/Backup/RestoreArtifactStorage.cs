@@ -18,6 +18,13 @@ public static class RestoreArtifactStorage
         if (initial != SnapshotNodeKind.Missing && (!replaceExisting || initial != SnapshotNodeKind.RegularFile))
             throw new IOException("The recovery destination cannot be replaced.");
         var originalHash = initial == SnapshotNodeKind.RegularFile ? Fingerprint(target) : null;
+        if (OperatingSystem.IsLinux())
+        {
+            using var directory = RecoveryDirectoryIdentity.Open(Path.GetDirectoryName(target)!);
+            if (originalHash is not null && Fingerprint(target) != originalHash) throw new IOException("Recovery destination changed contents.");
+            directory.PublishChild(Path.GetFileName(target), encrypted, replaceExisting);
+            return;
+        }
         var staging = Path.Combine(Path.GetDirectoryName(target)!, ".restore-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
@@ -35,7 +42,8 @@ public static class RestoreArtifactStorage
     public static byte[] Read(string path)
     {
         var target = Validate(path);
-        using var input = SnapshotFileAccess.OpenRead(target);
+        using var directory = OperatingSystem.IsLinux() ? RecoveryDirectoryIdentity.Open(Path.GetDirectoryName(target)!) : null;
+        using var input = directory is null ? SnapshotFileAccess.OpenRead(target) : directory.OpenReadChild(Path.GetFileName(target));
         if (input.Length is < ArchiveEncryption.HeaderSize or > MaximumBytes || !ArchiveEncryption.IsEncrypted(input))
             throw new InvalidDataException("Invalid recovery artifact framing or size.");
         var bytes = new byte[(int)input.Length];
