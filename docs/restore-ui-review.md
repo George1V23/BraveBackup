@@ -1,7 +1,8 @@
 # Restore control review
 
 The control-by-control review is complete. These decisions define the proposed behavior;
-the phased implementation plan is awaiting approval before application code changes.
+the phased implementation sequence is approved. Phase 1 read-only inspection is implemented
+for review; destination modification remains unavailable.
 
 ## Accepted controls
 
@@ -124,6 +125,6 @@ the phased implementation plan is awaiting approval before application code chan
 ## Review status
 
 All fifteen items are reviewed, including the user's revised pause/rollback/resume flow.
-The [phased Restore implementation plan](restore-completion-plan.md) is proposed for approval. The future diff/merge
+The [phased Restore implementation plan](restore-completion-plan.md) is approved. The future diff/merge
 tool remains
 separate from replacement restore; see [its scope and KDiff3 investigation](diff-merge-future.md).

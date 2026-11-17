@@ -1,6 +1,7 @@
 # Restore phased completion plan
 
-Status: proposed for user approval. No application code changes are part of this plan.
+Status: sequence approved by the user. Phase 1 is implemented for review; see
+[read-only inspection and validation](restore-phase1-preview.md). Later phases remain pending their checkpoints.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.

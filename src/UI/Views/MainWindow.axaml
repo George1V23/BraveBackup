@@ -480,9 +480,7 @@
                     </ScrollViewer>
                 </TabItem>
                 <TabItem Header="Restore">
-                    <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
-                        <TextBlock Text="Restoring from backup files is not available yet." Classes="muted" />
-                    </Border>
+                    <views:RestorePreviewView DataContext="{Binding RestorePreview}" />
                 </TabItem>
                 <TabItem Header="Export">
                     <ScrollViewer>

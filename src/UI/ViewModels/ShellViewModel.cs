@@ -27,6 +27,10 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets the Backup tab position.</summary>
     public const int BackupTabIndex = 0;
+    /// <summary>Gets the Restore tab position.</summary>
+    public const int RestoreTabIndex = 1;
+    /// <summary>Read-only archive inspection, independent from backup and live profile selections.</summary>
+    public RestorePreviewViewModel RestorePreview { get; } = new();
 
     /// <summary>Gets the Export tab position.</summary>
     public const int ExportTabIndex = 2;
@@ -391,6 +395,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         ExportViewModel.PropertyChanged -= OnExportStateChanged;
         PasswordCsvExport.PropertyChanged -= OnPasswordCsvStateChanged;
         PasswordCsvExport.Dispose();
+        RestorePreview.Dispose();
         Options.ClearSecrets();
         ExportViewModel.Dispose();
         ExportFilePicker = null;
@@ -466,8 +471,16 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         NotifyBackupSummary();
     }
 
+    partial void OnActiveInstallationChanged(InstallationViewModel? value)
+    {
+        if (value is null) RestorePreview.Leave();
+        else if (SelectedTabIndex == RestoreTabIndex) _ = RestorePreview.EnterAsync();
+    }
+
     partial void OnSelectedTabIndexChanged(int value)
     {
+        if (value == RestoreTabIndex) _ = RestorePreview.EnterAsync();
+        else RestorePreview.Leave();
         OnPropertyChanged(nameof(WorkspaceTitle));
         OnPropertyChanged(nameof(StatusText));
     }

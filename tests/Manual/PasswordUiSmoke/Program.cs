@@ -139,6 +139,27 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 Check(!dialog.IsVisible && !File.Exists(shell.Options.BackupPath), "operation cancellation closes CSV archive dialog without saving");
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "CSV archive source bytes unchanged");
                 shell.Options.ProtectPasswords = true; shell.Options.EncryptBackup = true;
+                // Read-only Restore phase 1 against the synthetic archive created above.
+                shell.SelectedTabIndex = ShellViewModel.RestoreTabIndex;
+                var restore = shell.RestorePreview;
+                restore.SourcePath = Path.Combine(root, "output", "csv-encrypted.bravebackup");
+                var previewDeadline = DateTime.UtcNow.AddSeconds(15);
+                while (restore.IsBusy && DateTime.UtcNow < previewDeadline) await Task.Delay(25);
+                Check(!restore.IsBusy && restore.NeedsUnlock && restore.Installations.Count == 0, "Restore waits for explicit archive unlock");
+                var restoreView = window.GetVisualDescendants().OfType<RestorePreviewView>().Single();
+                Check(restoreView.GetVisualDescendants().OfType<TextBox>().Any(box => box.PasswordChar == '●'), "Restore password field is masked");
+                restore.Password = "Synthetic-archive-key-4827"; await restore.UnlockAsync(); await Task.Delay(200);
+                Check(restore.Installations.Count == 1 && restore.Summary.Contains("format: 8"), "Restore renders validated archive inventory");
+                Check(restoreView.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("CSV passwords") == true), "Restore displays password representation without credential values");
+                using (var restoreBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
+                {
+                    restoreBitmap.Render(window);
+                    restoreBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase1-preview.png"), PngBitmapEncoderOptions.Default);
+                }
+                restore.Password = "synthetic-not-retained";
+                shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
+                Check(restore.Password.Length == 0 && restore.Installations.Count == 0, "leaving Restore clears password and preview");
+                foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Restore inspection leaves source profile bytes unchanged");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;

@@ -28,11 +28,24 @@ public partial class MainWindow : Window
             ConfirmRawPasswordPreservation = ConfirmRawPasswordPreservationAsync,
             ConfirmPasswordCsvArchiveSave = ConfirmPasswordCsvArchiveSaveAsync
         };
+        ((ShellViewModel)DataContext).RestorePreview.PickSource = PickRestoreSourceAsync;
         var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
         csv.PickDestination = PickPasswordCsvPathAsync;
         csv.ConfirmPlaintextSave = ConfirmPasswordCsvSaveAsync;
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Selects an existing local archive without creating files or touching browser profiles.</summary>
+    private async Task<string?> PickRestoreSourceAsync()
+    {
+        if (!StorageProvider.CanOpen) throw new InvalidOperationException("A local open picker is unavailable.");
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Choose backup to inspect", AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("BraveBackup archive (*.bravebackup)") { Patterns = new[] { "*.bravebackup" } } }
+        });
+        return files.Count == 1 ? files[0].TryGetLocalPath() : null;
     }
 
     /// <summary>Shows fresh standalone plaintext-save/replacement consent, closing without approval on cancellation.</summary>
