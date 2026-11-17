@@ -117,3 +117,10 @@ artifact-path authorization outside browser/source data, exclusive ownership, ph
 filesystem identity and race-safe directory/target handling. Type checks do not prevent a
 same-type concurrent replacement or ancestor race. Directory durability across power loss
 is not established. Do not enable restoration on the strength of this component alone.
+
+Artifact replacement now fingerprints bounded encrypted content before staging and again
+before publication to reject observed same-type content changes. Explicit replacement
+cannot clobber a plaintext or directory destination. Failed bounded reads clear their
+allocated buffers. All three focused artifact-storage tests pass. These checks still
+leave the final check/rename and ancestor races described above; physical identity and
+handle-relative production I/O remain pending, and restore execution is not enabled.

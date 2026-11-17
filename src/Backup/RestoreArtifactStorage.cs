@@ -1,4 +1,5 @@
 using BraveBackup.Platform;
+using System.Security.Cryptography;
 
 namespace BraveBackup.Core;
 
@@ -16,6 +17,7 @@ public static class RestoreArtifactStorage
         var initial = SnapshotFileAccess.Kind(target);
         if (initial != SnapshotNodeKind.Missing && (!replaceExisting || initial != SnapshotNodeKind.RegularFile))
             throw new IOException("The recovery destination cannot be replaced.");
+        var originalHash = initial == SnapshotNodeKind.RegularFile ? Fingerprint(target) : null;
         var staging = Path.Combine(Path.GetDirectoryName(target)!, ".restore-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
@@ -23,6 +25,8 @@ public static class RestoreArtifactStorage
             { output.Write(encrypted.Span); output.Flush(true); }
             Validate(target);
             if (SnapshotFileAccess.Kind(target) != initial) throw new IOException("Recovery destination changed type.");
+            if (originalHash is not null && Fingerprint(target) != originalHash)
+                throw new IOException("Recovery destination changed contents.");
             File.Move(staging, target, replaceExisting);
         }
         finally { if (File.Exists(staging)) File.Delete(staging); }
@@ -35,10 +39,36 @@ public static class RestoreArtifactStorage
         if (input.Length is < ArchiveEncryption.HeaderSize or > MaximumBytes || !ArchiveEncryption.IsEncrypted(input))
             throw new InvalidDataException("Invalid recovery artifact framing or size.");
         var bytes = new byte[(int)input.Length];
-        input.ReadExactly(bytes);
-        if (input.ReadByte() != -1) throw new IOException("Recovery artifact changed length.");
-        return bytes;
+        try
+        {
+            input.ReadExactly(bytes);
+            if (input.ReadByte() != -1) throw new IOException("Recovery artifact changed length.");
+            return bytes;
+        }
+        catch { CryptographicOperations.ZeroMemory(bytes); throw; }
     }
+    /// <summary>Hashes bounded encrypted framing for observed replacement conflicts, without authenticating its contents.</summary>
+    private static string Fingerprint(string path)
+    {
+        using var input = SnapshotFileAccess.OpenRead(path);
+        if (input.Length is < ArchiveEncryption.HeaderSize or > MaximumBytes || !ArchiveEncryption.IsEncrypted(input))
+            throw new InvalidDataException("Existing recovery artifact framing or size is invalid.");
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[65536];
+        try
+        {
+            long total = 0; int count;
+            while ((count = input.Read(buffer)) != 0)
+            {
+                total += count;
+                if (total > MaximumBytes) throw new InvalidDataException("Recovery artifact exceeded its size limit.");
+                hash.AppendData(buffer.AsSpan(0, count));
+            }
+            return Convert.ToHexStringLower(hash.GetHashAndReset());
+        }
+        finally { CryptographicOperations.ZeroMemory(buffer); }
+    }
+
     private static string Validate(string path)
     {
         var target = Path.GetFullPath(path);

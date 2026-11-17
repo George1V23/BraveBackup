@@ -31,5 +31,17 @@ public sealed class RestoreArtifactStorageTests : IDisposable
             Assert.Throws<IOException>(() => RestoreArtifactStorage.Read(link));
         }
     }
+    [Fact]
+    public void ReplacementCannotClobberPlaintextOrDirectoryAndLeavesNoStaging()
+    {
+        using var output = new MemoryStream();
+        using (var writer = ArchiveEncryption.CreateWriter(output, "synthetic-password")) writer.Write("fixture"u8);
+        var target = Path.Combine(_root, "existing"); File.WriteAllText(target, "keep-original");
+        Assert.Throws<InvalidDataException>(() => RestoreArtifactStorage.Publish(target, output.ToArray(), true));
+        Assert.Equal("keep-original", File.ReadAllText(target));
+        var directory = Path.Combine(_root, "directory"); Directory.CreateDirectory(directory);
+        Assert.Throws<IOException>(() => RestoreArtifactStorage.Publish(directory, output.ToArray(), true));
+        Assert.Single(Directory.GetFiles(_root));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }
