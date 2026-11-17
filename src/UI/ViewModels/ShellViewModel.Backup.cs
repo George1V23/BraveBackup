@@ -65,6 +65,8 @@ public partial class ShellViewModel
             ? "Select at least one profile for backup."
             : !Options.Categories.Any(item => item.IsSelected)
                 ? "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus."
+                : !string.IsNullOrEmpty(Options.PasswordModeValidation)
+                    ? Options.PasswordModeValidation
                 : Options.Categories.Any(item =>
                     item.IsSelected &&
                     item.Id is not ("bookmarks" or "settings" or "extensions" or "sessions" or "tabmanagerplus"))

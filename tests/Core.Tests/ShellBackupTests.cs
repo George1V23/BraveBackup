@@ -310,4 +310,20 @@ public sealed class ShellBackupTests : IDisposable
     }
 
     public void Dispose() => Directory.Delete(_root, true);
+    [Fact]
+    public async Task PasswordProtectionValidationExplainsTheActualChoiceWithoutCreatingFiles()
+    {
+        using var shell = await Create();
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        shell.Options.EncryptBackup = false;
+        Assert.True(shell.Options.ProtectPasswords);
+        Assert.Contains("require archive encryption", shell.BackupAvailability);
+        Assert.False(shell.CreateBackupCommand.CanExecute(null));
+        shell.Options.ProtectPasswords = false;
+        Assert.Contains("CSV archive saving is not available", shell.BackupAvailability);
+        Assert.False(shell.CreateBackupCommand.CanExecute(null));
+        Assert.False(File.Exists(shell.Options.BackupPath));
+    }
+
 }

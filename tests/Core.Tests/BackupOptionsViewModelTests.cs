@@ -67,6 +67,10 @@ public sealed class BackupOptionsViewModelTests
         passwords.IsSelected = true;
         Assert.False(options.RequiresPlaintextConfirmation);
         options.EncryptBackup = false;
+        Assert.False(options.RequiresPlaintextConfirmation);
+        Assert.True(options.ProtectPasswords);
+        Assert.Contains("require archive encryption", options.PasswordModeValidation);
+        options.ProtectPasswords = false;
         Assert.True(options.RequiresPlaintextConfirmation);
         Assert.Empty(options.Password);
         Assert.Empty(options.PasswordConfirmation);
@@ -97,4 +101,37 @@ public sealed class BackupOptionsViewModelTests
         Assert.Equal(0, options.PasswordStrength);
         Assert.Empty(options.PasswordConfirmation);
     }
+    [Fact]
+    public void ProtectDefaultsResetAndEncryptionNeverSelectsCsvImplicitly()
+    {
+        var options = new BackupOptionsViewModel();
+        options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        Assert.True(options.ProtectPasswords); options.EncryptBackup = false;
+        Assert.True(options.ProtectPasswords); Assert.False(options.RequiresPlaintextConfirmation);
+        Assert.NotEmpty(options.PasswordModeValidation);
+        options.ProtectPasswords = false; Assert.True(options.RequiresPlaintextConfirmation);
+        Assert.Contains("anyone with file access", options.PasswordCsvWarning);
+        options.EncryptBackup = true;
+        Assert.False(options.ProtectPasswords); Assert.True(options.RequiresPlaintextConfirmation);
+        Assert.Contains("after archive decryption", options.PasswordCsvWarning);
+        Assert.Contains("not available yet", options.PasswordModeValidation);
+        options.Reset(); Assert.True(options.ProtectPasswords); Assert.True(options.EncryptBackup);
+        Assert.False(options.PasswordsSelected); Assert.False(options.RequiresPlaintextConfirmation);
+    }
+
+    [Fact]
+    public void PasswordModeChangesNotifyBindingsWithoutReadingAnyProfile()
+    {
+        var options = new BackupOptionsViewModel(); var changes = new List<string?>();
+        options.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+        options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
+        options.ProtectPasswords = false; options.EncryptBackup = false;
+        Assert.Contains(nameof(options.PasswordsSelected), changes);
+        Assert.Contains(nameof(options.PasswordModeValidation), changes);
+        Assert.Contains(nameof(options.PasswordModeDescription), changes);
+        Assert.Contains(nameof(options.PasswordCsvWarning), changes);
+        options.Categories.Single(item => item.Id == "passwords").IsSelected = false;
+        Assert.Empty(options.PasswordModeValidation); Assert.False(options.RequiresPlaintextConfirmation);
+    }
+
 }

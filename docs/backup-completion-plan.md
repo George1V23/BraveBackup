@@ -143,3 +143,7 @@ origin/version compatibility work remain pending.
 [Complete single-profile standalone CSV export](passwords-csv-operation.md) now connects
 capture, offline grouping, projection, fresh confirmation and atomic saving behind a
 researched-version gate. UI wiring, broader compatibility and CSV archive entries remain pending.
+
+[Approved password-protection UI](passwords-ui-protection.md) now preserves safe defaults
+and explains explicit CSV/container choices. The new provider-selector control is awaiting
+the user’s requested individual review; password UI actions remain blocked meanwhile.

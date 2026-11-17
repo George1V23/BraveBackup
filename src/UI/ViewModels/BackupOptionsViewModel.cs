@@ -71,6 +71,34 @@ public partial class BackupOptionsViewModel : ViewModelBase
     /// <summary>Gets or sets the selected compression level.</summary>
     [ObservableProperty] private string _compression = "Balanced";
 
+    /// <summary>Gets whether the password mode controls apply to the selected categories.</summary>
+    public bool PasswordsSelected => Categories.Any(item => item.Id == "passwords" && item.IsSelected);
+
+    /// <summary>Approved safe default. Changing whole-archive encryption never changes this explicit choice.</summary>
+    [ObservableProperty] private bool _protectPasswords = true;
+
+    /// <summary>Describes the explicit password representation without claiming unsupported CSV archive saving works.</summary>
+    public string PasswordModeDescription => ProtectPasswords
+        ? "Protect passwords: portable credentials require an encrypted backup. Native unlock may be required when the operation starts."
+        : "CSV chosen explicitly. CSV inside backups is not available yet; a fresh destination-specific warning and confirmation will be required.";
+
+    /// <summary>Blocks an incompatible protection/container choice without silently selecting CSV.</summary>
+    public string PasswordModeValidation => !PasswordsSelected ? string.Empty : !ProtectPasswords
+        ? "CSV archive saving is not available yet. Re-enable Protect passwords for the protected option."
+        : !EncryptBackup ? "Protected passwords require archive encryption. Re-enable Encrypt backup; CSV is never selected automatically."
+        : string.Empty;
+
+    /// <summary>Accurately distinguishes CSV inside an encrypted container from an unencrypted local save.</summary>
+    public string PasswordCsvWarning => EncryptBackup
+        ? "CSV credentials become readable after archive decryption or extraction. A fresh destination-specific warning and confirmation is required before saving."
+        : "CSV credentials would be readable by anyone with file access. A fresh destination-specific warning and confirmation is required before saving.";
+
+    partial void OnProtectPasswordsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(PasswordModeDescription)); OnPropertyChanged(nameof(PasswordModeValidation));
+        OnPropertyChanged(nameof(RequiresPlaintextConfirmation)); OnPropertyChanged(nameof(PasswordCsvWarning));
+    }
+
     /// <summary>Gets whether the optional native session files can be included.</summary>
     public bool SessionsSelected => Categories.Any(item => item.Id == "sessions" && item.IsSelected);
 
@@ -120,7 +148,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
 
     /// <summary>Gets whether plaintext credentials would need a warning and confirmation before any save.</summary>
     public bool RequiresPlaintextConfirmation =>
-        !EncryptBackup && Categories.Any(item => item.Id == "passwords" && item.IsSelected);
+        PasswordsSelected && !ProtectPasswords;
 
     /// <summary>Gets an approximate length/character-variety score, not an encryption guarantee.</summary>
     public int PasswordStrength => Password.Length == 0
@@ -153,6 +181,7 @@ public partial class BackupOptionsViewModel : ViewModelBase
     {
         BackupPath = $"BraveBackup_{_clock():yyyy-MM-dd_HHmmss}.bravebackup";
         EncryptBackup = true;
+        ProtectPasswords = true;
         Password = string.Empty;
         PasswordConfirmation = string.Empty;
         RevealPassword = false;
@@ -173,6 +202,8 @@ public partial class BackupOptionsViewModel : ViewModelBase
     {
         if (args.PropertyName != nameof(BackupCategoryItem.IsSelected)) return;
         if (!SessionsSelected) IncludeNativeSessionFiles = false;
+        OnPropertyChanged(nameof(PasswordsSelected));
+        OnPropertyChanged(nameof(PasswordModeValidation));
         OnPropertyChanged(nameof(SessionsSelected));
         OnPropertyChanged(nameof(AllCategoriesSelected));
         OnPropertyChanged(nameof(RequiresPlaintextConfirmation));
@@ -181,6 +212,8 @@ public partial class BackupOptionsViewModel : ViewModelBase
     partial void OnEncryptBackupChanged(bool value)
     {
         if (!value) ClearSecrets();
+        OnPropertyChanged(nameof(PasswordModeValidation));
+        OnPropertyChanged(nameof(PasswordCsvWarning));
         OnPropertyChanged(nameof(ProtectionDescription));
         OnPropertyChanged(nameof(RequiresPlaintextConfirmation));
         OnPropertyChanged(nameof(PasswordValidation));

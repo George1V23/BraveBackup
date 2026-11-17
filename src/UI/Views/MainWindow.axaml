@@ -320,6 +320,15 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
+                                        <StackPanel IsVisible="{Binding Options.PasswordsSelected}" Spacing="6">
+                                            <CheckBox Content="Protect passwords"
+                                                      IsChecked="{Binding Options.ProtectPasswords}" />
+                                            <TextBlock Text="{Binding Options.PasswordModeDescription}" Classes="muted"
+                                                       FontSize="11" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Options.PasswordModeValidation}" Foreground="#F3D5AA"
+                                                       FontSize="11" TextWrapping="Wrap"
+                                                       IsVisible="{Binding Options.PasswordModeValidation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                                 <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
@@ -371,7 +380,7 @@
                                                 CornerRadius="6" Padding="12"
                                                 IsVisible="{Binding Options.RequiresPlaintextConfirmation}">
                                             <TextBlock
-                                                Text="Passwords would be saved as readable CSV in this unencrypted backup. Anyone with file access could read them. Explicit confirmation will be required before saving."
+                                                Text="{Binding Options.PasswordCsvWarning}"
                                                 TextWrapping="Wrap" Foreground="#F3D5AA" />
                                         </Border>
                                         <CheckBox Content="Include native session files (best-effort restoration)"
