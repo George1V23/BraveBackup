@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
-/// <summary>Writes and verifies archive-v1/v2/v3/v4/v5 ZIP content independently of any browser or UI.</summary>
+/// <summary>Writes and verifies archive-v1/v2/v3/v4/v5/v6 ZIP content independently of any browser or UI.</summary>
 public static class BackupArchive
 {
     /// <summary>Maps the four approved compression choices without adding package dependencies.</summary>
@@ -50,7 +50,8 @@ public static class BackupArchive
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
             throw new InvalidDataException("Archive exceeds its supported size.");
         source.Position = 0;
-        using var decrypted = ArchiveEncryption.IsEncrypted(source)
+        var encryptedEnvelope = ArchiveEncryption.IsEncrypted(source);
+        using var decrypted = encryptedEnvelope
             ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token)
             : null;
         var content = decrypted ?? source;
@@ -85,6 +86,8 @@ public static class BackupArchive
         }
 
         ValidateManifest(manifest);
+        if (manifest.RequiredCapabilities.Contains("passwords-v1", StringComparer.Ordinal) && !encryptedEnvelope)
+            throw new InvalidDataException("Portable password payloads require an encrypted archive envelope.");
         var ids = new HashSet<Guid>();
         foreach (var installation in manifest.Installations)
         {
@@ -107,6 +110,13 @@ public static class BackupArchive
                         category.Files is null ||
                         !manifest.RequiredCapabilities.Contains(category.Id + "-v1", StringComparer.Ordinal))
                         throw new InvalidDataException("Unsupported or duplicate archive category.");
+                    if (category.Id == "passwords")
+                    {
+                        PasswordArchiveFormat.ValidateCategory(entries,
+                            $"installations/{installation.Id:D}/profiles/{profile.Id:D}/passwords/", category, token);
+                        continue;
+                    }
+
                     if (category.Id == "tabmanagerplus")
                     {
                         ExtensionSavedWindowsArchiveFormat.ValidateCategory(zip, entries,
@@ -226,7 +236,7 @@ public static class BackupArchive
 
     private static void ValidateManifest(ArchiveManifest manifest)
     {
-        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5) ||
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5 or 6) ||
             manifest.ArchiveId == Guid.Empty ||
             manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
             string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
@@ -245,13 +255,18 @@ public static class BackupArchive
                               manifest.RequiredCapabilities.SequenceEqual(
                                   new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1" }.Where(
                                       manifest.RequiredCapabilities.Contains))
-                            : manifest.RequiredCapabilities.Contains("tabmanagerplus-v1") &&
+                            : manifest.FormatVersion == 5
+                            ? manifest.RequiredCapabilities.Contains("tabmanagerplus-v1") &&
                               manifest.RequiredCapabilities.SequenceEqual(
                                   new[]
                                       {
                                           "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1",
                                           "tabmanagerplus-v1"
                                       }
+                                      .Where(manifest.RequiredCapabilities.Contains))
+                            : manifest.RequiredCapabilities.Contains("passwords-v1") &&
+                              manifest.RequiredCapabilities.SequenceEqual(
+                                  new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v1" }
                                       .Where(manifest.RequiredCapabilities.Contains))) ||
             manifest.Installations is null || manifest.Installations.Length == 0)
             throw new InvalidDataException("Unsupported or invalid archive manifest.");

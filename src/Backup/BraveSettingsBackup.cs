@@ -107,12 +107,12 @@ public static class BraveSettingsBackup
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
             throw new InvalidDataException("Archive exceeds its supported size.");
+        var manifest = BackupArchive.Validate(source, password, token);
         source.Position = 0;
         using var decrypted = ArchiveEncryption.IsEncrypted(source)
             ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token)
             : null;
         var content = decrypted ?? source;
-        var manifest = BackupArchive.Validate(content, token: token);
         content.Position = 0;
         using var zip = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
         foreach (var category in manifest.Installations.SelectMany(item => item.Profiles)

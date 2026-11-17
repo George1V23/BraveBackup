@@ -102,7 +102,9 @@ integration tests. The [portable password payload codec](passwords-payload.md) n
 independent synthetic fixture and capture-mapping coverage. The [CSV formatter](passwords-csv.md)
 has 17 tests against synthetic fixtures. [Confirmed standalone CSV saving](passwords-csv-save.md)
 is implemented with synthetic transaction coverage; browser row projection remains separate work. The [explicit raw-file fallback](passwords-raw-fallback.md) now has capture and host-choice
-coverage. Real Windows/keyring validation, archive saving and UI wiring remain pending. Live capture remains conditional; the initial path requests Brave closed.
+coverage. [Archive-v6 protected portable password validation](archive-format-v6.md) is
+implemented; password archive writing is still pending. Real Windows/keyring validation
+and UI wiring remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and
