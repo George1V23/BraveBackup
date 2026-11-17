@@ -54,7 +54,7 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         var handle = new SafeFileHandle((IntPtr)descriptor, true);
         try
         {
-            if (Statx(handle, "", 0x1000, 1, out var status) != 0 || (status.Mask & 1) == 0 || (status.Mode & 0xF000) != 0x8000)
+            if (Statx(handle, "", 0x1000, 5, out var status) != 0 || (status.Mask & 5) != 5 || status.LinkCount != 1 || (status.Mode & 0xF000) != 0x8000)
                 throw new IOException("Recovery artifact is not a regular file.");
             Verify(); return new FileStream(handle, FileAccess.Read);
         }
@@ -67,18 +67,33 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         var staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
         var descriptor = OpenAt(_handle, staging, 1 | 0x40 | 0x80 | 0x20000 | 0x80000, 0x180);
         if (descriptor < 0) throw new IOException("Cannot create private recovery staging.");
+        using var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.Write);
         try
         {
-            using (var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.Write))
-            { output.Write(bytes.Span); output.Flush(true); }
+            output.Write(bytes.Span); output.Flush(true);
             Verify();
+            if (!MatchesChild(staging, output.SafeFileHandle)) throw new IOException("Recovery staging identity changed.");
             // RENAME_NOREPLACE prevents a new artifact from replacing a concurrently created child.
             if (RenameAt(_handle, staging, _handle, name, replace ? 0u : 1u) != 0)
                 throw new IOException("Cannot publish recovery artifact.");
+            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
             Verify();
         }
-        finally { UnlinkAt(_handle, staging, 0); }
+        finally
+        {
+            // Do not knowingly delete a child that replaced our staging file.
+            if (MatchesChild(staging, output.SafeFileHandle)) UnlinkAt(_handle, staging, 0);
+        }
     }
+    private bool MatchesChild(string name, SafeFileHandle owned)
+    {
+        if (Statx(owned, "", 0x1000, 0x105, out var first) != 0 ||
+            Statx(_handle, name, 0x100, 0x105, out var second) != 0) return false;
+        return (first.Mask & 0x105) == 0x105 && (second.Mask & 0x105) == 0x105 &&
+            first.LinkCount == 1 && second.LinkCount == 1 && (second.Mode & 0xF000) == 0x8000 &&
+            first.Inode == second.Inode && first.DeviceMajor == second.DeviceMajor && first.DeviceMinor == second.DeviceMinor;
+    }
+
     private static void CheckName(string name)
     {
         if (string.IsNullOrEmpty(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0']) >= 0)
@@ -115,6 +130,7 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
     private struct StatxBuffer
     {
         [FieldOffset(0)] public uint Mask;
+        [FieldOffset(16)] public uint LinkCount;
         [FieldOffset(28)] public ushort Mode;
         [FieldOffset(32)] public ulong Inode;
         [FieldOffset(136)] public uint DeviceMajor;

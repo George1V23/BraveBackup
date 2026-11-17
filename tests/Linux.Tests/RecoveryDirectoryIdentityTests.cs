@@ -64,5 +64,17 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Throws<ArgumentException>(() => directory.OpenReadChild("nested/file"));
         Assert.Empty(Directory.GetFiles(_root));
     }
+    [Fact]
+    public void PublicationRetainsSingleOwnedFileAndLinkedChildrenCannotBeRead()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        directory.PublishChild("artifact", "first"u8.ToArray(), false);
+        directory.PublishChild("artifact", "second"u8.ToArray(), true);
+        Assert.Equal("second", File.ReadAllText(Path.Combine(_root, "artifact")));
+        File.CreateSymbolicLink(Path.Combine(_root, "linked"), Path.Combine(_root, "artifact"));
+        Assert.Throws<IOException>(() => directory.OpenReadChild("linked"));
+        Assert.DoesNotContain(Directory.GetFiles(_root), path => path.EndsWith(".tmp"));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

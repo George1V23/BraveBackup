@@ -177,3 +177,19 @@ restoration has been enabled.
 
 Latest full regression run: 1,061 passed, six environment-dependent tests skipped
 (987 Core, 48 Brave, 20 Linux and six Windows-labelled tests passed).
+
+## Retained staging-file identity
+
+Linux publication now keeps the staging file handle open through rename, compares its
+device/inode and single-link status with the named staging entry before publication,
+and compares the published entry with that same owned handle afterward. Cleanup does
+not knowingly unlink a substituted staging entry. Child reads reject multiple-link files
+as well as links/special files. Seven native directory tests and five artifact/scope tests
+pass after this change. Tests cover normal replacement, linked child rejection and no
+leftover staging under normal operation; adversarial mid-syscall substitution is not yet
+covered by a deterministic test.
+
+These are detection checks, not atomic compare-and-swap. Concurrent mutation of child
+names between checks and rename/unlink, and exclusive operation-directory ownership,
+remain pending. Existing Windows limitations and the prohibition on enabling profile
+writers remain unchanged.
