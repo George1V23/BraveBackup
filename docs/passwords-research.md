@@ -252,3 +252,11 @@ The pinned `StoredCredential::GetPasswordNote` selects only the empty-name canon
 note. [Researched note projection](passwords-csv-notes.md) implements group sorting/joining
 and refuses nonempty named notes rather than violating the approved no-omission rule.
 Protected portable payloads continue preserving every note separately.
+
+## Desktop affiliation/grouping refinement
+
+The pinned desktop presenter delegates grouping to PasswordsGrouper, which consumes
+affiliation-service group information and PSL-extension merging. The
+[verified-group projection contract](passwords-csv-projection.md) implements row grouping
+and projection without inventing those inputs. Offline group-source loading remains
+separate work; a per-origin fallback is not silently treated as equivalent.

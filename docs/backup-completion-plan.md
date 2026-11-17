@@ -123,3 +123,7 @@ Password UI integration remain unfinished.
 [Supported ASCII CSV web-origin projection](passwords-csv-origins.md) now has source-derived
 fixtures and tests. Complete browser grouping/affiliation and broader origin families
 remain pending before a complete CSV export flow can be enabled.
+
+[Verified-group CSV row projection](passwords-csv-projection.md) now combines the tested
+origin/note components with source-derived grouping and URL deduplication. Its offline
+affiliation/group resolver input remains unresolved; the full CSV UI is still disabled.

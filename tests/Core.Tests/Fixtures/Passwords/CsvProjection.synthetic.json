@@ -1,0 +1,46 @@
+{
+  "testOnly": true,
+  "logins": [
+    {
+      "id": 1,
+      "url": "https://a.synthetic.invalid/login",
+      "username": "user",
+      "password": "synthetic-password",
+      "note": "z",
+      "group": "alpha"
+    },
+    {
+      "id": 2,
+      "url": "https://a.synthetic.invalid/login",
+      "username": "user",
+      "password": "synthetic-password",
+      "note": "a",
+      "group": "alpha"
+    },
+    {
+      "id": 3,
+      "url": "https://b.synthetic.invalid/login",
+      "username": "user",
+      "password": "synthetic-password",
+      "note": "z",
+      "group": "alpha"
+    },
+    {
+      "id": 4,
+      "url": "https://a.synthetic.invalid/login",
+      "username": "other",
+      "password": "synthetic-password",
+      "note": "",
+      "group": "alpha"
+    },
+    {
+      "id": 5,
+      "url": "https://a.synthetic.invalid/login",
+      "username": "user",
+      "password": "different-synthetic-password",
+      "note": "note",
+      "group": "alpha"
+    }
+  ],
+  "expectedCsv": "name,url,username,password,note\na.synthetic.invalid,https://a.synthetic.invalid/login,other,synthetic-password,\na.synthetic.invalid,https://a.synthetic.invalid/login,user,different-synthetic-password,note\na.synthetic.invalid,https://a.synthetic.invalid/login,user,synthetic-password,\"a\nz\"\nb.synthetic.invalid,https://b.synthetic.invalid/login,user,synthetic-password,\"a\nz\"\n"
+}

@@ -40,7 +40,9 @@ strings cannot be reliably erased. All diagnostic `ToString` methods are redacte
 ## What remains before export
 
 The [canonical-note group projection](passwords-csv-notes.md) is now implemented, with
-explicit refusal of nonempty named notes. Rows still need complete browser projection. Browser grouping,
+explicit refusal of nonempty named notes. The [verified-group row projector](passwords-csv-projection.md) now connects these
+components, but requires established affiliation-group identities. Offline group-source
+loading remains pending. Browser grouping inputs,
 A separate [supported ASCII web-origin projector](passwords-csv-origins.md) implements
 source-derived naming. Full domain support, affiliated-domain expansion and Android
 facets are not implemented by this formatter. Note combination is a separate Brave-specific component. A direct database dump
