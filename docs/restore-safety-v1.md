@@ -515,3 +515,16 @@ incur significant I/O. This component does not establish physical target identit
 separate target leases do), atomic absence/reservation, metadata completeness or safe
 replacement/deletion. It is not yet wired into an application transaction store. Production
 restore and Windows/native recovery integration remain pending.
+
+## Physical Linux duplicate-target checks
+
+The frozen restore context now retains Linux directory identities during target verification
+and rejects targets referring to the same device/inode, in addition to normalized path
+checks. Identities are revalidated and released after the read-only check; execution must
+still retain/recheck its own target leases. Twelve native directory tests pass, including
+same/different directory comparison. Bind-mount aliases have not been created in tests;
+physical comparison uses the existing native device/inode identity contract. Windows
+physical duplicate checking and production write integration remain pending.
+
+Latest full regression run: 1,094 passed, nine environment-dependent tests skipped
+(995 Core, 48 Brave, 37 Linux and 14 Windows-labelled tests passed).

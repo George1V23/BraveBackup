@@ -126,5 +126,16 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Throws<IOException>(() => directory.VerifyChildIdentity("target", retained.SafeFileHandle));
         Assert.Equal("synthetic", File.ReadAllText(path));
     }
+    [Fact]
+    public void DirectoryIdentityComparisonDistinguishesSameAndDifferentTargets()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var child = Path.Combine(_root, "child"); Directory.CreateDirectory(child);
+        using var first = RecoveryDirectoryIdentity.Open(_root);
+        using var alias = RecoveryDirectoryIdentity.Open(Path.Combine(_root, "."));
+        using var different = RecoveryDirectoryIdentity.Open(child);
+        Assert.True(first.RefersToSameDirectory(alias));
+        Assert.False(first.RefersToSameDirectory(different));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

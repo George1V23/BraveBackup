@@ -46,6 +46,13 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         if (Identity(current) != _identity || Identity(_handle) != _identity)
             throw new IOException("Recovery directory identity changed.");
     }
+    /// <summary>Compares retained device/inode identities after revalidating both directory paths.</summary>
+    public bool RefersToSameDirectory(RecoveryDirectoryIdentity other)
+    {
+        ArgumentNullException.ThrowIfNull(other); Verify(); other.Verify();
+        return _identity == other._identity;
+    }
+
     /// <summary>Acquires a nonblocking Linux advisory lock for this retained directory until disposal.</summary>
     /// <remarks>Only cooperating writers honor this lock. It does not prevent unrelated processes changing directory entries.</remarks>
     public void AcquireExclusive()

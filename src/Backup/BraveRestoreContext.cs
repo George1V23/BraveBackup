@@ -31,11 +31,28 @@ public sealed class BraveRestoreContext
         token.ThrowIfCancellationRequested();
         if (_observe() != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
         var paths = new HashSet<string>(HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        foreach (var target in _targets)
+        var directories = new List<RecoveryDirectoryIdentity>();
+        try
         {
-            var path = BraveRestoreTargetGuard.Validate(target.Installation, target.Profile, _source, token);
-            if (!paths.Add(path)) throw new IOException("Restore destinations must be distinct.");
+            foreach (var target in _targets)
+            {
+                var path = BraveRestoreTargetGuard.Validate(target.Installation, target.Profile, _source, token);
+                if (!paths.Add(path)) throw new IOException("Restore destinations must be distinct.");
+                if (HostEnvironment.IsLinux)
+                {
+                    var identity = RecoveryDirectoryIdentity.Open(path);
+                    try
+                    {
+                        if (directories.Any(existing => existing.RefersToSameDirectory(identity)))
+                            throw new IOException("Restore destinations refer to the same physical directory.");
+                        directories.Add(identity);
+                    }
+                    catch { identity.Dispose(); throw; }
+                }
+            }
+            foreach (var identity in directories) identity.Verify();
         }
+        finally { foreach (var identity in directories) identity.Dispose(); }
         if (Fingerprint(_source, token) != _fingerprint) throw new IOException("The restore source archive changed.");
         token.ThrowIfCancellationRequested();
         if (_observe() != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
