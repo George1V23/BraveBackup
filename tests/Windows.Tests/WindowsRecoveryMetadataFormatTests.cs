@@ -30,4 +30,19 @@ public sealed class WindowsRecoveryMetadataFormatTests
         }
         Assert.Throws<InvalidDataException>(() => WindowsRecoveryMetadata.Validate(bytes));
     }
+    [Fact]
+    public void SidAndAclStructuresMustFitTheirDeclaredRegions()
+    {
+        var bytes = new byte[76]; Fixture().CopyTo(bytes, 0);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), 40);
+        var descriptor = bytes.AsSpan(36);
+        BinaryPrimitives.WriteUInt32LittleEndian(descriptor[4..], 20);
+        BinaryPrimitives.WriteUInt32LittleEndian(descriptor[16..], 32);
+        descriptor[20] = 1; descriptor[21] = 1;
+        descriptor[32] = 2; descriptor[34] = 8;
+        WindowsRecoveryMetadata.Validate(bytes);
+        bytes[57] = 15; Assert.Throws<InvalidDataException>(() => WindowsRecoveryMetadata.Validate(bytes));
+        bytes[57] = 1; bytes[72] = 1;
+        Assert.Throws<InvalidDataException>(() => WindowsRecoveryMetadata.Validate(bytes));
+    }
 }

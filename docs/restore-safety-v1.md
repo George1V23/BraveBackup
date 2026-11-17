@@ -398,3 +398,15 @@ offsets. Seven new cross-platform framing tests pass on Linux; the Windows-label
 now passes 13 nonnative cases with five native cases skipped. These checks do not validate
 the full SID/ACL structures or authorize applying them. Native Windows capture and ACL
 application remain unverified/unimplemented; no profile writer is enabled.
+
+## Windows SID/ACL structural bounds
+
+Cross-platform metadata validation now bounds SID subauthority arrays, ACL headers and
+sizes, declared ACE counts/lengths and partially overlapping descriptor regions. Shared
+identical SID regions remain permitted. Eight Windows-format tests pass on Linux; the
+Windows-labelled project totals 14 passed and five native skips. Sources:
+[SID](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-sid),
+[ACL](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-acl),
+[ACE_HEADER](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-ace_header).
+These are structural bounds only: ACE payload semantics, native ACL validity and recovery
+authorization are not established. Windows application/publication remains disabled.

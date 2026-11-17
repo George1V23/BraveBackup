@@ -49,10 +49,39 @@ public static class WindowsRecoveryMetadata
         if (length != bytes.Length - 36) throw Invalid();
         var descriptor = bytes[36..];
         if (descriptor[0] != 1 || (BinaryPrimitives.ReadUInt16LittleEndian(descriptor[2..]) & 0x8000) == 0) throw Invalid();
+        var regions = new List<(uint Start, uint End)>();
         foreach (var offset in new[] { 4, 8, 12, 16 })
         {
             var relative = BinaryPrimitives.ReadUInt32LittleEndian(descriptor[offset..]);
-            if (relative != 0 && (relative < 20 || relative >= length || (relative & 3) != 0)) throw Invalid();
+            if (relative == 0) continue;
+            if (relative < 20 || relative >= length || (relative & 3) != 0) throw Invalid();
+            var part = descriptor[(int)relative..];
+            int size;
+            if (offset is 4 or 8)
+            {
+                if (part.Length < 8 || part[0] != 1 || part[1] > 15) throw Invalid();
+                size = 8 + part[1] * 4;
+                if (size > part.Length) throw Invalid();
+            }
+            else
+            {
+                if (part.Length < 8 || part[0] is not (2 or 4)) throw Invalid();
+                size = BinaryPrimitives.ReadUInt16LittleEndian(part[2..]);
+                if (size < 8 || size > part.Length || (size & 3) != 0) throw Invalid();
+                var count = BinaryPrimitives.ReadUInt16LittleEndian(part[4..]);
+                var cursor = 8;
+                for (var index = 0; index < count; index++)
+                {
+                    if (cursor > size - 4) throw Invalid();
+                    var aceSize = BinaryPrimitives.ReadUInt16LittleEndian(part[(cursor + 2)..]);
+                    if (aceSize < 4 || (aceSize & 3) != 0 || aceSize > size - cursor) throw Invalid();
+                    cursor += aceSize;
+                }
+            }
+            var end = relative + (uint)size;
+            if (regions.Any(region => relative < region.End && end > region.Start &&
+                    (relative != region.Start || end != region.End))) throw Invalid();
+            regions.Add((relative, end));
         }
     }
     private static InvalidDataException Invalid() => new("Invalid Windows recovery metadata.");
