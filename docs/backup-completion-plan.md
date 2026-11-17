@@ -135,3 +135,7 @@ merging remain pending before CSV group identities can be resolved from real pro
 [Affiliation main/WAL source capture](passwords-affiliation-snapshot.md) now preserves
 source bytes and revalidates the cache source through publication. Canonical facet
 construction and PSL/private-registry related-group merging remain unfinished.
+
+[Canonical facets and offline PSL/private-registry group merging](passwords-offline-groups.md)
+now resolve supported cache/singleton groups. The full CSV operation/UI and broader
+origin/version compatibility work remain pending.

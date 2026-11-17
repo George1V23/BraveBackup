@@ -6,6 +6,11 @@
         <RootNamespace>BraveBackup.Core</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <EmbeddedResource Include="Resources/PublicSuffix/effective_tld_names.dat" LogicalName="BraveBackup.PublicSuffixRules" />
+        <None Update="Resources/PublicSuffix/LICENSE-MPL-2.0.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <None Update="Resources/PublicSuffix/README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="../Core/Core.csproj"/>
         <ProjectReference Include="../Platform/Platform.csproj"/>
         <ProjectReference Include="../Extensions/TabManagerPlus/TabManagerPlus.csproj"/>

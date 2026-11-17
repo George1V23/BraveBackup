@@ -60,8 +60,8 @@ behavior still needs native execution.
 ## Remaining integration
 
 This provides raw cached groups only. Canonical facet construction, public-suffix/private
-registry matching and cached PSL-extension related-group merging are still required
-before these data can supply the CSV projector's verified-group resolver. Both password
+registry matching and cached PSL-extension related-group merging now have a [supported offline implementation](passwords-offline-groups.md).
+The complete capture-to-save operation remains pending. Both password
 and affiliation captures must remain valid through the eventual CSV save. Full CSV UI,
 CSV archive contracts/consent and real native authentication checks remain pending.
 Existing password backup/archive behavior is unchanged.

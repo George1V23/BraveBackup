@@ -64,6 +64,7 @@ use disposable test copies; no live profile/keyring was accessed.
 
 [Safe main/WAL source capture](passwords-affiliation-snapshot.md) and source revalidation
 are now implemented separately. Canonical facet construction, public-suffix/private-registry
-matching and related-group merging remain pending before this cache can supply the CSV projector's verified resolver. There is no
+matching and related-group merging now have a [supported offline implementation](passwords-offline-groups.md);
+the full capture-to-save operation remains pending. There is no
 claim of fresh server equivalence: this is offline cached state. Existing password/archive
 behavior is unchanged, and CSV UI remains disabled.
