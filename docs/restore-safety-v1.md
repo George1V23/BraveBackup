@@ -373,3 +373,18 @@ parent-rename/disposal test was added. The Windows project compiles; six nonnati
 pass and four native cases are explicitly skipped on this Linux host. Native behavior,
 child-file publication, operation ownership and ACL recovery remain unverified/pending.
 The chain is not connected to artifact storage or target writers; no restore is enabled.
+
+## Windows metadata capture prototype (native validation pending)
+
+`WindowsRecoveryMetadata.Capture` records creation/write/access UTC ticks and the
+handle-based owner/group/DACL security descriptor in opaque `BBKWM001` metadata: eight
+magic bytes, three little-endian int64 tick fields, int32 descriptor length and descriptor
+bytes, bounded to 64 KiB. Native descriptor memory is released with LocalFree. Source:
+[GetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo).
+
+The Windows project compiles; six nonnative tests pass and five native cases are skipped
+on Linux, including the new synthetic metadata-capture test. No native capture behavior
+has been verified. This prototype does not capture SACL, alternate streams, EAs or full
+filesystem metadata, does not establish target file eligibility, and has no apply or
+publication path. It is disconnected from restore execution pending native validation,
+metadata policy and production adapter integration.
