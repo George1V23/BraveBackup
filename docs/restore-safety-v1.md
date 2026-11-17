@@ -472,3 +472,17 @@ This improves inspection-time identity only. The returned image does not retain 
 for the transaction lifetime; publication must retain/revalidate target identity separately.
 Original absence still requires atomic no-clobber creation, and concurrent modifications
 after capture remain a production-adapter responsibility. No restore is enabled.
+
+## Retained read-only Linux target lease
+
+`LinuxRestoreTargetLease` now keeps directory identity, the original file handle (when
+present), and independently owned original bytes/metadata across calls. `VerifyOriginal`
+compares physical identity and exact captured state without refreshing originals;
+`CopyOriginal` supplies a separate safety image owner. Observed absence is rechecked but
+not reserved. Disposal clears buffers/releases handles without writing files.
+
+A native synthetic test passes for unchanged state, same-content physical replacement,
+original-absence changes, retained original copies and disposed-lease rejection. This is
+not yet connected to transaction target publication: the future adapter must track applied
+state, handle safe replacement/deletion and enforce explicit scope/browser checks. Windows
+parity and complete restore/lifetime recovery remain pending; no profile writes are enabled.
