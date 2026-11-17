@@ -2,7 +2,9 @@
 
 Status: all seven scope items reviewed and accepted, with the revisions recorded below.
 The encrypted-source [snapshot component](passwords-snapshot.md) is implemented and tested;
-password decryption, export and archive/UI integration remain pending. The user's
+[provider-aware decryption](passwords-decoding.md) and the [Windows key adapter](passwords-windows-key.md)
+are implemented as isolated components. Native validation, Linux keyring access, export
+and archive/UI integration remain pending. The user's
 protected default and explicitly confirmed optional plaintext CSV remain requirements.
 The subsequent [research/fixture checkpoint](passwords-research.md) records pinned sources,
 six passing fixture checks and unresolved native/live-capture/automation limits.
@@ -19,8 +21,9 @@ a file-presence placeholder, not parsed credential rows or an actual credential 
 The CLI's existing metadata display is likewise not password extraction. Neither is an
 acceptable source for a completed portable password backup.
 
-No SQLite provider or OS credential-unlocking implementation currently exists in the
-projects. Do not reinterpret copied encrypted browser files as portable credentials.
+A bounded SQLite snapshot reader and isolated Windows DPAPI adapter now exist, but
+credential unlocking is not connected to user operations. Do not reinterpret copied
+encrypted browser files as portable credentials.
 
 ## What was actually accessed
 
