@@ -317,3 +317,20 @@ directory metadata or source/browser-state policy and is not used by the applica
 This is one focused integration case; the previous full run remains 1,075 passed with six
 skipped. Phase 3 remains open for production target adapters, Windows support, complete
 supported-metadata policy and lifecycle/recovery integration. No profile writes are enabled.
+
+## Read-only Linux target capture
+
+`Backup.LinuxRestoreFileCapture.Read` captures one authorized directory child as original
+bytes/metadata or original absence. It uses Platform retained directory handles and native
+metadata eligibility checks, rejects linked/special children and traversal names, and bounds
+each file to 64 MiB. Two full captures compare bytes and metadata; per-read metadata/length
+checks and cancellation reject observed changes. Temporary buffers are cleared, and the
+returned image owns independent bytes. A native synthetic test passes for contents,
+metadata, absence, link/traversal rejection and pre-cancellation with no target writes.
+
+The caller must establish explicit operation scope and closed-browser state. Equal bytes
+and metadata do not prove unchanged inode identity, nor prevent changes after capture;
+the future writer must retain/revalidate physical target identity before publication.
+Original-absence checks are observations, not an atomic creation reservation. This is a
+read-side production component only; no application transaction adapter or target writer
+has been connected. Windows capture and complete publication/recovery handling remain pending.
