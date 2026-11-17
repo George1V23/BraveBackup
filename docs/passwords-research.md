@@ -260,3 +260,10 @@ affiliation-service group information and PSL-extension merging. The
 [verified-group projection contract](passwords-csv-projection.md) implements row grouping
 and projection without inventing those inputs. Offline group-source loading remains
 separate work; a per-origin fallback is not silently treated as equivalent.
+
+## Offline cache lookup refinement
+
+The pinned backend resolves grouping from cached schema-v7 data and explicitly returns
+a singleton for an absent facet, before PSL/private-registry related-group merging.
+The [bounded cache reader](passwords-affiliation-cache.md) implements that raw lookup;
+source capture and merge semantics remain separate requirements for verified CSV groups.

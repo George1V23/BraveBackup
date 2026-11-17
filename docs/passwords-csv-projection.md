@@ -74,7 +74,10 @@ null/empty usernames, missing/unresolved groups, unsupported URLs/notes, indepen
 ownership/disposal, empty collections, cancellation and pathological/scope resource bounds.
 No real credentials, profile, browser or keyring was accessed.
 
-Offline affiliation/group-source loading, broader origin/Android support, CSV archive
+A [schema-v7 affiliation-cache reader](passwords-affiliation-cache.md) now loads raw
+cached groups and source-defined missing-facet singletons. Safe file capture and PSL
+related-domain merging remain pending before it supplies the verified resolver.
+Broader origin/Android support, CSV archive
 contracts/consent and the complete Passwords UI remain unfinished. The host must not
 silently choose a trivial per-origin resolver and label it verified browser grouping.
 Protected portable/raw archive backup behavior is unchanged.

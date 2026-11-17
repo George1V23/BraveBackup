@@ -127,3 +127,7 @@ remain pending before a complete CSV export flow can be enabled.
 [Verified-group CSV row projection](passwords-csv-projection.md) now combines the tested
 origin/note components with source-derived grouping and URL deduplication. Its offline
 affiliation/group resolver input remains unresolved; the full CSV UI is still disabled.
+
+[Offline affiliation-cache schema-v7 reading](passwords-affiliation-cache.md) now has
+upstream fixture coverage. Main/WAL source capture, canonical facets and PSL/private-registry
+merging remain pending before CSV group identities can be resolved from real profiles.
