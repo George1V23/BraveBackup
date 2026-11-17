@@ -486,3 +486,17 @@ original-absence changes, retained original copies and disposed-lease rejection.
 not yet connected to transaction target publication: the future adapter must track applied
 state, handle safe replacement/deletion and enforce explicit scope/browser checks. Windows
 parity and complete restore/lifetime recovery remain pending; no profile writes are enabled.
+
+## Expected target checkpoints without baseline replacement
+
+`LinuxRestoreExpectedState` now separates the immutable original safety image from the
+currently expected physical target state. After an explicit caller-controlled publication,
+`AcceptPublished` requires exact expected existence/content/metadata before retaining its
+new identity. Failed observations do not adopt the candidate. Verification uses the retained
+checkpoint; original copies remain unchanged across applied/deleted observations.
+
+One focused native synthetic test passes for applied-state verification, conflicting edits,
+failed acceptance, deletion observation and original-byte/metadata retention. The class
+performs no target writes and cannot prove who made an observed change. Callers must not
+use it to authorize changes or adopt arbitrary external edits. Production replacement/
+deletion and rollback publication are still pending; no restore command is connected.
