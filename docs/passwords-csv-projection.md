@@ -75,8 +75,8 @@ ownership/disposal, empty collections, cancellation and pathological/scope resou
 No real credentials, profile, browser or keyring was accessed.
 
 A [schema-v7 affiliation-cache reader](passwords-affiliation-cache.md) now loads raw
-cached groups and source-defined missing-facet singletons. Safe file capture and PSL
-related-domain merging remain pending before it supplies the verified resolver.
+cached groups and source-defined missing-facet singletons. [Safe file capture](passwords-affiliation-snapshot.md) is now implemented. PSL
+related-domain merging remains pending before it supplies the verified resolver.
 Broader origin/Android support, CSV archive
 contracts/consent and the complete Passwords UI remain unfinished. The host must not
 silently choose a trivial per-origin resolver and label it verified browser grouping.

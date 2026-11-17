@@ -62,8 +62,8 @@ input, cached/missing/duplicate lookups, empty cache, unsupported schemas, corru
 objects, invalid types/references, bounds, cancellation and safe diagnostics. Mutations
 use disposable test copies; no live profile/keyring was accessed.
 
-Safe main/WAL source capture, source revalidation through publication, canonical facet
-construction, public-suffix/private-registry matching and related-group merging remain
-pending before this cache can supply the CSV projector's verified resolver. There is no
+[Safe main/WAL source capture](passwords-affiliation-snapshot.md) and source revalidation
+are now implemented separately. Canonical facet construction, public-suffix/private-registry
+matching and related-group merging remain pending before this cache can supply the CSV projector's verified resolver. There is no
 claim of fresh server equivalence: this is offline cached state. Existing password/archive
 behavior is unchanged, and CSV UI remains disabled.

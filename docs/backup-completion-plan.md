@@ -131,3 +131,7 @@ affiliation/group resolver input remains unresolved; the full CSV UI is still di
 [Offline affiliation-cache schema-v7 reading](passwords-affiliation-cache.md) now has
 upstream fixture coverage. Main/WAL source capture, canonical facets and PSL/private-registry
 merging remain pending before CSV group identities can be resolved from real profiles.
+
+[Affiliation main/WAL source capture](passwords-affiliation-snapshot.md) now preserves
+source bytes and revalidates the cache source through publication. Canonical facet
+construction and PSL/private-registry related-group merging remain unfinished.

@@ -17,3 +17,8 @@ python3 tests/Core.Tests/Fixtures/Affiliations/generate-fixture.py
 Tests modify private disposable copies, never this fixture or a live database. This does
 not prove native Brave runtime cache compatibility, freshness, PSL merging or source
 snapshot consistency; those remain separate checks.
+
+The generator also freezes a synthetic committed WAL update under `Wal/` while its private
+SQLite connection is open. Reader tests require `main_domain=wal.synthetic.invalid` from
+the committed WAL and compare source main/WAL/SHM hashes before/after capture. Runtime
+WAL salts and SHM values can change on regeneration; none comes from a live profile.
