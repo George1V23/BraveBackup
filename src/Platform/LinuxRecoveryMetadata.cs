@@ -47,15 +47,15 @@ public static class LinuxRecoveryMetadata
     /// <summary>Requires the current effective user/group; no ownership changes or privilege elevation are attempted.</summary>
     private static void RejectForeignOwnership(SafeFileHandle handle)
     {
-        if (ReadStatus(handle, "", 0x1000, 0x18, out var status) != 0 || (status.Mask & 0x18) != 0x18 ||
-            !OwnershipMatches(status.User, status.Group, EffectiveUser(), EffectiveGroup()))
-            throw new IOException("File ownership is unsupported or cannot be inspected for recovery.");
+        _ = ReadOwnedIdentity(handle);
     }
     private static (uint User, uint Group) ReadOwnedIdentity(SafeFileHandle handle)
     {
-        if (ReadStatus(handle, "", 0x1000, 0x18, out var status) != 0 || (status.Mask & 0x18) != 0x18 ||
+        const uint required = 0x11d; // TYPE, NLINK, UID, GID, INO.
+        if (ReadStatus(handle, "", 0x1000, required, out var status) != 0 || (status.Mask & required) != required ||
+            (status.Mode & 0xF000) != 0x8000 || status.LinkCount != 1 ||
             !OwnershipMatches(status.User, status.Group, EffectiveUser(), EffectiveGroup()))
-            throw new IOException("Recovery ownership cannot be preserved.");
+            throw new IOException("Recovery requires a single-link regular file owned by the current effective user/group.");
         return (status.User, status.Group);
     }
     internal static bool OwnershipMatches(uint owner, uint group, uint effectiveUser, uint effectiveGroup)
@@ -64,6 +64,8 @@ public static class LinuxRecoveryMetadata
     private struct OwnershipStatus
     {
         [FieldOffset(0)] public uint Mask;
+        [FieldOffset(16)] public uint LinkCount;
+        [FieldOffset(28)] public ushort Mode;
         [FieldOffset(20)] public uint User;
         [FieldOffset(24)] public uint Group;
     }

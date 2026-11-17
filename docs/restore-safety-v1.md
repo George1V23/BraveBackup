@@ -290,3 +290,16 @@ The previous 20-byte `BBKLM001` metadata remains readable/applicable under the e
 current-effective-owner restriction, but cannot prove historical ownership because those
 fields were absent. No `.bravebackup` or safety snapshot container version changes.
 ACL/xattr fidelity, Windows metadata and production target integration remain pending.
+
+## Linux file eligibility
+
+Metadata capture/application now requires handle-reported regular-file type, exactly one
+hard link and available ownership/link/type fields. Directories and multiply linked files
+are not eligible for this file-only recovery path. Seven focused native metadata cases
+pass; the new hard-link test verifies rejection of capture/application and unchanged
+metadata after the extra link is removed. This remains a point-in-time check; production
+publication must still guard identity and concurrent link/metadata changes.
+
+Latest full regression run (2026-11-18): 1,075 passed, six environment-dependent tests
+skipped (992 Core, 48 Brave, 29 Linux and six Windows-labelled tests passed). Production
+target integration, Windows recovery support and full metadata fidelity remain pending.

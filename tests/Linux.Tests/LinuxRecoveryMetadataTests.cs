@@ -11,6 +11,29 @@ public sealed class LinuxRecoveryMetadataTests
         => Assert.Equal(expected, LinuxRecoveryMetadata.OwnershipMatches(owner, group, 1000, 1000));
 
     [Fact]
+    public void MultiplyLinkedFilesCannotBeCapturedOrReceiveRecoveryMetadata()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(Path.GetTempPath(), "RecoveryLinks_" + Guid.NewGuid().ToString("N"));
+        var alias = path + ".alias";
+        try
+        {
+            using var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
+            var metadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle);
+            Assert.Equal(0, LinkFile(path, alias));
+            Assert.Throws<IOException>(() => LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+            Assert.Throws<IOException>(() => LinuxRecoveryMetadata.Apply(file.SafeFileHandle, metadata));
+            File.Delete(alias);
+            Assert.Equal(metadata, LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+        }
+        finally { File.Delete(alias); File.Delete(path); }
+    }
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int LinkFile(
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string original,
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string alias);
+
+    [Fact]
     public void SavedOwnershipMismatchIsRejectedAndLegacyMetadataRemainsReadable()
     {
         if (!OperatingSystem.IsLinux()) return;
