@@ -10,6 +10,7 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
     private readonly string _path;
     private readonly (uint Major, uint Minor, ulong Inode) _identity;
     private bool _disposed;
+    private bool _exclusive;
     private RecoveryDirectoryIdentity(string path, SafeFileHandle handle)
     { _path = path; _handle = handle; _identity = Identity(handle); }
     /// <summary>Opens a directory without following its final link after rejecting linked ancestors. Unsupported hosts fail closed.</summary>
@@ -45,6 +46,20 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         if (Identity(current) != _identity || Identity(_handle) != _identity)
             throw new IOException("Recovery directory identity changed.");
     }
+    /// <summary>Acquires a nonblocking Linux advisory lock for this retained directory until disposal.</summary>
+    /// <remarks>Only cooperating writers honor this lock. It does not prevent unrelated processes changing directory entries.</remarks>
+    public void AcquireExclusive()
+    {
+        Verify();
+        if (_exclusive) return;
+        if (Flock(_handle, 2 | 4) != 0) throw new IOException("Recovery directory is already owned or cannot be locked.");
+        _exclusive = true;
+        try { Verify(); }
+        catch { Flock(_handle, 8); _exclusive = false; throw; }
+    }
+    [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+    private static extern int Flock(SafeFileHandle directory, int operation);
+
     /// <summary>Opens a regular child relative to the retained directory; links and special files are rejected.</summary>
     public FileStream OpenReadChild(string name)
     {

@@ -76,5 +76,17 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Throws<IOException>(() => directory.OpenReadChild("linked"));
         Assert.DoesNotContain(Directory.GetFiles(_root), path => path.EndsWith(".tmp"));
     }
+    [Fact]
+    public void ExclusiveDirectoryOwnershipRejectsContenderAndReleasesOnDispose()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var first = RecoveryDirectoryIdentity.Open(_root);
+        using var second = RecoveryDirectoryIdentity.Open(_root);
+        first.AcquireExclusive(); first.AcquireExclusive();
+        Assert.Throws<IOException>(() => second.AcquireExclusive());
+        first.Dispose(); second.AcquireExclusive();
+        second.PublishChild("owned", "synthetic"u8.ToArray(), false);
+        Assert.Equal("synthetic", File.ReadAllText(Path.Combine(_root, "owned")));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

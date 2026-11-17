@@ -43,5 +43,15 @@ public sealed class RestoreArtifactStorageTests : IDisposable
         Assert.Throws<IOException>(() => RestoreArtifactStorage.Publish(directory, output.ToArray(), true));
         Assert.Single(Directory.GetFiles(_root));
     }
+    [Fact]
+    public void ContendedLinuxRecoveryDirectoryCannotPublishOrLeaveStaging()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var owner = BraveBackup.Platform.RecoveryDirectoryIdentity.Open(_root); owner.AcquireExclusive();
+        using var output = new MemoryStream();
+        using (var writer = ArchiveEncryption.CreateWriter(output, "synthetic-password")) writer.Write("fixture"u8);
+        Assert.Throws<IOException>(() => RestoreArtifactStorage.Publish(Path.Combine(_root, "blocked"), output.ToArray()));
+        Assert.Empty(Directory.GetFiles(_root));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

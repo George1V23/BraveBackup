@@ -208,3 +208,15 @@ serializes cooperating publishers, not arbitrary same-user processes. It is curr
 per-publication lock, not an operation-lifetime recovery lease. Remote filesystem semantics,
 noncooperating child replacement, metadata fidelity and Windows parity remain unresolved.
 No restore execution has been enabled.
+
+## Operation-lifetime Linux artifact lease
+
+`RestoreArtifactLease` retains directory identity and its advisory lock across safety,
+journal and readback calls, releasing it only on disposal without deleting artifacts.
+It uses the frozen authorized scope and bounded encrypted handle-relative I/O. Initial
+safety/journal creation never clobbers existing artifacts. Journal updates compare the
+previous ciphertext hash; a newly acquired lease can inspect retained artifacts but does
+not silently adopt/overwrite an existing journal. Two focused lease tests pass for lock
+contention, retained artifacts, repeated journal publication, directory replacement and
+disposal. No production target adapter or UI execution is connected yet. Windows parity,
+metadata recovery and noncooperating filesystem mutation remain pending.

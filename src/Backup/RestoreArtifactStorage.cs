@@ -21,8 +21,9 @@ public static class RestoreArtifactStorage
         if (OperatingSystem.IsLinux())
         {
             using var directory = RecoveryDirectoryIdentity.Open(Path.GetDirectoryName(target)!);
+            directory.AcquireExclusive();
             if (originalHash is not null && Fingerprint(target) != originalHash) throw new IOException("Recovery destination changed contents.");
-            directory.PublishChild(Path.GetFileName(target), encrypted, replaceExisting);
+            directory.PublishChild(Path.GetFileName(target), encrypted, initial == SnapshotNodeKind.RegularFile);
             return;
         }
         var staging = Path.Combine(Path.GetDirectoryName(target)!, ".restore-" + Guid.NewGuid().ToString("N") + ".tmp");
