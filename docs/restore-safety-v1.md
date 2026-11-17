@@ -193,3 +193,18 @@ These are detection checks, not atomic compare-and-swap. Concurrent mutation of 
 names between checks and rename/unlink, and exclusive operation-directory ownership,
 remain pending. Existing Windows limitations and the prohibition on enabling profile
 writers remain unchanged.
+
+## Cooperating Linux writer serialization
+
+`RecoveryDirectoryIdentity.AcquireExclusive` takes a nonblocking advisory directory lock
+until handle disposal. Linux artifact publication acquires it before the final fingerprint
+check, staging and rename. Initially missing children always use no-clobber publication,
+even if the caller permits replacement, preventing an intervening new artifact from being
+replaced. Eight native directory cases and six artifact/scope cases pass, including a
+contender failing without staging writes and lock release after disposal.
+
+The [flock contract](https://man7.org/linux/man-pages/man2/flock.2.html) is advisory: this
+serializes cooperating publishers, not arbitrary same-user processes. It is currently a
+per-publication lock, not an operation-lifetime recovery lease. Remote filesystem semantics,
+noncooperating child replacement, metadata fidelity and Windows parity remain unresolved.
+No restore execution has been enabled.
