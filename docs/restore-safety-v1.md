@@ -60,8 +60,34 @@ production adapters, recovery/lifetime handling and category writers are tested.
 ## Implementation checkpoint
 
 The snapshot/journal codecs and initial Core transaction coordinator are present. Three
-focused codec/ownership tests pass; the solution compiled successfully. Transaction-store
-integration, injected failure/recovery tests and full regression validation are still pending.
+focused codec/ownership tests pass; the solution compiled successfully. The initial codec checkpoint was followed by the synthetic transaction tests below;
+production-store integration is still pending.
 This coordinator is not production-ready and is not connected to Restore execution.
 Next: exercise an adapter over synthetic directories, including encrypted artifact readback,
 write-intent persistence, original absence, pause/resume, rollback conflicts and partial failure.
+
+## Synthetic transaction tests
+
+The file-only test adapter in `RestoreTransactionTests` uses unique temporary directories,
+private encrypted artifact staging with flush and atomic rename, and atomic synthetic
+file publication/deletion. It is not a production profile adapter: its empty metadata
+contract does not establish Windows ACL, Unix mode, directory, link or path-race recovery.
+
+Transaction tests cover verified safety/journal readback before destination writes, a
+pause after the first file of an unfinished category, declining rollback without resuming,
+explicit resume with unchanged original safety bytes, and recovery of original absence.
+They also cover unsafe/changed resume contexts, failure after file publication while the
+journal still records intent, rollback conflict/partial recovery/retry, failed journal
+publication, preparation cancellation and changed safety artifacts after preparation.
+The coordinator reauthenticates the saved safety artifact before execution/resumption and
+rollback, verifies target publication readback, and rechecks pause requests after journaling
+before starting a target publication. A production store must additionally preserve and
+revalidate recovery artifact identity throughout writes, not merely at operation entry.
+
+No UI/profile adapter is connected. Remaining phase-3 work includes production-grade
+filesystem identity/metadata/permission handling, bounded artifact I/O, safe lifecycle and
+recovery integration, and additional injected failures. Actual restore actions remain
+unavailable; the existing Backup and Export paths are unchanged.
+
+Validation: the full solution run passed 1,046 tests with six environment-dependent
+native tests skipped. No real browser profile or credential store was modified.

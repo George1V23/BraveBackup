@@ -69,6 +69,7 @@ public sealed class RestoreTransaction : IDisposable
     private readonly object _execution = new();
     private RestoreSafetySnapshot? _snapshot;
     private string? _password;
+    private string? _safetyHash;
     private long _revision;
     private int _pause;
     private bool _disposed;
@@ -122,6 +123,7 @@ public sealed class RestoreTransaction : IDisposable
                 }
                 _snapshot = new(OperationId, originals);
                 using var plain = RestoreSafetyFormat.Encode(_snapshot, token);
+                _safetyHash = Convert.ToHexStringLower(SHA256.HashData(plain.Bytes.Span));
                 var encrypted = Encrypt(plain.Bytes.Span, token);
                 try { _store.SaveSafety(encrypted); }
                 finally { CryptographicOperations.ZeroMemory(encrypted); }
@@ -159,6 +161,7 @@ public sealed class RestoreTransaction : IDisposable
         {
             if (_disposed || State is not (RestoreTransactionState.Prepared or RestoreTransactionState.Paused)) throw new InvalidOperationException("Restore cannot run in this state.");
             // A failed resume preflight keeps the operation paused and never refreshes originals.
+            VerifySafety();
             _store.VerifyContext(CancellationToken.None);
             for (var index = 0; index < _mutations.Length; index++)
             {
@@ -181,6 +184,7 @@ public sealed class RestoreTransaction : IDisposable
                         if (!Same(current, _snapshot!.Entries[index].Original)) throw new IOException("Restore target changed; no conflicting data was overwritten.");
                     _entries[index] = RestoreEntryState.Intent; Journal();
                     _store.VerifyContext(CancellationToken.None);
+                    if (Volatile.Read(ref _pause) != 0) { State = RestoreTransactionState.Paused; Journal(); return; }
                     _store.WriteTargetAtomic(mutation.Id, mutation.Replacement);
                     using (var published = _store.ReadTarget(mutation.Id, CancellationToken.None))
                         if (!Same(published, mutation.Replacement)) throw new IOException("Restore publication verification failed.");
@@ -202,7 +206,7 @@ public sealed class RestoreTransaction : IDisposable
             if (_disposed || _snapshot is null || State is not (RestoreTransactionState.Paused or RestoreTransactionState.Failed or RestoreTransactionState.Completed or RestoreTransactionState.RecoveryIncomplete))
                 throw new InvalidOperationException("Rollback cannot run in this state.");
             State = RestoreTransactionState.RollingBack;
-            try { _store.VerifyContext(CancellationToken.None); Journal(); }
+            try { VerifySafety(); _store.VerifyContext(CancellationToken.None); Journal(); }
             catch { State = RestoreTransactionState.RecoveryIncomplete; TryJournal(); throw; }
             var failed = false;
             for (var index = _mutations.Length - 1; index >= 0; index--)
@@ -229,6 +233,19 @@ public sealed class RestoreTransaction : IDisposable
             try { Journal(); } catch { State = RestoreTransactionState.RecoveryIncomplete; throw; }
         }
     }
+    /// <summary>Reauthenticates the retained safety artifact before executing or recovering a transaction.</summary>
+    private void VerifySafety()
+    {
+        var bytes = _store.ReadSafety();
+        try
+        {
+            using var plaintext = Decrypt(bytes, CancellationToken.None);
+            if (Convert.ToHexStringLower(SHA256.HashData(plaintext.Bytes.Span)) != _safetyHash)
+                throw new InvalidDataException("The verified safety artifact changed.");
+        }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
     private void Report(RestoreMutation mutation)
     {
         var group = Enumerable.Range(0, _mutations.Length).Where(i => _mutations[i].InstallationId == mutation.InstallationId &&
