@@ -449,3 +449,13 @@ all changed files were successfully recovered when later files were never modifi
 The post-publication-failure test now checks complete recovery progress for that mixed
 Intent/Untouched case. All 12 focused transaction cases pass. Apply progress is unchanged;
 production UI execution remains disabled.
+
+## Visible staging-cleanup failures
+
+Linux publication now surfaces a failed unlink of an observed owned staging child as an
+I/O failure instead of ignoring it. Both artifact publication and metadata-aware new-file
+publication use this cleanup behavior. A new failure-path test rejects malformed metadata,
+checks no new destination/staging remains and verifies unrelated existing content stays
+unchanged. All ten native directory tests pass. The failing-unlink branch itself has not
+been deterministically injected; noncooperating substitution/ownership limitations remain
+as documented. Production restore execution is still disabled.

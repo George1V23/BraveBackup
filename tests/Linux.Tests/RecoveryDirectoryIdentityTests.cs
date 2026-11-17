@@ -103,5 +103,16 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Equal("synthetic-original", File.ReadAllText(original));
         Assert.DoesNotContain(Directory.GetFiles(_root), path => path.EndsWith(".tmp"));
     }
+    [Fact]
+    public void InvalidMetadataPublicationCleansStagingAndPreservesExistingDestination()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        File.WriteAllText(Path.Combine(_root, "existing"), "synthetic-original");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        Assert.Throws<InvalidDataException>(() => directory.PublishNewRecoveryFile("new", "synthetic"u8.ToArray(), new byte[4]));
+        Assert.False(File.Exists(Path.Combine(_root, "new")));
+        Assert.Single(Directory.GetFiles(_root));
+        Assert.Equal("synthetic-original", File.ReadAllText(Path.Combine(_root, "existing")));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

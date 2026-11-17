@@ -97,7 +97,7 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         finally
         {
             // Do not knowingly delete a child that replaced our staging file.
-            if (MatchesChild(staging, output.SafeFileHandle)) UnlinkAt(_handle, staging, 0);
+            CleanupOwnedChild(staging, output.SafeFileHandle);
         }
     }
     /// <summary>Publishes a new recovery file with verified metadata; never replaces an existing child.</summary>
@@ -134,7 +134,14 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
             if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
             Verify();
         }
-        finally { if (MatchesChild(staging, output.SafeFileHandle)) UnlinkAt(_handle, staging, 0); }
+        finally { CleanupOwnedChild(staging, output.SafeFileHandle); }
+    }
+
+    /// <summary>Removes an observed owned staging child; cleanup failure must remain visible to the recovery caller.</summary>
+    private void CleanupOwnedChild(string name, SafeFileHandle owned)
+    {
+        if (MatchesChild(name, owned) && UnlinkAt(_handle, name, 0) != 0)
+            throw new IOException("Recovery staging cleanup failed; recovery artifacts require attention.");
     }
 
     private bool MatchesChild(string name, SafeFileHandle owned)
