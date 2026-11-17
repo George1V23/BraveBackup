@@ -50,14 +50,16 @@ and bookmark workflows remain covered by regressions.
 ## Validation and limitations
 
 Five added tests cover native-picker callback success/cancellation without writes or key
-access, profile-bound asynchronous picker results, shell context/result preservation and per-installation destination/source switching,
+access, profile-bound asynchronous picker results, shell context/result preservation and per-installation
+destination/source switching,
 CSV busy navigation/refresh/conflicting-action interlocks with cancellation, and the
 view-model host-availability guard. Existing CSV tests cover fresh/repeated warnings,
 exact synthetic output, unsupported versions, frozen scopes and cancellation cleanup.
 Compiled Avalonia bindings validate the new view and context boundaries in the build.
 
-No real credentials/keyring was accessed. Native visual layout, native file picker/dialog
-interaction and Windows execution were not exercised during this checkpoint. CSV remains
+No real credentials/keyring was accessed. The later [synthetic Linux UI smoke test](passwords-ui-smoke.md)
+verified native layout, selector bindings and CSV/raw-preservation dialog interaction.
+The native file picker, real OS unlock prompts and Windows execution remain untested. CSV remains
 limited to the researched version/provider/web/note compatibility profile. Broader support,
 CSV entries inside backups and their encrypted/unencrypted consent contracts remain pending.
 No restore behavior or archive format changes were introduced.

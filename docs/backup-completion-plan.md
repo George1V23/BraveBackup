@@ -101,11 +101,14 @@ has synthetic wrapper and isolated native D-Bus coverage.
 integration tests. The [portable password payload codec](passwords-payload.md) now has
 independent synthetic fixture and capture-mapping coverage. The [CSV formatter](passwords-csv.md)
 has 17 tests against synthetic fixtures. [Confirmed standalone CSV saving](passwords-csv-save.md)
-is implemented with synthetic transaction coverage; browser row projection remains separate work. The [explicit raw-file fallback](passwords-raw-fallback.md) now has capture and host-choice
+is implemented with synthetic transaction coverage; browser row projection remains separate work.
+The [explicit raw-file fallback](passwords-raw-fallback.md) now has capture and host-choice
 coverage. [Archive-v6 protected portable password validation](archive-format-v6.md) is
 implemented. [Protected portable password writing](passwords-protected-backup.md) now
-creates verified encrypted v6 archives through explicit advanced options. [Encrypted raw fallback writing](archive-format-v7.md) now emits v7 with explicit
-portable/raw result classification. CSV archive writing and UI integration remain pending. Real Windows/keyring validation
+creates verified encrypted v6 archives through explicit advanced
+options. [Encrypted raw fallback writing](archive-format-v7.md) now emits v7 with explicit
+portable/raw result classification. CSV archive writing and UI integration remain pending. Real Windows/keyring
+validation
 and UI wiring remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
@@ -159,3 +162,8 @@ placement is awaiting the user’s reserved visible-control review; no view was 
 The user approved the [Password CSV section below bookmark export](passwords-csv-section.md).
 Profile synchronization, native picker/consent callbacks, busy interlocks and cancellation
 are connected. Broader compatibility and CSV-in-archive support remain pending.
+
+The [synthetic Linux desktop smoke test](passwords-ui-smoke.md) now verifies real Avalonia
+layout/bindings, CSV cancellation/approval and encrypted raw-preservation consent without
+accessing real credentials. The reproducible opt-in runner and screenshot are checked in.
+Native file-picker/OS-unlock/Windows validation and CSV-in-archive support remain pending.
