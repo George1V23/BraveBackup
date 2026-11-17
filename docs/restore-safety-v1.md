@@ -101,3 +101,19 @@ rollback writes while context verification fails. Rollback requires an explicit 
 when those failures are resolved. These additions use synthetic directories only; no
 production adapter or UI execution was enabled. The full solution suite was not rerun
 for this test-only increment; its previous 1,046-pass result remains the last full run.
+
+## Encrypted artifact I/O component
+
+`RestoreArtifactStorage.Publish/Read` now provides bounded artifact I/O for later adapter
+integration. Publication requires encrypted framing, an existing directory with no linked
+ancestors, private staging permissions, flush and atomic rename. Existing files require
+explicit replacement. Reads reject plaintext, oversized/special/linked files and changed
+lengths. Authentication is deliberately performed by the transaction coordinator; framing
+alone is not proof of valid ciphertext. Two focused tests pass, including Linux private
+permissions and plaintext/link rejection. No profile writer is connected.
+
+This helper is not a complete production transaction store: callers must establish
+artifact-path authorization outside browser/source data, exclusive ownership, physical
+filesystem identity and race-safe directory/target handling. Type checks do not prevent a
+same-type concurrent replacement or ancestor race. Directory durability across power loss
+is not established. Do not enable restoration on the strength of this component alone.
