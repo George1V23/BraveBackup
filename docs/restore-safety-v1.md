@@ -1,0 +1,67 @@
+# Restore safety snapshot and journal v1
+
+This is an application-owned recovery contract, separate from `.bravebackup` versions 1–8.
+It does not change those versions or define a Brave/Chromium format. The phase-3 engine
+is not connected to profile writers or the UI; only synthetic adapters exercise writes.
+
+Both artifacts require the existing authenticated BBKENC1 envelope with a nonempty safety
+password supplied independently from the source archive password. No plaintext artifact
+is written by the engine. Each encoded plaintext buffer is owned and cleared after use.
+The storage adapter must privately create, flush, atomically publish and read back each
+artifact; its implementation is part of a later production integration checkpoint.
+
+## Snapshot plaintext
+
+All integers are little-endian. GUIDs use .NET `Guid.ToByteArray()` order. Fields:
+
+- Eight bytes `BBKSF001`, operation GUID, int32 entry count (1–10,000).
+- Per entry: nonempty unique mutation GUID, installation GUID, profile GUID;
+  int32 UTF-8 category byte length (1–64), then lowercase ASCII category ID bytes
+  (`a-z`, `0-9`, `-`); byte original-existed flag (0/1);
+  int32 content length and original bytes (at most 64 MiB);
+  int32 opaque adapter metadata length and bytes (at most 64 KiB).
+- No trailing bytes. Original absence requires both lengths zero.
+
+The complete plaintext snapshot is at most 128 MiB. Metadata is opaque to Core; an adapter
+must establish its own recoverable metadata contract rather than silently discard modes,
+ACLs or other required metadata. Snapshot IDs refer to the frozen in-memory plan, never
+infer filesystem paths from archived profile names.
+
+## Journal plaintext
+
+Eight bytes `BBKJR001`, operation GUID, int64 monotonic revision, int32 transaction-state
+value, int32 entry count, then each mutation GUID and int32 entry-state value in frozen
+plan order. Transaction states: New=0, Prepared=1, Running=2, Paused=3, Completed=4,
+RollingBack=5, RolledBack=6, Failed=7, RecoveryIncomplete=8. Entry states:
+Untouched=0, Intent=1, Applied=2, Recovered=3. Unknown versions/states, duplicate/empty IDs,
+negative revisions, mismatched counts/order and trailing bytes are invalid.
+
+Snapshot publication and authenticated decode/comparison must finish before Prepared.
+Persist the complete encrypted journal before each destination write (Intent), and again
+after publication (Applied). Original safety state is never refreshed on resume. Track
+intent even when a write reports failure after publication. During rollback, only original
+or expected applied state is accepted; unknown contents/metadata are a conflict and are
+not overwritten. Persist recovery results, including partial failures, without success claims.
+
+## Boundaries and limits
+
+The engine owns frozen mutation bytes, originals and metadata, and clears them on disposal.
+The storage adapter owns path identity/access checks, source fingerprints, stopped-browser
+checks, per-file atomic publication and metadata fidelity. These must be rechecked on
+prepare, every write, resume and rollback. Pause is requested between atomic operations;
+no cancellation token interrupts a destination publication once it has begun.
+
+There is no cross-file atomicity, power-loss/directory-fsync guarantee or automatic crash
+resume/recovery in this checkpoint. The journal records intent/results for diagnosis and
+future recovery integration; it is not a complete persisted executable plan. Destination
+mapping and restore payloads remain in memory. Do not enable real-profile writes until
+production adapters, recovery/lifetime handling and category writers are tested.
+
+## Implementation checkpoint
+
+The snapshot/journal codecs and initial Core transaction coordinator are present. Three
+focused codec/ownership tests pass; the solution compiled successfully. Transaction-store
+integration, injected failure/recovery tests and full regression validation are still pending.
+This coordinator is not production-ready and is not connected to Restore execution.
+Next: exercise an adapter over synthetic directories, including encrypted artifact readback,
+write-intent persistence, original absence, pause/resume, rollback conflicts and partial failure.
