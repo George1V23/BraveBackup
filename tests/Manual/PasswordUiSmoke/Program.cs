@@ -179,8 +179,28 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     planningBitmap.Render(window);
                     planningBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase2-mapping.png"), PngBitmapEncoderOptions.Default);
                 }
+                var safetyView = window.GetVisualDescendants().OfType<RestoreSafetyOptionsView>().Single();
+                Check(safetyView.GetVisualDescendants().OfType<TextBox>().Count(box => box.PasswordChar == '●') == 2,
+                    "safety encryption and confirmation fields are masked");
+                restore.Safety.Folder = Path.Combine(root, "output");
+                restore.Safety.Password = "Synthetic-safety-password";
+                restore.Safety.Confirmation = "different-synthetic-password";
+                await Task.Delay(100);
+                Check(safetyView.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("do not match") == true),
+                    "safety password mismatch is visible");
+                restore.Safety.Confirmation = restore.Safety.Password;
+                await Task.Delay(100);
+                Check(restore.Safety.Validation.Contains("not enabled"), "safety settings do not enable restoration");
+                restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(200);
+                using (var safetyBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
+                {
+                    safetyBitmap.Render(window);
+                    safetyBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-safety-settings.png"), PngBitmapEncoderOptions.Default);
+                }
                 restore.Password = "synthetic-not-retained";
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
+                Check(restore.Safety.Password.Length == 0 && restore.Safety.Confirmation.Length == 0,
+                    "leaving Restore clears independent safety secrets");
                 Check(restore.Password.Length == 0 && restore.Installations.Count == 0, "leaving Restore clears password and preview");
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Restore inspection leaves source profile bytes unchanged");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.

@@ -46,7 +46,7 @@ The unencrypted archive warning is also captured in
 
 ## Recorded result and limits
 
-On 2026-11-17, the extended runner passed all 43 assertions using Linux/X11 software rendering
+On 2026-11-17, the extended runner passed all 47 assertions using Linux/X11 software rendering
 at 1160 × 860. No Avalonia warning output was emitted. The section's destination,
 readiness, action and completion feedback were visible in the rendered image.
 

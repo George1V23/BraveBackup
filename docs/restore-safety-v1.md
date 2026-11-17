@@ -426,3 +426,16 @@ Two focused view-model tests pass for independent password validation, clearing,
 and stale picker rejection. The solution build passes with zero warnings/errors, including
 compiled Avalonia bindings. Native visual/picker validation of this new section remains
 pending. Production transaction integration and Windows recovery remain unfinished.
+
+## Native safety-settings validation
+
+The Linux desktop runner now passes 47 checks. Added native checks verify both safety
+password fields are masked, mismatch feedback renders, entered settings do not enable
+restoration, and tab departure clears both safety secrets. Existing source-profile byte
+checks also pass. See [safety settings screenshot](screenshots/restore-safety-settings.png).
+The native folder picker was wired but not manually driven; Windows desktop validation
+remains unavailable. All inputs were synthetic.
+
+Latest full run: 1,088 passed, nine environment-dependent tests skipped (994 Core,
+48 Brave, 32 Linux and 14 Windows-labelled tests passed). Native Windows recovery
+validation and production restore integration remain pending.
