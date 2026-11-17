@@ -88,5 +88,20 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         second.PublishChild("owned", "synthetic"u8.ToArray(), false);
         Assert.Equal("synthetic", File.ReadAllText(Path.Combine(_root, "owned")));
     }
+    [Fact]
+    public void NewRecoveryFilePublishesVerifiedMetadataWithoutClobberingExistingData()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var original = Path.Combine(_root, "original"); File.WriteAllText(original, "synthetic-original");
+        File.SetLastWriteTimeUtc(original, new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        byte[] metadata; using (var file = File.OpenRead(original)) metadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle);
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        directory.PublishNewRecoveryFile("new", "synthetic-new"u8.ToArray(), metadata);
+        Assert.Equal("synthetic-new", File.ReadAllText(Path.Combine(_root, "new")));
+        using (var file = File.OpenRead(Path.Combine(_root, "new"))) Assert.Equal(metadata, LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+        Assert.Throws<IOException>(() => directory.PublishNewRecoveryFile("original", "overwrite"u8.ToArray(), metadata));
+        Assert.Equal("synthetic-original", File.ReadAllText(original));
+        Assert.DoesNotContain(Directory.GetFiles(_root), path => path.EndsWith(".tmp"));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

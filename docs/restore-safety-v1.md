@@ -334,3 +334,16 @@ the future writer must retain/revalidate physical target identity before publica
 Original-absence checks are observations, not an atomic creation reservation. This is a
 read-side production component only; no application transaction adapter or target writer
 has been connected. Windows capture and complete publication/recovery handling remain pending.
+
+## Metadata-aware no-clobber publication
+
+`RecoveryDirectoryIdentity.PublishNewRecoveryFile` stages a new Linux child privately,
+applies/verifies supported metadata through its open handle, flushes, verifies content
+readback and staging identity, and publishes with RENAME_NOREPLACE. Existing targets are
+never overwritten. Nine native directory tests now pass, including exact metadata on
+publication, preservation of an existing target and normal staging cleanup.
+
+This is a low-level new-file primitive, not a complete transaction writer. Authorization,
+closed-browser checks, existing-target compare/publication, deletion for original absence,
+concurrent same-user mutation handling and Windows support remain pending. No application
+restore command is connected to this primitive.

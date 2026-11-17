@@ -100,6 +100,43 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
             if (MatchesChild(staging, output.SafeFileHandle)) UnlinkAt(_handle, staging, 0);
         }
     }
+    /// <summary>Publishes a new recovery file with verified metadata; never replaces an existing child.</summary>
+    /// <remarks>Callers must authorize the target and enforce closed-browser state. Existing-target recovery is not implemented here.</remarks>
+    public void PublishNewRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata)
+    {
+        Verify(); CheckName(name);
+        var staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
+        var descriptor = OpenAt(_handle, staging, 2 | 0x40 | 0x80 | 0x20000 | 0x80000, 0x180);
+        if (descriptor < 0) throw new IOException("Cannot create private recovery staging.");
+        using var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.ReadWrite);
+        try
+        {
+            output.Write(content.Span); output.Flush(true);
+            LinuxRecoveryMetadata.Apply(output.SafeFileHandle, metadata.Span); output.Flush(true);
+            if (output.Length != content.Length) throw new IOException("Recovery staging length changed.");
+            output.Position = 0;
+            var buffer = new byte[65536];
+            try
+            {
+                var offset = 0;
+                while (offset < content.Length)
+                {
+                    var count = output.Read(buffer, 0, Math.Min(buffer.Length, content.Length - offset));
+                    if (count == 0 || !buffer.AsSpan(0, count).SequenceEqual(content.Span.Slice(offset, count)))
+                        throw new IOException("Recovery staging verification failed.");
+                    offset += count;
+                }
+            }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
+            Verify();
+            if (!MatchesChild(staging, output.SafeFileHandle)) throw new IOException("Recovery staging identity changed.");
+            if (RenameAt(_handle, staging, _handle, name, 1) != 0) throw new IOException("Recovery destination already exists or cannot be published.");
+            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
+            Verify();
+        }
+        finally { if (MatchesChild(staging, output.SafeFileHandle)) UnlinkAt(_handle, staging, 0); }
+    }
+
     private bool MatchesChild(string name, SafeFileHandle owned)
     {
         if (Statx(owned, "", 0x1000, 0x105, out var first) != 0 ||
