@@ -3,12 +3,14 @@ using System.Security.Cryptography;
 
 namespace BraveBackup.Core;
 
-/// <summary>Validates the protected portable-password category of archive version 6 without extracting files.</summary>
+/// <summary>Validates protected password categories of archive versions 6/7 without extracting files.</summary>
 internal static class PasswordArchiveFormat
 {
     internal static void ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
         ArchiveCategory category, CancellationToken token)
     {
+        if (category.Version == 2 && category.Files.Any(file => file?.Role == "raw-password-index"))
+        { RawPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token); return; }
         if (category.Files.Length != 1) throw Invalid();
         var file = category.Files[0];
         var expected = prefix + "portable-v1.bin";

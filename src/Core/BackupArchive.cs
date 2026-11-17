@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace BraveBackup.Core;
 
-/// <summary>Writes and verifies archive-v1/v2/v3/v4/v5/v6 ZIP content independently of any browser or UI.</summary>
+/// <summary>Writes and verifies archive-v1/v2/v3/v4/v5/v6/v7 ZIP content independently of any browser or UI.</summary>
 public static class BackupArchive
 {
     /// <summary>Maps the four approved compression choices without adding package dependencies.</summary>
@@ -86,7 +86,7 @@ public static class BackupArchive
         }
 
         ValidateManifest(manifest);
-        if (manifest.RequiredCapabilities.Contains("passwords-v1", StringComparer.Ordinal) && !encryptedEnvelope)
+        if (manifest.RequiredCapabilities.Any(capability => capability is "passwords-v1" or "passwords-v2") && !encryptedEnvelope)
             throw new InvalidDataException("Portable password payloads require an encrypted archive envelope.");
         var ids = new HashSet<Guid>();
         foreach (var installation in manifest.Installations)
@@ -106,9 +106,9 @@ public static class BackupArchive
                 var categoryIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var category in profile.Categories)
                 {
-                    if (category is null || !categoryIds.Add(category.Id) || category.Version != 1 ||
+                    if (category is null || !categoryIds.Add(category.Id) || category.Version != (category.Id == "passwords" && manifest.FormatVersion == 7 ? 2 : 1) ||
                         category.Files is null ||
-                        !manifest.RequiredCapabilities.Contains(category.Id + "-v1", StringComparer.Ordinal))
+                        !manifest.RequiredCapabilities.Contains(category.Id + "-v" + category.Version, StringComparer.Ordinal))
                         throw new InvalidDataException("Unsupported or duplicate archive category.");
                     if (category.Id == "passwords")
                     {
@@ -236,7 +236,7 @@ public static class BackupArchive
 
     private static void ValidateManifest(ArchiveManifest manifest)
     {
-        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5 or 6) ||
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5 or 6 or 7) ||
             manifest.ArchiveId == Guid.Empty ||
             manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
             string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
@@ -264,9 +264,14 @@ public static class BackupArchive
                                           "tabmanagerplus-v1"
                                       }
                                       .Where(manifest.RequiredCapabilities.Contains))
-                            : manifest.RequiredCapabilities.Contains("passwords-v1") &&
+                            : manifest.FormatVersion == 6
+                            ? manifest.RequiredCapabilities.Contains("passwords-v1") &&
                               manifest.RequiredCapabilities.SequenceEqual(
                                   new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v1" }
+                                      .Where(manifest.RequiredCapabilities.Contains))
+                            : manifest.RequiredCapabilities.Contains("passwords-v2") &&
+                              manifest.RequiredCapabilities.SequenceEqual(
+                                  new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v2" }
                                       .Where(manifest.RequiredCapabilities.Contains))) ||
             manifest.Installations is null || manifest.Installations.Length == 0)
             throw new InvalidDataException("Unsupported or invalid archive manifest.");

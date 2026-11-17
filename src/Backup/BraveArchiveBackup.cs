@@ -114,7 +114,7 @@ public static class BraveArchiveBackup
         if (selectedCategories.Contains("passwords"))
         {
             if (!passwordOptions!.ProtectPasswords)
-                throw new BackupOperationException("passwords-mode-unsupported", "This archive path supports protected portable passwords only; CSV and raw saving are not enabled.");
+                throw new BackupOperationException("passwords-mode-unsupported", "This archive path requires password protection; CSV saving is not enabled; protected raw saving requires its separate explicit fallback choice.");
             if (string.IsNullOrEmpty(password))
                 throw new BackupOperationException("passwords-protection-required", "Protected passwords require archive encryption. Disabling encryption does not choose CSV.");
             if (passwordOptions.GetProvider is null)
@@ -351,7 +351,16 @@ public static class BraveArchiveBackup
                             profiles.ToArray()));
                     }
 
+                    if (passwords?.RawProfiles > 0)
+                    {
+                        capabilities[Array.IndexOf(capabilities, "passwords-v1")] = "passwords-v2";
+                        foreach (var archivedProfile in installations.SelectMany(item => item.Profiles))
+                        for (var categoryIndex = 0; categoryIndex < archivedProfile.Categories.Length; categoryIndex++)
+                            if (archivedProfile.Categories[categoryIndex].Id == "passwords")
+                                archivedProfile.Categories[categoryIndex] = archivedProfile.Categories[categoryIndex] with { Version = 2 };
+                    }
                     BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive",
+                        passwords?.RawProfiles > 0 ? 7 :
                         passwords is not null ? 6 :
                         tabManagerPlus is not null ? 5 :
                         sessions is not null ? 4 :
@@ -404,6 +413,8 @@ public static class BraveArchiveBackup
                 : $"TabManagerPlus saved-window profiles: {tabManagerPlus.Profiles}; windows: {tabManagerPlus.WindowCount}; tabs: {tabManagerPlus.TabCount}\nSource: supported 7.0.0 stored saved windows, captured with Brave observed closed. Unsaved live windows, extension preferences and native tab-group metadata are not included. Restore is not available.";
             var passwordsSummary = passwords is null ? string.Empty :
                 $"Protected password profiles: {passwords.Profiles}; credentials: {passwords.CredentialCount}; notes: {passwords.NoteCount}; excluded entries: {passwords.ExcludedCount}\nPortable capture completed inside an encrypted archive. Raw preservation and CSV were not used. Restore is not available.";
+            if (passwords?.RawProfiles > 0)
+                passwordsSummary = $"Protected password profiles: {passwords.Profiles}; portable profiles: {passwords.Profiles - passwords.RawProfiles}; portable credentials: {passwords.CredentialCount}; notes: {passwords.NoteCount}\nRaw/native preservation profiles: {passwords.RawProfiles}; files: {passwords.RawFileCount}; missing main stores: {passwords.IncompleteRawStores}\nPortable capture did not complete for raw profiles. Raw credential counts are unknown; portability and recoverability are not guaranteed. All password data is inside the encrypted archive. Restore is not available.";
             var settingsSummary = hasSettings
                 ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
                 : string.Empty;

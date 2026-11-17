@@ -146,6 +146,69 @@ public sealed class ProtectedPasswordBackupTests : IDisposable
         Assert.Empty(_keys); Assert.Equal("synthetic-original", File.ReadAllText(Destination));
     }
 
+    private PasswordBackupOptions RawOptions(Func<PasswordRawFallbackWarning, CancellationToken, Task<bool>> choice)
+    {
+        var original = Options();
+        return new PasswordBackupOptions { GetProvider = original.GetProvider, ObserveBrowserState = original.ObserveBrowserState,
+            Unlock = original.Unlock, ChooseRawPreservation = choice };
+    }
+
+    [Fact]
+    public async Task ExplicitRawChoiceWritesMixedV7WithTruthfulStatusAndExactFiles()
+    {
+        Prepare();
+        var profile = _scope[1].Profiles[0].ProfileDirectory;
+        File.WriteAllBytes(Path.Combine(profile, "Login Data"), "synthetic-corrupt-password-file"u8.ToArray());
+        File.WriteAllBytes(Path.Combine(profile, "Login Data-journal"), "synthetic-journal"u8.ToArray());
+        File.WriteAllText(Path.Combine(profile, "Local State"), "must not include");
+        File.WriteAllText(Path.Combine(profile, "Cookies"), "must not include");
+        var calls = 0;
+        var result = await Create(RawOptions((warning, _) =>
+        { calls++; Assert.Equal(profile, warning.ProfileDirectory); return Task.FromResult(true); }));
+        Assert.Equal(1, calls);
+        using var input = File.OpenRead(Destination);
+        var manifest = BraveSettingsBackup.ValidateArchive(input, ArchivePassword);
+        Assert.Equal(7, manifest.FormatVersion); Assert.Equal(new[] { "passwords-v2" }, manifest.RequiredCapabilities);
+        var categories = manifest.Installations.SelectMany(i => i.Profiles).SelectMany(p => p.Categories).ToArray();
+        Assert.All(categories, c => Assert.Equal(2, c.Version));
+        Assert.Contains(categories, c => c.Files.Any(f => f.Role == "portable-passwords"));
+        var raw = Assert.Single(categories.Where(c => c.Files.Any(f => f.Role == "raw-password-index")));
+        using var decrypted = ArchiveEncryption.OpenReader(input, ArchivePassword);
+        using var zip = new ZipArchive(decrypted, ZipArchiveMode.Read);
+        foreach (var descriptor in raw.Files.Where(f => f.Role == "native-password-file"))
+        {
+            using var stream = zip.GetEntry(descriptor.Path)!.Open(); using var bytes = new MemoryStream(); stream.CopyTo(bytes);
+            Assert.Equal(File.ReadAllBytes(Path.Combine(profile, descriptor.Path.Split('/').Last())), bytes.ToArray());
+        }
+        Assert.DoesNotContain(zip.Entries, entry => entry.Name is "Local State" or "Cookies");
+        Assert.Contains("Raw/native preservation profiles: 1", result.PasswordsSummary);
+        Assert.Contains("Raw credential counts are unknown", result.Report);
+        Assert.DoesNotContain("synthetic-corrupt-password-file", result.Report);
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(Destination)!));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RawDeclineOrCancellationPreservesDestination(bool cancel)
+    {
+        Prepare(); File.WriteAllBytes(Path.Combine(_scope[0].Profiles[0].ProfileDirectory, "Login Data"), "corrupt"u8.ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(Destination)!); File.WriteAllText(Destination, "synthetic-original");
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Create(RawOptions((_, _) =>
+        { if (cancel) cancellation.Cancel(); return Task.FromResult(cancel); }), overwrite: _ => Task.FromResult(true), token: cancellation.Token));
+        Assert.Equal("synthetic-original", File.ReadAllText(Destination)); Assert.Single(Directory.GetFiles(Path.GetDirectoryName(Destination)!));
+    }
+
+    [Fact]
+    public async Task RawSourceChangeAfterCaptureBlocksPublication()
+    {
+        Prepare(); var source = Path.Combine(_scope[0].Profiles[0].ProfileDirectory, "Login Data"); File.WriteAllBytes(source, "corrupt"u8.ToArray());
+        await Assert.ThrowsAsync<BackupOperationException>(() => Create(RawOptions((_, _) => Task.FromResult(true)),
+            progress: new InlineProgress(stage => { if (stage.Stage == "Verifying") File.AppendAllText(source, "changed"); })));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(Destination)!));
+    }
+
     private sealed class InlineProgress(Action<BackupProgress> callback) : IProgress<BackupProgress>
     { public void Report(BackupProgress value) => callback(value); }
     public void Dispose() { foreach (var key in _keys) key.Dispose(); if (Directory.Exists(_root)) Directory.Delete(_root, true); }

@@ -8,7 +8,8 @@ disabled until its full controls/provider/fallback flow is connected.
 `ProtectPasswords` defaults to true. This writer supports **protected portable data only**:
 archive encryption is mandatory, an empty/missing encryption password fails before
 provider/key access, and unchecking protection is rejected rather than silently selecting
-CSV. CSV and raw/native archive saving need their separately documented contracts/consent.
+CSV. CSV archive saving remains unsupported. The [v7 raw fallback contract](archive-format-v7.md)
+now supports encrypted raw/native preservation after a fresh explicit host choice.
 
 `GetProvider` is mandatory and establishes the researched provider/backend per selected
 installation/profile; no OS-only or prefix-only guess is made. `ObserveBrowserState` can
@@ -16,7 +17,8 @@ supply the operation process observer. The optional `Unlock` adapter receives a 
 borrowed captured Local State bytes where applicable, and cancellation; it must return
 an owned key and retain no copies. Without that adapter, native researched key access is
 used. Options store no keys or archive password. Provider failures stop this writer;
-the separate raw-or-cancel capture component is not silently substituted into its payload.
+the raw-or-cancel component is used only when the host supplies the explicit
+`ChooseRawPreservation` callback. A raw result is never substituted into a portable payload.
 
 ## Capture, streaming and publication
 
@@ -62,5 +64,5 @@ were accessed. The full regression suite protects existing categories and versio
 
 The semantic refactoring tool updated advanced call sites to pass no password options;
 a compatibility overload preserves the existing source/API entry point. UI selection and
-credential discovery remain unchanged. Native Windows/keyring validation, raw/CSV archive
-contracts, browser CSV projection, full fallback controls and the Passwords UI remain pending.
+credential discovery remain unchanged. Native Windows/keyring validation, CSV archive contracts, browser CSV projection, full
+fallback UI controls and the Passwords UI remain pending.

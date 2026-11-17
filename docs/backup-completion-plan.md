@@ -104,8 +104,8 @@ has 17 tests against synthetic fixtures. [Confirmed standalone CSV saving](passw
 is implemented with synthetic transaction coverage; browser row projection remains separate work. The [explicit raw-file fallback](passwords-raw-fallback.md) now has capture and host-choice
 coverage. [Archive-v6 protected portable password validation](archive-format-v6.md) is
 implemented. [Protected portable password writing](passwords-protected-backup.md) now
-creates verified encrypted v6 archives through explicit advanced options. Raw/CSV archive
-writing and UI integration remain pending. Real Windows/keyring validation
+creates verified encrypted v6 archives through explicit advanced options. [Encrypted raw fallback writing](archive-format-v7.md) now emits v7 with explicit
+portable/raw result classification. CSV archive writing and UI integration remain pending. Real Windows/keyring validation
 and UI wiring remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session

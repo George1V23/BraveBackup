@@ -10,7 +10,9 @@ The [CSV formatting component](passwords-csv.md) is tested for already-projected
 [Confirmed standalone CSV saving](passwords-csv-save.md) is implemented for prepared rows.
 [Explicit raw/native fallback capture](passwords-raw-fallback.md) now includes the host
 raw-or-cancel choice. Real OS/keyring validation, browser CSV projection, encrypted-container
-consent, raw/CSV archive writing and UI integration remain pending.
+consent, CSV archive writing and UI integration remain pending.
+[Encrypted raw fallback archives](archive-format-v7.md) now preserve explicitly chosen
+files with nonportable status and no inferred credential counts.
 [Protected portable archive writing](passwords-protected-backup.md) is implemented through
 explicit advanced options without enabling discovery or UI credential access.
 [Archive-v6 protected portable payload validation](archive-format-v6.md) is implemented. The user's

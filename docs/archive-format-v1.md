@@ -136,3 +136,8 @@ before that work is complete.
 
 The [archive-v6 contract](archive-format-v6.md) adds encrypted-envelope-only portable
 password validation. Existing v1–v5 contracts and writer behavior are unchanged.
+
+## Version 7 raw-password extension
+
+[Archive v7](archive-format-v7.md) adds encrypted, explicitly classified raw/native
+password preservation while retaining all earlier readers/contracts.

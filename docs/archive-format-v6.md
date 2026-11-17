@@ -65,6 +65,6 @@ All archive generation is in memory using synthetic credentials. The full regres
 suite also exercises the existing categories and versions.
 
 Protected writing now has frozen options, source revalidation, atomic publication and
-truthful counts. Explicit raw-file archive contracts and CSV archive consent remain
-separate requirements. Browser CSV projection, actual UI wiring and real
+truthful counts. The subsequent [v7 contract](archive-format-v7.md) adds explicit raw-file preservation;
+CSV archive consent remains separate work. Browser CSV projection, actual UI wiring and real
 native authentication validation remain pending. No restore operation is introduced.
