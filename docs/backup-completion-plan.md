@@ -93,7 +93,8 @@ explicit raw-file preservation choice on portable-capture failure. Research and 
 checkpoint is complete: [Passwords sources, compatibility limits and synthetic fixtures](passwords-research.md).
 Six independent fixture checks pass. [Isolated encrypted-database capture and schema
 validation](passwords-snapshot.md) are implemented with 36 new tests, without enabling the
-UI category. Provider-aware decoding, native OS/browser integration and password saving
+UI category. [Provider-aware password and note decoding](passwords-decoding.md) is
+implemented with 20 synthetic tests. Native OS/browser integration and password saving
 remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
