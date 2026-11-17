@@ -8,7 +8,8 @@ components, now connected by [explicit capture orchestration](passwords-capture.
 The [portable payload codec](passwords-payload.md) is implemented independently of archive saving.
 The [CSV formatting component](passwords-csv.md) is tested for already-projected rows.
 [Confirmed standalone CSV saving](passwords-csv-save.md) is implemented for prepared rows.
-Real OS/keyring validation, raw-file fallback, browser CSV projection, encrypted-container
+[Explicit raw/native fallback capture](passwords-raw-fallback.md) now includes the host
+raw-or-cancel choice. Real OS/keyring validation, browser CSV projection, encrypted-container
 consent and archive/UI integration remain pending. The user's
 protected default and explicitly confirmed optional plaintext CSV remain requirements.
 The subsequent [research/fixture checkpoint](passwords-research.md) records pinned sources,
