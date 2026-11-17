@@ -500,3 +500,18 @@ failed acceptance, deletion observation and original-byte/metadata retention. Th
 performs no target writes and cannot prove who made an observed change. Callers must not
 use it to authorize changes or adopt arbitrary external edits. Production replacement/
 deletion and rollback publication are still pending; no restore command is connected.
+
+## Frozen read-only restore context
+
+`BraveRestoreContext` freezes source path/fingerprint and explicit installation/profile
+mappings, then rechecks supported target directory boundaries/access, duplicate normalized
+destinations, source bytes and stopped-browser observations before/after verification.
+A focused synthetic test passes for unchanged context, source edits and Running/Unknown
+browser states without destination writes. The host must first authenticate the archive
+and obtain explicit final operation approval; context capture does not grant either.
+
+Fingerprint verification currently rereads the whole bounded archive; large archives may
+incur significant I/O. This component does not establish physical target identity (the
+separate target leases do), atomic absence/reservation, metadata completeness or safe
+replacement/deletion. It is not yet wired into an application transaction store. Production
+restore and Windows/native recovery integration remain pending.
