@@ -233,3 +233,21 @@ metadata fidelity, Windows parity and production recovery/lifetime handling rema
 
 Latest full regression run after lease integration: 1,068 passed, six environment-dependent
 tests skipped (992 Core, 48 Brave, 22 Linux and six Windows-labelled tests passed).
+
+## Linux ordinary permission/mtime metadata
+
+`Platform.LinuxRecoveryMetadata` captures/applies ordinary permission bits and last-write
+UTC ticks through an already authorized file handle. Its opaque v1 metadata is exactly
+20 bytes: `BBKLM001`, little-endian int32 mode (only 0777 bits permitted), and little-endian
+int64 .NET UTC ticks. Unknown framing/length, special mode bits and invalid ticks are
+rejected before applying metadata; exact capture readback verifies application. A native
+synthetic test passes for permission/mtime roundtrip and malformed-input rejection.
+
+The handle-based APIs are documented in
+[GetUnixFileMode](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.getunixfilemode?view=net-10.0)
+and [SetLastWriteTimeUtc](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.setlastwritetimeutc?view=net-10.0).
+This component is not connected to profile publication. It does not capture UID/GID, ACLs,
+xattrs, creation/access times, filesystem flags or directory metadata. A production target
+adapter must establish its supported metadata policy and reject cases requiring unsupported
+recovery fidelity, rather than claiming this codec alone provides complete rollback.
+Windows metadata and production target integration remain pending.
