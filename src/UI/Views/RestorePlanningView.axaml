@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:UI.ViewModels"
+             x:Class="UI.Views.RestorePlanningView" x:DataType="vm:RestorePlanningViewModel">
+    <Border Classes="card" IsVisible="{Binding HasSource}">
+        <StackPanel Spacing="12">
+            <TextBlock Text="Restore sources and destinations" Classes="section" />
+            <TextBlock Text="Select backed-up profiles and map each to an existing detected profile. Selected categories will replace corresponding destination data; other categories stay unchanged. No merge or restoration is performed in this phase."
+                       TextWrapping="Wrap" Classes="muted" />
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Select all profiles" Command="{Binding SelectAllProfilesCommand}" />
+                <Button Content="Clear all profiles" Command="{Binding ClearProfilesCommand}" />
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RestoreSourceGroup">
+                        <StackPanel Spacing="10" Margin="0,8,0,8">
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding Profiles}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RestoreProfileChoice">
+                                        <StackPanel Spacing="8" Margin="12,0,0,18">
+                                            <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" />
+                                            <StackPanel Spacing="8" IsEnabled="{Binding IsSelected}">
+                                                <TextBlock Text="Data categories" FontWeight="SemiBold" />
+                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                    <Button Content="Select all supported" Command="{Binding SelectAllSupportedCommand}" IsEnabled="{Binding HasSupportedCategories}" />
+                                                    <Button Content="Clear categories" Command="{Binding ClearCategoriesCommand}" IsEnabled="{Binding HasSupportedCategories}" />
+                                                </StackPanel>
+                                                <ItemsControl ItemsSource="{Binding Categories}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:RestoreCategoryChoice">
+                                                            <StackPanel Spacing="3" Margin="8,0,0,8">
+                                                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" IsEnabled="{Binding IsSupported}" />
+                                                                <TextBlock Text="{Binding SupportReason}" TextWrapping="Wrap" Classes="muted" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Text="Destination Brave installation" />
+                                                <ComboBox ItemsSource="{Binding TargetInstallations}" SelectedItem="{Binding SelectedInstallation}"
+                                                          PlaceholderText="Choose destination installation" HorizontalAlignment="Stretch">
+                                                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:RestoreTargetInstallation"><TextBlock Text="{Binding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <TextBlock Text="Destination profile" />
+                                                <ComboBox ItemsSource="{Binding TargetProfiles}" SelectedItem="{Binding SelectedProfile}"
+                                                          PlaceholderText="Choose existing profile" HorizontalAlignment="Stretch">
+                                                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:RestoreTargetProfile"><TextBlock Text="{Binding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <SelectableTextBlock Text="{Binding DestinationPath}" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding CheckResult}" TextWrapping="Wrap" Classes="muted" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="Browser checks conservatively cover all visible Brave processes. One running installation can block every target. No browser is terminated." TextWrapping="Wrap" Classes="muted" />
+            <Button Content="Recheck" Command="{Binding RecheckCommand}" HorizontalAlignment="Left" />
+            <ProgressBar IsVisible="{Binding IsChecking}" IsIndeterminate="True" />
+            <TextBlock Text="{Binding Availability}" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding PlanSummary}" TextWrapping="Wrap" />
+        </StackPanel>
+    </Border>
+</UserControl>

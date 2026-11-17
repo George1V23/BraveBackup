@@ -300,6 +300,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
                 Installations.Add(installation);
             }
 
+            RestorePreview.Planning.SetTargets(Installations.Select(item => new RestoreTargetInstallation(item.AppInfo,
+                item.Profiles.Select(profile => new RestoreTargetProfile(profile.ProfileInfo)).ToArray())));
             ActiveInstallation = replacementActive;
             FocusedProfile = replacementFocus;
             SynchronizeExportContext();

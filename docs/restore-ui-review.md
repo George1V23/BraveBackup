@@ -2,7 +2,7 @@
 
 The control-by-control review is complete. These decisions define the proposed behavior;
 the phased implementation sequence is approved. Phase 1 read-only inspection is implemented
-for review; destination modification remains unavailable.
+for review, followed by phase 2 source selection/mapping. Destination modification remains unavailable.
 
 ## Accepted controls
 

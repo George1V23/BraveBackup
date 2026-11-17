@@ -1,7 +1,9 @@
 # Restore phased completion plan
 
 Status: sequence approved by the user. Phase 1 is implemented for review; see
-[read-only inspection and validation](restore-phase1-preview.md). Later phases remain pending their checkpoints.
+[read-only inspection and validation](restore-phase1-preview.md). Phase 2 is now implemented
+for review: [source selection, mapping and preflight](restore-phase2-planning.md).
+Later phases remain pending their checkpoints.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.
@@ -14,8 +16,9 @@ starting the next phase. Existing backup/export functionality must remain operat
   profiles and category representations. These are reusable read-side components.
 - Platform code supplies process observation, private-file creation and folder opening.
   Discovery supplies existing destination installation/profile metadata.
-- The Restore tab is a placeholder. There is no destination writer, restore planner,
-  safety snapshot contract, modification journal or rollback engine.
+- The original Restore placeholder has been replaced with read-only inspection and
+  source/target planning. There is still no destination writer, safety snapshot contract,
+  modification journal or rollback engine.
 - Backup support does not establish restore compatibility. Portable password payloads,
   raw password files and CSV are different representations; extension/session captures
   also require their own destination compatibility checks and writer research.

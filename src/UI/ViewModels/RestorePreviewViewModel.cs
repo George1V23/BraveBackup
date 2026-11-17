@@ -26,6 +26,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     private bool _disposed;
     /// <summary>Native local-open picker supplied by the window; choosing does not write files.</summary>
     public Func<Task<string?>>? PickSource { get; set; }
+    /// <summary>Independent read-only source/target plan; no execution capability is exposed.</summary>
+    public RestorePlanningViewModel Planning { get; } = new();
     public ObservableCollection<RestoreInstallationPreview> Installations { get; } = [];
     [ObservableProperty] private string _sourcePath = string.Empty;
     [ObservableProperty] private string _password = string.Empty;
@@ -81,7 +83,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         var generation = ++_generation;
         var source = SourcePath;
         var secret = unlock ? Password : null;
-        Password = string.Empty; Summary = string.Empty; Installations.Clear(); NeedsUnlock = false;
+        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); NeedsUnlock = false;
         if (string.IsNullOrWhiteSpace(source)) { IsBusy = false; Status = "Choose a backup to inspect. No browser files will be changed."; return; }
         using var cancellation = new CancellationTokenSource();
         _inspection = cancellation;
@@ -96,6 +98,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories.Select(Category).ToArray())).ToArray()));
+            Planning.Load(manifest, result.SourcePath);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
             NeedsUnlock = false;
             Status = "Backup validated. Preview only; restoration is not enabled in this phase.";
@@ -128,9 +131,9 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     public void Leave()
     {
         ++_generation; _inspection?.Cancel(); _inspection = null;
-        Password = string.Empty; Summary = string.Empty; Installations.Clear(); NeedsUnlock = false; IsBusy = false;
+        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); NeedsUnlock = false; IsBusy = false;
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
 }

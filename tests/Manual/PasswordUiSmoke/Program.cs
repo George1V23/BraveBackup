@@ -156,6 +156,29 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     restoreBitmap.Render(window);
                     restoreBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase1-preview.png"), PngBitmapEncoderOptions.Default);
                 }
+                var planning = restore.Planning;
+                var planningView = window.GetVisualDescendants().OfType<RestorePlanningView>().Single();
+                var sourceChoice = planning.Groups.Single().Profiles.Single();
+                Check(!sourceChoice.IsSelected, "Restore source choices start unselected");
+                var targetBoxes = planningView.GetVisualDescendants().OfType<ComboBox>().ToArray();
+                Check(targetBoxes.Length == 2 && targetBoxes.All(box => box.SelectedItem is null), "Restore destination selectors start empty");
+                var sourceCheck = planningView.GetVisualDescendants().OfType<CheckBox>().Single(box => Equals(box.Content, sourceChoice.Name));
+                sourceCheck.IsChecked = true; await Task.Delay(100);
+                Check(sourceChoice.IsSelected, "Restore source checkbox binding selects only archived source");
+                Check(planningView.GetVisualDescendants().OfType<CheckBox>().Where(box => !ReferenceEquals(box, sourceCheck)).All(box => !box.IsEffectivelyEnabled), "unsupported restore categories remain disabled");
+                targetBoxes[0].SelectedIndex = 0; await Task.Delay(100); targetBoxes[1].SelectedIndex = 0; await Task.Delay(100);
+                Check(sourceChoice.SelectedProfile is not null && sourceChoice.DestinationPath == profileDirectory, "Restore mapping bindings show exact destination path");
+                planning.ObserveBrowserState = _ => ProcessPresence.Stopped;
+                await planning.RecheckAsync();
+                Check(sourceChoice.CheckResult.StartsWith("Closed"), "Restore Recheck reports controlled closed-browser status");
+                Check(planning.Availability.Contains("restoration is unavailable"), "Restore planning cannot execute destination writes");
+                var restoreScroll = restoreView.GetVisualDescendants().OfType<ScrollViewer>().First();
+                restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(200);
+                using (var planningBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
+                {
+                    planningBitmap.Render(window);
+                    planningBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase2-mapping.png"), PngBitmapEncoderOptions.Default);
+                }
                 restore.Password = "synthetic-not-retained";
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
                 Check(restore.Password.Length == 0 && restore.Installations.Count == 0, "leaving Restore clears password and preview");
