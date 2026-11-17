@@ -257,6 +257,38 @@ public sealed class PasswordCaptureTests : IDisposable
         Assert.Equal("passwords-key-source-invalid", Assert.Throws<BackupOperationException>(() => Read(unlock: (_, _) => throw new Exception("Must not unlock"))).Code);
     }
 
+    [Theory]
+    [InlineData("windows")]
+    [InlineData("linux")]
+    public void PortableMappingOwnsIndependentSecrets(string os)
+    {
+        Prepare(os);
+        File.Copy(Path.Combine(Profile, "Login Data"), Path.Combine(Profile, "Login Data For Account"));
+        using var capture = Read(os);
+        using var portable = BravePortablePasswords.Create(capture);
+        Assert.Equal(new[] { PortablePasswordStoreKind.Profile, PortablePasswordStoreKind.Account }, portable.Stores.Select(s => s.Kind));
+        var source = capture.Databases["Login Data"].Rows[0].Password.Utf8;
+        var copied = portable.Stores[0].Logins[0].Password.Utf8;
+        capture.Dispose();
+        Assert.All(source.ToArray(), b => Assert.Equal(0, b));
+        Assert.Equal(Vectors.GetProperty("passwordUtf8").GetString(), Encoding.UTF8.GetString(copied.Span));
+        using var encoded = PasswordPayloadFormat.Encode(portable);
+        using var restored = PasswordPayloadFormat.Decode(encoded.Bytes.Span);
+        Assert.Equal(copied.ToArray(), restored.Stores[0].Logins[0].Password.Utf8.ToArray());
+        portable.Dispose();
+        Assert.All(copied.ToArray(), b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void PortableMappingRejectsStaleCaptureAndCancellation()
+    {
+        Prepare();
+        using var capture = Read();
+        Assert.Throws<OperationCanceledException>(() => BravePortablePasswords.Create(capture, new CancellationToken(true)));
+        File.AppendAllText(State, " ");
+        Assert.Equal("passwords-key-source-changed", Assert.Throws<BackupOperationException>(() => BravePortablePasswords.Create(capture)).Code);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);

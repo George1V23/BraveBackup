@@ -5,7 +5,8 @@ The encrypted-source [snapshot component](passwords-snapshot.md) is implemented 
 [provider-aware decryption](passwords-decoding.md), the [Windows key adapter](passwords-windows-key.md)
 and the [Linux Secret Service adapter](passwords-linux-key.md) are implemented as isolated
 components, now connected by [explicit capture orchestration](passwords-capture.md).
-Real OS/keyring validation, raw-file fallback, export and archive/UI integration remain pending. The user's
+The [portable payload codec](passwords-payload.md) is implemented independently of archive saving.
+Real OS/keyring validation, raw-file fallback, CSV export and archive/UI integration remain pending. The user's
 protected default and explicitly confirmed optional plaintext CSV remain requirements.
 The subsequent [research/fixture checkpoint](passwords-research.md) records pinned sources,
 six passing fixture checks and unresolved native/live-capture/automation limits.
