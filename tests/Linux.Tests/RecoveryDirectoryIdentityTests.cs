@@ -114,5 +114,17 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Single(Directory.GetFiles(_root));
         Assert.Equal("synthetic-original", File.ReadAllText(Path.Combine(_root, "existing")));
     }
+    [Fact]
+    public void IdenticalContentReplacementDoesNotMatchRetainedFileIdentity()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(_root, "target"); File.WriteAllText(path, "synthetic");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        using var retained = directory.OpenReadChild("target"); directory.VerifyChildIdentity("target", retained.SafeFileHandle);
+        var replacement = Path.Combine(_root, "replacement"); File.WriteAllText(replacement, "synthetic");
+        File.Move(replacement, path, true);
+        Assert.Throws<IOException>(() => directory.VerifyChildIdentity("target", retained.SafeFileHandle));
+        Assert.Equal("synthetic", File.ReadAllText(path));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

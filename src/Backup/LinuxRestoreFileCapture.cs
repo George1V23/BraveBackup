@@ -23,10 +23,13 @@ public static class LinuxRestoreFileCapture
             if (SnapshotFileAccess.Kind(path) != SnapshotNodeKind.Missing) throw new IOException("Target absence changed during capture.");
             return new(false, []);
         }
+        using var retained = directory.OpenReadChild(fileName);
         using var first = Capture(directory, fileName, token);
+        directory.VerifyChildIdentity(fileName, retained.SafeFileHandle);
         using var second = Capture(directory, fileName, token);
         if (!first.Content.Bytes.Span.SequenceEqual(second.Content.Bytes.Span) || !first.Metadata.Bytes.Span.SequenceEqual(second.Metadata.Bytes.Span))
             throw new IOException("Restore target changed during capture.");
+        directory.VerifyChildIdentity(fileName, retained.SafeFileHandle);
         directory.Verify(); token.ThrowIfCancellationRequested();
         return first.Clone();
     }

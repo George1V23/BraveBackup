@@ -75,6 +75,13 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         }
         catch { handle.Dispose(); throw; }
     }
+    /// <summary>Requires the named regular child to still refer to an already retained file handle.</summary>
+    public void VerifyChildIdentity(string name, SafeFileHandle retainedFile)
+    {
+        Verify(); CheckName(name);
+        if (!MatchesChild(name, retainedFile)) throw new IOException("Recovery target file identity changed.");
+    }
+
     /// <summary>Publishes a private staged child using directory-relative syscalls, so directory replacement cannot redirect writes.</summary>
     public void PublishChild(string name, ReadOnlyMemory<byte> bytes, bool replace)
     {

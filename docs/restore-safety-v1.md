@@ -459,3 +459,16 @@ checks no new destination/staging remains and verifies unrelated existing conten
 unchanged. All ten native directory tests pass. The failing-unlink branch itself has not
 been deterministically injected; noncooperating substitution/ownership limitations remain
 as documented. Production restore execution is still disabled.
+
+## Retained target identity during Linux capture
+
+`VerifyChildIdentity` now compares a named regular, single-link child with a retained file
+handle. Linux original-state capture keeps the initial file handle open across both full
+reads and rechecks the named child against it, rejecting an observed replacement even
+when its bytes/metadata are identical. Twelve focused native directory/capture tests pass,
+including a deterministic same-content replacement case.
+
+This improves inspection-time identity only. The returned image does not retain a handle
+for the transaction lifetime; publication must retain/revalidate target identity separately.
+Original absence still requires atomic no-clobber creation, and concurrent modifications
+after capture remain a production-adapter responsibility. No restore is enabled.
