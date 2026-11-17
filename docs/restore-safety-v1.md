@@ -134,3 +134,15 @@ Construction is write-free. Safety publication never replaces an existing artifa
 journal revisions may replace their fixed journal path. Two focused scope tests pass.
 The wrapper still requires complete custom roots from discovery and does not solve bind
 mount aliases, physical directory identity or final path races. No profile writer is enabled.
+
+## Linux directory identity primitive
+
+`Platform.RecoveryDirectoryIdentity` retains a native directory handle and verifies that
+reopening its authorized path still gives the same device/inode. Same-named directory
+replacement and symbolic-link paths are rejected. The statx layout/mask follows the
+[Linux UAPI definition](https://github.com/torvalds/linux/blob/master/include/uapi/linux/stat.h).
+Two native Linux tests pass for replacement, links and disposed-handle rejection.
+This primitive is not connected to artifact publication yet. Handle-relative I/O and
+publication race handling remain pending; path rechecking alone is not a race-free write.
+Windows implementation is pending and this primitive fails closed on unsupported hosts.
+No restore/profile writes are enabled by adding it.
