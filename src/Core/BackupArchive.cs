@@ -106,7 +106,7 @@ public static class BackupArchive
                 var categoryIds = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var category in profile.Categories)
                 {
-                    if (category is null || !categoryIds.Add(category.Id) || category.Version != (category.Id == "passwords" && manifest.FormatVersion == 7 ? 2 : 1) ||
+                    if (category is null || !categoryIds.Add(category.Id) || category.Version != (category.Id == "passwords" && manifest.FormatVersion == 8 ? 3 : category.Id == "passwords" && manifest.FormatVersion == 7 ? 2 : 1) ||
                         category.Files is null ||
                         !manifest.RequiredCapabilities.Contains(category.Id + "-v" + category.Version, StringComparer.Ordinal))
                         throw new InvalidDataException("Unsupported or duplicate archive category.");
@@ -236,7 +236,7 @@ public static class BackupArchive
 
     private static void ValidateManifest(ArchiveManifest manifest)
     {
-        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5 or 6 or 7) ||
+        if (manifest.Format != "BraveBackupArchive" || manifest.FormatVersion is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8) ||
             manifest.ArchiveId == Guid.Empty ||
             manifest.CreatedUtc == default || manifest.CreatedUtc.Offset != TimeSpan.Zero ||
             string.IsNullOrEmpty(manifest.ApplicationVersion) || manifest.RequiredCapabilities is null ||
@@ -269,9 +269,14 @@ public static class BackupArchive
                               manifest.RequiredCapabilities.SequenceEqual(
                                   new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v1" }
                                       .Where(manifest.RequiredCapabilities.Contains))
-                            : manifest.RequiredCapabilities.Contains("passwords-v2") &&
+                            : manifest.FormatVersion == 7
+                            ? manifest.RequiredCapabilities.Contains("passwords-v2") &&
                               manifest.RequiredCapabilities.SequenceEqual(
                                   new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v2" }
+                                      .Where(manifest.RequiredCapabilities.Contains))
+                            : manifest.RequiredCapabilities.Contains("passwords-v3") &&
+                              manifest.RequiredCapabilities.SequenceEqual(
+                                  new[] { "bookmarks-v1", "settings-v1", "extensions-v1", "sessions-v1", "tabmanagerplus-v1", "passwords-v3" }
                                       .Where(manifest.RequiredCapabilities.Contains))) ||
             manifest.Installations is null || manifest.Installations.Length == 0)
             throw new InvalidDataException("Unsupported or invalid archive manifest.");

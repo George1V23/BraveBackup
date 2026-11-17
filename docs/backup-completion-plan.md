@@ -167,3 +167,9 @@ The [synthetic Linux desktop smoke test](passwords-ui-smoke.md) now verifies rea
 layout/bindings, CSV cancellation/approval and encrypted raw-preservation consent without
 accessing real credentials. The reproducible opt-in runner and screenshot are checked in.
 Native file-picker/OS-unlock/Windows validation and CSV-in-archive support remain pending.
+
+[Archive v8 CSV password support](archive-format-v8.md) now provides strict validators
+and a backend writer for encrypted or unencrypted archives, with mandatory fresh consent
+before staging/unlock, source revalidation and atomic publication. Versions 1–7 remain
+compatible. The UI still blocks CSV-in-backup pending its destination-specific dialog wiring;
+broader browser compatibility and native OS validation also remain pending.

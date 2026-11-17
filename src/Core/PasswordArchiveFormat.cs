@@ -3,12 +3,14 @@ using System.Security.Cryptography;
 
 namespace BraveBackup.Core;
 
-/// <summary>Validates protected password categories of archive versions 6/7 without extracting files.</summary>
+/// <summary>Validates protected v6/v7 and explicit CSV v8 password categories without extracting files.</summary>
 internal static class PasswordArchiveFormat
 {
     internal static void ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
         ArchiveCategory category, CancellationToken token)
     {
+        if (category.Version == 3)
+        { CsvPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token); return; }
         if (category.Version == 2 && category.Files.Any(file => file?.Role == "raw-password-index"))
         { RawPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token); return; }
         if (category.Files.Length != 1) throw Invalid();

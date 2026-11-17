@@ -113,10 +113,21 @@ public static class BraveArchiveBackup
                 "Select supported Bookmarks, Settings, Extensions, Sessions and/or TabManagerPlus. Passwords remain unavailable.");
         if (selectedCategories.Contains("passwords"))
         {
-            if (!passwordOptions!.ProtectPasswords)
-                throw new BackupOperationException("passwords-mode-unsupported", "This archive path requires password protection; CSV saving is not enabled; protected raw saving requires its separate explicit fallback choice.");
-            if (string.IsNullOrEmpty(password))
+            if (!passwordOptions!.ProtectPasswords && passwordOptions.ConfirmCsvArchiveSave is null)
+                throw new BackupOperationException("passwords-mode-unsupported", "Explicit CSV archive saving requires a fresh plaintext-save confirmation callback.");
+            if (passwordOptions.ProtectPasswords && string.IsNullOrEmpty(password))
                 throw new BackupOperationException("passwords-protection-required", "Protected passwords require archive encryption. Disabling encryption does not choose CSV.");
+            if (!passwordOptions.ProtectPasswords)
+            {
+                if (passwordOptions.CsvLineEnding is not (PasswordCsvLineEnding.LinuxLf or PasswordCsvLineEnding.WindowsCrLf))
+                    throw new BackupOperationException("passwords-csv-line-ending", "Choose CSV record separators explicitly.");
+                if (scope.Any(selection => selection.Profiles.Any(profile =>
+                        !string.Equals(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(profile.ProfileDirectory))),
+                            Path.TrimEndingDirectorySeparator(Path.GetFullPath(selection.Installation.UserDataDirectory)), HostEnvironment.PathComparison))))
+                    throw new BackupOperationException("passwords-csv-profile-scope", "CSV profiles must belong to the selected installation's user-data directory.");
+                if (scope.Any(selection => !BravePasswordCsvExport.SupportsVersion(selection.Installation.Version)))
+                    throw new BackupOperationException("passwords-csv-version-unsupported", "CSV backup currently supports only the researched Brave 1.102.13 version profile.");
+            }
             if (passwordOptions.GetProvider is null)
                 throw new BackupOperationException("passwords-provider-required", "Establish the supported password provider/backend for each selected profile before capture.");
         }
@@ -172,6 +183,17 @@ public static class BraveArchiveBackup
         var initial = await Task.Run(() => Fingerprint(target, cancellationToken), cancellationToken);
         if (initial != null && !await confirmOverwrite(target)) throw new OperationCanceledException(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        if (selectedCategories.Contains("passwords") && !passwordOptions!.ProtectPasswords)
+        {
+            var warning = new PasswordCsvArchiveWarning(target, password is not null,
+                initial is not null, scope.Sum(selection => selection.Profiles.Count));
+            if (!await passwordOptions.ConfirmCsvArchiveSave!(warning, cancellationToken))
+                throw new OperationCanceledException(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            ExportDestinationGuard.Validate(target, roots);
+            if (await Task.Run(() => Fingerprint(target, cancellationToken), cancellationToken) != initial)
+                throw new BackupOperationException("destination-changed", "The destination changed while reviewing CSV consent. Start again to review replacement and plaintext saving.");
+        }
         return await Task.Run(() => Run(scope, target, password, compression, roots, applicationVersion,
                 initial, progress, cancellationToken, selectedCategories, extensionSession, sessionSession,
                 tabManagerPlus, selectedCategories.Contains("passwords") ? new PasswordCaptureSession(passwordOptions!, cancellationToken) : null),
@@ -202,6 +224,9 @@ public static class BraveArchiveBackup
         {
             progress?.Report(new BackupProgress("Validating", 0, total));
             ExportDestinationGuard.Validate(target, roots);
+            if (passwords?.IsCsv == true && Fingerprint(target, token) != initialFingerprint)
+                throw new BackupOperationException("destination-changed", "The destination changed after CSV consent. Review plaintext saving again.");
+            token.ThrowIfCancellationRequested();
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             using (var output = BackupFileOperations.CreatePrivateFile(temp))
             {
@@ -321,7 +346,7 @@ public static class BraveArchiveBackup
                                 }
                                 if (passwords is not null)
                                 {
-                                    progress?.Report(new BackupProgress("Reading/writing protected passwords", done, total));
+                                    progress?.Report(new BackupProgress(passwords.IsCsv ? "Reading/writing password CSV" : "Reading/writing protected passwords", done, total));
                                     profileCategories.Add(passwords.Capture(selection.Installation, profile,
                                         $"installations/{installationId:D}/profiles/{profileId:D}/passwords/", zip, compression));
                                 }
@@ -351,6 +376,8 @@ public static class BraveArchiveBackup
                             profiles.ToArray()));
                     }
 
+                    if (passwords?.IsCsv == true)
+                        capabilities[Array.IndexOf(capabilities, "passwords-v1")] = "passwords-v3";
                     if (passwords?.RawProfiles > 0)
                     {
                         capabilities[Array.IndexOf(capabilities, "passwords-v1")] = "passwords-v2";
@@ -360,6 +387,7 @@ public static class BraveArchiveBackup
                                 archivedProfile.Categories[categoryIndex] = archivedProfile.Categories[categoryIndex] with { Version = 2 };
                     }
                     BackupArchive.WriteManifest(zip, new ArchiveManifest("BraveBackupArchive",
+                        passwords?.IsCsv == true ? 8 :
                         passwords?.RawProfiles > 0 ? 7 :
                         passwords is not null ? 6 :
                         tabManagerPlus is not null ? 5 :
@@ -415,6 +443,8 @@ public static class BraveArchiveBackup
                 $"Protected password profiles: {passwords.Profiles}; credentials: {passwords.CredentialCount}; notes: {passwords.NoteCount}; excluded entries: {passwords.ExcludedCount}\nPortable capture completed inside an encrypted archive. Raw preservation and CSV were not used. Restore is not available.";
             if (passwords?.RawProfiles > 0)
                 passwordsSummary = $"Protected password profiles: {passwords.Profiles}; portable profiles: {passwords.Profiles - passwords.RawProfiles}; portable credentials: {passwords.CredentialCount}; notes: {passwords.NoteCount}\nRaw/native preservation profiles: {passwords.RawProfiles}; files: {passwords.RawFileCount}; missing main stores: {passwords.IncompleteRawStores}\nPortable capture did not complete for raw profiles. Raw credential counts are unknown; portability and recoverability are not guaranteed. All password data is inside the encrypted archive. Restore is not available.";
+            if (passwords?.IsCsv == true)
+                passwordsSummary = $"Password CSV profiles: {passwords.Profiles}; source credentials: {passwords.CredentialCount}; CSV rows: {passwords.CsvRows}; excluded entries: {passwords.ExcludedCount}\nCSV is readable by anyone with access to the {(password is null ? "unencrypted archive" : "decrypted archive")}. Raw preservation was not used. Restore is not available.";
             var settingsSummary = hasSettings
                 ? $"\nStored supported settings: {storedSettings}; absent keys: {absentSettings}\nStored settings per profile (scope order): {string.Join(", ", settingsCounts)}"
                 : string.Empty;

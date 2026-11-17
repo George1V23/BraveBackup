@@ -5,10 +5,14 @@ using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
 
-/// <summary>Explicit per-operation protected-password configuration. No keys or encryption passwords are stored.</summary>
+/// <summary>Explicit per-operation password configuration. No keys or encryption passwords are stored.</summary>
 public sealed class PasswordBackupOptions
 {
     public bool ProtectPasswords { get; init; } = true;
+    /// <summary>Fresh operation-scoped CSV warning; required with an explicit unprotected choice. No approval is cached.</summary>
+    public Func<PasswordCsvArchiveWarning, CancellationToken, Task<bool>>? ConfirmCsvArchiveSave { get; init; }
+    /// <summary>Explicit target record separators; required for CSV mode.</summary>
+    public PasswordCsvLineEnding? CsvLineEnding { get; init; }
     /// <summary>Optional fresh raw-or-cancel choice on eligible portable failures. Invoked on the archive worker; dispatch UI explicitly.</summary>
     public Func<PasswordRawFallbackWarning, CancellationToken, Task<bool>>? ChooseRawPreservation { get; init; }
     /// <summary>Must establish the supported provider/backend; OS detection alone is insufficient.</summary>
@@ -18,12 +22,15 @@ public sealed class PasswordBackupOptions
     public Func<BraveProfileInfo, ReadOnlyMemory<byte>, CancellationToken, PasswordKeyMaterial>? Unlock { get; init; }
 }
 
-/// <summary>Owns portable/raw captures through archive verification/publication; raw saving requires explicit choice; CSV is not supported here.</summary>
+/// <summary>Owns portable/raw captures through archive verification/publication; raw and CSV saving require their separate explicit choices.</summary>
 internal sealed class PasswordCaptureSession(PasswordBackupOptions options, CancellationToken token) : IDisposable
 {
     private readonly List<BravePasswordCapture> _captures = [];
     private readonly List<PasswordBackupCapture> _fallbacks = [];
+    private readonly List<BraveAffiliationSnapshot> _affiliations = [];
     private long _retainedSourceBytes;
+    public bool IsCsv => !options.ProtectPasswords;
+    public int CsvRows { get; private set; }
     public long Bytes { get; private set; }
     public int CredentialCount { get; private set; }
     public int NoteCount { get; private set; }
@@ -39,7 +46,7 @@ internal sealed class PasswordCaptureSession(PasswordBackupOptions options, Canc
         token.ThrowIfCancellationRequested();
         var provider = options.GetProvider!(installation, profile);
         PasswordBackupCapture? selected = null;
-        if (options.ChooseRawPreservation is not null)
+        if (!IsCsv && options.ChooseRawPreservation is not null)
         {
             selected = PasswordBackupCapture.ReadAsync(profile.ProfileDirectory, provider, options.ChooseRawPreservation,
                 options.Unlock is null ? null : (state, cancellation) => options.Unlock(profile, state, cancellation),
@@ -59,6 +66,7 @@ internal sealed class PasswordCaptureSession(PasswordBackupOptions options, Canc
         }
         catch { selected?.Dispose(); capture.Dispose(); throw; }
         using var document = BravePortablePasswords.Create(capture, token);
+        if (IsCsv) return CaptureCsv(profile, document, prefix, zip, compression);
         using var payload = PasswordPayloadFormat.Encode(document, token);
         Bytes += payload.Bytes.Length;
         if (Bytes > 128L * 1024 * 1024)
@@ -84,6 +92,44 @@ internal sealed class PasswordCaptureSession(PasswordBackupOptions options, Canc
         return new ArchiveCategory("passwords", 1,
             [new ArchiveFile(path, "portable-passwords", payload.Bytes.Length, Convert.ToHexStringLower(SHA256.HashData(payload.Bytes.Span)))]);
     }
+    /// <summary>Projects supported credentials through the same offline groups as standalone CSV; retains cache sources through publication.</summary>
+    private ArchiveCategory CaptureCsv(BraveProfileInfo profile, PortablePasswordDocument document,
+        string prefix, ZipArchive zip, string compression)
+    {
+        Func<PortablePasswordLogin, string?> resolve = _ => null;
+        if (document.Stores.Any(store => store.Logins.Count != 0))
+        {
+            var affiliation = BraveAffiliationSnapshot.Read(profile.ProfileDirectory, options.ObserveBrowserState, token);
+            try
+            {
+                if (affiliation.RetainedSourceBytes > 128L * 1024 * 1024 - _retainedSourceBytes)
+                    throw new BackupOperationException("passwords-archive-limit", "Selected CSV sources exceed the operation retention limit.");
+                _affiliations.Add(affiliation); _retainedSourceBytes += affiliation.RetainedSourceBytes;
+            }
+            catch { affiliation.Dispose(); throw; }
+            resolve = BraveOfflineCsvGroups.Create(document, affiliation.Cache, token).Resolve;
+        }
+        using var projection = BravePasswordCsvProjection.Create(document, resolve, token);
+        using var payload = PasswordCsvFormat.Encode(projection.Rows, options.CsvLineEnding!.Value, token);
+        Bytes += payload.Bytes.Length;
+        if (Bytes > 128L * 1024 * 1024)
+            throw new BackupOperationException("passwords-archive-limit", "Selected CSV payloads exceed the operation limit.");
+        var path = prefix + "passwords.csv";
+        using (var output = zip.CreateEntry(path, BackupArchive.Compression(compression)).Open())
+        {
+            var remaining = payload.Bytes;
+            while (!remaining.IsEmpty)
+            {
+                token.ThrowIfCancellationRequested(); var count = Math.Min(65536, remaining.Length);
+                output.Write(remaining.Span[..count]); remaining = remaining[count..];
+            }
+        }
+        CredentialCount += projection.SourceLoginCount; CsvRows += projection.Rows.Count;
+        ExcludedCount += document.Stores.Sum(store => store.BlockedEntries + store.FederatedEntries);
+        return new ArchiveCategory("passwords", 3,
+            [new ArchiveFile(path, "plaintext-password-csv", payload.Bytes.Length, Convert.ToHexStringLower(SHA256.HashData(payload.Bytes.Span)))]);
+    }
+
     private ArchiveCategory CaptureRaw(PasswordBackupCapture selected, string prefix, ZipArchive zip, string compression)
     {
         var snapshot = selected.Raw;
@@ -131,6 +177,8 @@ internal sealed class PasswordCaptureSession(PasswordBackupOptions options, Canc
     public void VerifySources()
     {
         foreach (var capture in _captures) { token.ThrowIfCancellationRequested(); capture.VerifyUnchanged(); }
+        foreach (var affiliation in _affiliations) { token.ThrowIfCancellationRequested(); affiliation.VerifyUnchanged(); }
+        foreach (var capture in _captures) { token.ThrowIfCancellationRequested(); capture.VerifyUnchanged(); }
         foreach (var fallback in _fallbacks.Where(value => value.Kind == PasswordBackupCaptureKind.RawNative)) fallback.VerifyUnchanged();
     }
     public void EnsureStopped()
@@ -143,5 +191,5 @@ internal sealed class PasswordCaptureSession(PasswordBackupOptions options, Canc
         if (state != ProcessPresence.Stopped)
             throw new BackupOperationException("passwords-close-brave", "Close Brave and retry; password sources must remain stopped until publication.");
     }
-    public void Dispose() { foreach (var capture in _captures) capture.Dispose(); foreach (var fallback in _fallbacks) fallback.Dispose(); _captures.Clear(); _fallbacks.Clear(); }
+    public void Dispose() { foreach (var affiliation in _affiliations) affiliation.Dispose(); _affiliations.Clear(); foreach (var capture in _captures) capture.Dispose(); foreach (var fallback in _fallbacks) fallback.Dispose(); _captures.Clear(); _fallbacks.Clear(); }
 }
