@@ -1,0 +1,54 @@
+{
+  "testOnly": true,
+  "groups": [
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": "z\r\nline"
+        }
+      ]
+    },
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": "a,\"quoted\""
+        }
+      ]
+    },
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": "z\r\nline"
+        }
+      ]
+    },
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "notes": [
+        {
+          "name": "",
+          "value": "𐀀"
+        }
+      ]
+    }
+  ],
+  "expectedCombined": "a,\"quoted\"\nz\r\nline\n𐀀\n"
+}

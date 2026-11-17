@@ -115,3 +115,7 @@ Extensions. Password protection and the explicit plaintext exception follow AGEN
 
 Restore-from-backup, Import, Backups management and Merge/Sync retain their own later
 reviews. No restore operation is introduced by approval of Backup-page controls.
+
+[CSV canonical-note projection](passwords-csv-notes.md) now has independent fixture
+coverage. Full browser grouping/origin/affiliation projection, CSV archive saving and
+Password UI integration remain unfinished.

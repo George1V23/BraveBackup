@@ -245,3 +245,10 @@ between generations and hashes intentionally track the frozen generated artifact
 Application C# code and packages are unchanged, so the previous 557 .NET test result was
 not rerun or presented as new validation. Native OS unlocking, real Brave export, source-safe
 live capture and any restore behavior are not established by these research fixtures.
+
+## Canonical CSV note selection refinement
+
+The pinned `StoredCredential::GetPasswordNote` selects only the empty-name canonical
+note. [Researched note projection](passwords-csv-notes.md) implements group sorting/joining
+and refuses nonempty named notes rather than violating the approved no-omission rule.
+Protected portable payloads continue preserving every note separately.

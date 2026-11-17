@@ -39,9 +39,10 @@ strings cannot be reliably erased. All diagnostic `ToString` methods are redacte
 
 ## What remains before export
 
-Rows must first be correctly projected from captured credentials. Browser grouping,
-shown-domain name derivation, affiliated-domain expansion, Android facets and combining
-distinct nonempty notes are not implemented by this formatter. A direct database dump
+The [canonical-note group projection](passwords-csv-notes.md) is now implemented, with
+explicit refusal of nonempty named notes. Rows still need complete browser projection. Browser grouping,
+shown-domain name derivation, affiliated-domain expansion and Android facets are not
+implemented by this formatter. Note combination is a separate Brave-specific component. A direct database dump
 must not be labeled identical to Brave's complete export. No raw/native password files
 are represented as successful CSV output. The portable protected payload retains separate
 notes and metadata that CSV cannot preserve.
