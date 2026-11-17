@@ -20,6 +20,9 @@ CLI ──┘     └────── Platform
 - **Platform** supplies host directories (including configured Documents), PATH, path comparison, registry reads,
   executable
   product metadata and bounded command execution. It contains no Brave formats or paths.
+  It also owns native in-memory SQLite loading and its pinned managed/native packages;
+  generic database/WAL image assembly stays in Core and Brave password schema/capture
+  policy stays in Backup. See [the password snapshot checkpoint](passwords-snapshot.md).
 - **UI** and **CLI** consume Backup independently. UI-only avatars/presentation stay in UI.
 - **Extensions/TabManagerPlus** is a dependency-free .NET 10 project containing a bounded
   offline storage reader and typed saved-window parser. Backup references it for version-gated

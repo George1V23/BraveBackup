@@ -91,8 +91,10 @@ review of all seven items. They include on-demand access, protected defaults, op
 consistent live capture where possible, browser-assisted fallback investigation and an
 explicit raw-file preservation choice on portable-capture failure. Research and fixtures
 checkpoint is complete: [Passwords sources, compatibility limits and synthetic fixtures](passwords-research.md).
-Six independent fixture checks pass. Safe SQLite capture and provider adapters are next;
-application password implementation and native OS/browser integration remain pending.
+Six independent fixture checks pass. [Isolated encrypted-database capture and schema
+validation](passwords-snapshot.md) are implemented with 36 new tests, without enabling the
+UI category. Provider-aware decoding, native OS/browser integration and password saving
+remain pending. Live capture remains conditional; the initial path requests Brave closed.
 
 Extend the tested archive contract through settings, extensions, sessions/native session
 files, TabManagerPlus and passwords. Research, fixtures, tests, capability limitations and

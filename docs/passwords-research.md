@@ -5,6 +5,8 @@ Completed source/fixture checkpoint, 2026-11-17, under the accepted
 OS unlock, Selenium session, password export, archive format or package was added here.
 Passwords remains unavailable in Create Backup. No real user credential database,
 Local State key, browser profile or keyring was inspected.
+The subsequent [snapshot checkpoint](passwords-snapshot.md) implements isolated encrypted
+database capture/schema checks and documents the SQLite packages introduced there.
 
 ## Revisions actually inspected
 
