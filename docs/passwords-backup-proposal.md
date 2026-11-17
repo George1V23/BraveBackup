@@ -22,13 +22,17 @@ projects. Do not reinterpret copied encrypted browser files as portable credenti
 ## What was actually accessed
 
 -
+
 Brave's [password-manager help](https://support.brave.app/hc/en-us/articles/360018185951-How-do-I-use-the-built-in-password-manager)
 documents manual CSV export.
+
 -
+
 Brave's [sensitive-data storage documentation](https://support.brave.app/hc/en-us/articles/29808985123085-Sensitive-data-storage)
 describes OS-bound protection, Windows DPAPI and Linux password-store backends.
 That page was updated in 2024; it is background, not proof that every current Brave
 build still uses only those historical schemes.
+
 - Pinned Chromium revision `c0837d415025e31505c769f6ef13ba0196feaea2`:
   [password CSV writer](https://github.com/chromium/chromium/blob/c0837d415025e31505c769f6ef13ba0196feaea2/components/password_manager/core/browser/export/password_csv_writer.cc),
   [CSV quoting writer](https://github.com/chromium/chromium/blob/c0837d415025e31505c769f6ef13ba0196feaea2/components/password_manager/core/browser/export/csv_writer.cc)
@@ -41,6 +45,34 @@ Current Brave-specific storage schemas, encryption providers and OS access compa
 have **not** yet been fully researched or tested. No universal decryption or cross-machine
 restore claim is supported by this scope review. No real user credential database or
 keyring was opened during this review.
+
+## Item 1: user edits and open automation question
+
+Review proceeds one item at a time. The user edited item 1: credential values may be
+read only after an explicit backup/export operation including Passwords, never during
+startup, discovery, navigation or category selection. Request OS/keyring authentication
+when supported, with the user entering credentials into the native authentication UI.
+An application explanation can precede that dialog; BraveBackup must not retain OS
+credentials. Authentication cancellation/failure stops credential access. A successful
+OS login is not a guarantee that every browser encryption provider permits access.
+
+The user asked whether Selenium could instead launch Brave in the background and
+automate its official CSV export. This route is under consideration, not yet selected
+or implemented. [ChromeDriver profile/binary options](https://developer.chrome.com/docs/chromedriver/capabilities)
+and [Selenium's Chromium support](https://www.selenium.dev/documentation/webdriver/browsers/chrome/)
+establish browser automation capabilities, not a supported Brave password-export API.
+Chromium's [export delegate](https://chromium.googlesource.com/chromium/src/+/0a788fbaedd0baea22281a1733008144abb6634a/chrome/browser/extensions/api/passwords_private/passwords_private_delegate_impl.cc)
+explicitly requests export reauthentication. Native authentication/file dialogs and
+version-specific internal pages require compatibility testing and can require visible
+user interaction; unattended/headless export cannot be promised.
+
+Launching a browser with the original profile can write that profile, conflicting with
+the approved read-only backup policy. An isolated copy avoids those original-profile
+writes but is not guaranteed to retain access to OS/app-bound credentials. These are
+design constraints to resolve before selecting a browser-assisted fallback. No browser
+was launched, profile copied, password read or automation package installed for this review.
+
+Items 2–7 below remain proposed, awaiting individual review.
 
 ## Decisions to keep, edit or defer
 
