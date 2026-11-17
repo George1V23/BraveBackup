@@ -151,3 +151,7 @@ the user’s requested individual review; password UI actions remain blocked mea
 The user approved the initially unselected [Password source selector](passwords-ui-provider.md).
 Protected password backup now connects that explicit choice to v6 portable/v7 raw fallback
 archives with UI-thread consent. CSV Export controls and CSV archive support remain pending.
+
+[Standalone password CSV view-model behavior](passwords-csv-ui-behavior.md) now covers
+frozen requests, per-profile destinations, fresh consent and cancellation. Export layout
+placement is awaiting the user’s reserved visible-control review; no view was changed yet.

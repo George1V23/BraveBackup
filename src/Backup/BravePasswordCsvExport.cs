@@ -9,6 +9,10 @@ public sealed record BravePasswordCsvExportResult(string Destination, int Source
 /// <summary>Explicit capture-to-confirmed-save operation for the researched CSV compatibility profile.</summary>
 public static class BravePasswordCsvExport
 {
+    /// <summary>Checks only version metadata against the researched CSV profile; performs no source or credential access.</summary>
+    public static bool SupportsVersion(string? value) => Version.TryParse(value, out var version) &&
+        version.Major == 1 && version.Minor == 102 && version.Build == 13 && version.Revision <= 0;
+
     /// <summary>Captures supported credentials/cache, groups/projects them, warns freshly and atomically saves one plaintext CSV.</summary>
     /// <remarks>Real compatibility validation remains required; supported version identity is conservative, not proof of a binary's exact revision.</remarks>
     public static async Task<BravePasswordCsvExportResult> CreateAsync(BraveAppInfo installation, BraveProfileInfo profile,
@@ -21,7 +25,7 @@ public static class BravePasswordCsvExport
         ArgumentNullException.ThrowIfNull(confirmPlaintextSave); token.ThrowIfCancellationRequested();
         if (!csvExplicitlyChosen)
             throw new BackupOperationException("passwords-csv-not-selected", "Explicitly choose plaintext password CSV before capture or saving.");
-        if (!Version.TryParse(installation.Version, out var version) || version.Major != 1 || version.Minor != 102 || version.Build != 13 || version.Revision > 0)
+        if (!SupportsVersion(installation.Version))
             throw new BackupOperationException("passwords-csv-version-unsupported", "CSV projection currently supports only the researched Brave 1.102.13 version profile. Use a protected backup for other versions.");
         if (provider is not (PasswordEncryptionProvider.WindowsDpapiV10 or PasswordEncryptionProvider.LinuxKeyringV11))
             throw new ArgumentOutOfRangeException(nameof(provider));
