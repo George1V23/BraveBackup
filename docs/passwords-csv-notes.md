@@ -54,6 +54,7 @@ Browser domain naming calls `FormatOriginForSecurityDisplay` with `OMIT_CRYPTOGR
 not simply a raw display-name database column. The pinned
 [URL formatter](https://github.com/chromium/chromium/blob/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/components/url_formatter/elide_url.cc)
 handles schemes, ports, IDNs and security display. Credential grouping and available
-facets also affect exported rows. Those steps remain unimplemented; no equivalence claim
-is made for arbitrary Brave exports. CSV archive contracts/consent, complete export UI
+facets also affect exported rows. The [ASCII HTTP/HTTPS subset](passwords-csv-origins.md) is now implemented separately.
+Full domain support and grouping remain unimplemented; no equivalence claim is made
+for arbitrary Brave exports. CSV archive contracts/consent, complete export UI
 and real native authentication checks remain pending. Existing archives are unchanged.

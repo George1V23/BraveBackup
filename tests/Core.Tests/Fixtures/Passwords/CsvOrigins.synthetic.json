@@ -1,0 +1,60 @@
+{
+  "testOnly": true,
+  "sourceDerived": true,
+  "cases": [
+    {
+      "url": "https://synthetic.invalid/",
+      "name": "synthetic.invalid",
+      "groupOrigin": "synthetic.invalid",
+      "scheme": "https"
+    },
+    {
+      "url": "http://synthetic.invalid/",
+      "name": "http://synthetic.invalid",
+      "groupOrigin": "synthetic.invalid",
+      "scheme": "http"
+    },
+    {
+      "url": "https://www.synthetic.invalid/login?x=1#saved",
+      "name": "www.synthetic.invalid",
+      "groupOrigin": "www.synthetic.invalid",
+      "scheme": "https"
+    },
+    {
+      "url": "http://synthetic.invalid:8080/login",
+      "name": "http://synthetic.invalid:8080",
+      "groupOrigin": "synthetic.invalid:8080",
+      "scheme": "http"
+    },
+    {
+      "url": "https://synthetic.invalid:8443/login",
+      "name": "synthetic.invalid:8443",
+      "groupOrigin": "synthetic.invalid:8443",
+      "scheme": "https"
+    },
+    {
+      "url": "https://127.0.0.1/login",
+      "name": "127.0.0.1",
+      "groupOrigin": "127.0.0.1",
+      "scheme": "https"
+    },
+    {
+      "url": "http://localhost/login",
+      "name": "http://localhost",
+      "groupOrigin": "localhost",
+      "scheme": "http"
+    },
+    {
+      "url": "https://synthetic.invalid/a%20b?q=%E2%98%83",
+      "name": "synthetic.invalid",
+      "groupOrigin": "synthetic.invalid",
+      "scheme": "https"
+    },
+    {
+      "url": "https://synthetic.invalid/path?dot=/../",
+      "name": "synthetic.invalid",
+      "groupOrigin": "synthetic.invalid",
+      "scheme": "https"
+    }
+  ]
+}

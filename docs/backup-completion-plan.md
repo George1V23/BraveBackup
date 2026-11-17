@@ -119,3 +119,7 @@ reviews. No restore operation is introduced by approval of Backup-page controls.
 [CSV canonical-note projection](passwords-csv-notes.md) now has independent fixture
 coverage. Full browser grouping/origin/affiliation projection, CSV archive saving and
 Password UI integration remain unfinished.
+
+[Supported ASCII CSV web-origin projection](passwords-csv-origins.md) now has source-derived
+fixtures and tests. Complete browser grouping/affiliation and broader origin families
+remain pending before a complete CSV export flow can be enabled.
