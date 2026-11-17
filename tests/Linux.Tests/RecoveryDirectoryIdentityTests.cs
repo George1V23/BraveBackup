@@ -46,5 +46,23 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.Throws<IOException>(() => directory.PublishChild("artifact", "synthetic"u8.ToArray(), false));
         Assert.Empty(Directory.GetFiles(path)); Assert.Empty(Directory.GetFiles(path + "-original"));
     }
+    [Fact]
+    public void LinkedAncestorCannotBeUsedToOpenNestedRecoveryDirectory()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var real = Path.Combine(_root, "real"); Directory.CreateDirectory(Path.Combine(real, "nested"));
+        var link = Path.Combine(_root, "alias"); Directory.CreateSymbolicLink(link, real);
+        Assert.Throws<IOException>(() => RecoveryDirectoryIdentity.Open(Path.Combine(link, "nested")));
+        Assert.Empty(Directory.GetFiles(real, "*", SearchOption.AllDirectories));
+    }
+    [Fact]
+    public void ChildNamesCannotEscapeRetainedDirectory()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        Assert.Throws<ArgumentException>(() => directory.PublishChild("../escape", "synthetic"u8.ToArray(), false));
+        Assert.Throws<ArgumentException>(() => directory.OpenReadChild("nested/file"));
+        Assert.Empty(Directory.GetFiles(_root));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }

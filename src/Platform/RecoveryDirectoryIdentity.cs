@@ -18,8 +18,23 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Recovery directory handle support is not implemented on this host.");
         var full = Path.GetFullPath(path);
         CheckAncestors(full);
-        var handle = OpenDirectory(full);
-        try { return new(full, handle); } catch { handle.Dispose(); throw; }
+        // Walk from the filesystem root through retained handles. No ancestor component
+        // is resolved again through an untrusted absolute path during this open.
+        var handle = OpenDirectory("/");
+        try
+        {
+            foreach (var component in full.Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var descriptor = OpenAt(handle, component, 0x10000 | 0x20000 | 0x80000, 0);
+                if (descriptor < 0) throw new IOException("Cannot securely open recovery directory component.");
+                var next = new SafeFileHandle((IntPtr)descriptor, true);
+                handle.Dispose(); handle = next;
+            }
+            var result = new RecoveryDirectoryIdentity(full, handle);
+            result.Verify();
+            return result;
+        }
+        catch { handle.Dispose(); throw; }
     }
     /// <summary>Reopens the authorized path and compares its device/inode with the retained handle.</summary>
     public void Verify()

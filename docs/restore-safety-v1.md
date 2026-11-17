@@ -161,3 +161,19 @@ This does not establish complete production race safety: opening the initial anc
 chain, concurrent changes to child names/staging files, same-type replacement before an
 overwriting rename, artifact ownership and directory durability still require protection.
 Windows remains on the earlier path-based helper. No profile writer is enabled.
+
+## Linux ancestor traversal
+
+Initial directory acquisition now walks from `/` through directory-relative `openat`
+handles, applying O_DIRECTORY/O_NOFOLLOW to every component. It no longer opens the final
+absolute path after a separate ancestor check. The resulting handle is identity-verified
+before returning. Six native tests now pass, including linked ancestors and attempted
+child-name traversal. Existing absolute-path verification remains a detection check;
+subsequent artifact I/O uses the retained handle.
+
+Child-name/staging ownership and overwrite races, complete production adapter integration,
+metadata recovery and Windows handle-based support remain unfinished. No browser-profile
+restoration has been enabled.
+
+Latest full regression run: 1,061 passed, six environment-dependent tests skipped
+(987 Core, 48 Brave, 20 Linux and six Windows-labelled tests passed).
