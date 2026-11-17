@@ -277,3 +277,16 @@ and group policy cases. Platform exposes the pure policy internally to Linux.Tes
 The native ownership fields follow the Linux statx layout already referenced above.
 This restriction is not a persisted ownership recovery contract; exact ownership restoration
 and context continuity across process restarts remain pending. No profile writer is enabled.
+
+## Persisted Linux ownership metadata v2
+
+New Linux metadata captures emit `BBKLM002`: the previous mode/ticks fields followed by
+little-endian uint32 UID and GID, for exactly 28 bytes. Apply requires saved identities
+to match both the authorized destination handle and effective process identities before
+mode/time changes. It never changes ownership. Exact readback includes UID/GID. Six focused
+metadata tests pass, including tampered saved ownership rejection without changes.
+
+The previous 20-byte `BBKLM001` metadata remains readable/applicable under the earlier
+current-effective-owner restriction, but cannot prove historical ownership because those
+fields were absent. No `.bravebackup` or safety snapshot container version changes.
+ACL/xattr fidelity, Windows metadata and production target integration remain pending.

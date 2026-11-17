@@ -4,7 +4,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace BraveBackup.Platform;
 
-/// <summary>Handle-based Linux permission/mtime codec. Does not represent ownership, ACLs, xattrs or complete filesystem metadata.</summary>
+/// <summary>Handle-based Linux permission/mtime codec. Records owner/group without changing ownership; ACLs/xattrs and complete metadata recovery remain unsupported.</summary>
 public static class LinuxRecoveryMetadata
 {
     /// <summary>Captures ordinary permission bits and last-write UTC ticks from an already authorized file handle.</summary>
@@ -15,25 +15,34 @@ public static class LinuxRecoveryMetadata
         RejectExtendedAttributes(handle);
         var mode = (int)File.GetUnixFileMode(handle);
         if ((mode & ~0x1ff) != 0) throw new IOException("Special file mode bits are unsupported for recovery.");
-        var bytes = new byte[20]; "BBKLM001"u8.CopyTo(bytes);
+        var identity = ReadOwnedIdentity(handle);
+        var bytes = new byte[28]; "BBKLM002"u8.CopyTo(bytes);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), mode);
         BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(12), File.GetLastWriteTimeUtc(handle).Ticks);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(20), identity.User);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(24), identity.Group);
         return bytes;
     }
     /// <summary>Applies validated metadata to an authorized staging handle, then verifies exact readback. Does not publish a file.</summary>
     public static void Apply(SafeFileHandle handle, ReadOnlySpan<byte> bytes)
     {
         if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException();
-        if (bytes.Length != 20 || !bytes[..8].SequenceEqual("BBKLM001"u8)) throw new InvalidDataException("Invalid Linux recovery metadata.");
+        var legacy = bytes.Length == 20 && bytes[..8].SequenceEqual("BBKLM001"u8);
+        if (!legacy && (bytes.Length != 28 || !bytes[..8].SequenceEqual("BBKLM002"u8))) throw new InvalidDataException("Invalid Linux recovery metadata.");
         var mode = BinaryPrimitives.ReadInt32LittleEndian(bytes[8..]);
         var ticks = BinaryPrimitives.ReadInt64LittleEndian(bytes[12..]);
         if ((mode & ~0x1ff) != 0 || ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
             throw new InvalidDataException("Invalid Linux recovery metadata.");
-        RejectForeignOwnership(handle);
+        var identity = ReadOwnedIdentity(handle);
+        if (!legacy && (BinaryPrimitives.ReadUInt32LittleEndian(bytes[20..]) != identity.User ||
+                        BinaryPrimitives.ReadUInt32LittleEndian(bytes[24..]) != identity.Group))
+            throw new IOException("Saved recovery ownership does not match the destination.");
         RejectExtendedAttributes(handle);
         File.SetLastWriteTimeUtc(handle, new DateTime(ticks, DateTimeKind.Utc));
         File.SetUnixFileMode(handle, (UnixFileMode)mode);
-        if (!Capture(handle).AsSpan().SequenceEqual(bytes)) throw new IOException("Linux metadata recovery verification failed.");
+        var verified = Capture(handle);
+        if (legacy) { verified = verified[..20]; "BBKLM001"u8.CopyTo(verified); }
+        if (!verified.AsSpan().SequenceEqual(bytes)) throw new IOException("Linux metadata recovery verification failed.");
     }
     /// <summary>Requires the current effective user/group; no ownership changes or privilege elevation are attempted.</summary>
     private static void RejectForeignOwnership(SafeFileHandle handle)
@@ -41,6 +50,13 @@ public static class LinuxRecoveryMetadata
         if (ReadStatus(handle, "", 0x1000, 0x18, out var status) != 0 || (status.Mask & 0x18) != 0x18 ||
             !OwnershipMatches(status.User, status.Group, EffectiveUser(), EffectiveGroup()))
             throw new IOException("File ownership is unsupported or cannot be inspected for recovery.");
+    }
+    private static (uint User, uint Group) ReadOwnedIdentity(SafeFileHandle handle)
+    {
+        if (ReadStatus(handle, "", 0x1000, 0x18, out var status) != 0 || (status.Mask & 0x18) != 0x18 ||
+            !OwnershipMatches(status.User, status.Group, EffectiveUser(), EffectiveGroup()))
+            throw new IOException("Recovery ownership cannot be preserved.");
+        return (status.User, status.Group);
     }
     internal static bool OwnershipMatches(uint owner, uint group, uint effectiveUser, uint effectiveGroup)
         => owner == effectiveUser && group == effectiveGroup;

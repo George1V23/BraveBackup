@@ -11,6 +11,25 @@ public sealed class LinuxRecoveryMetadataTests
         => Assert.Equal(expected, LinuxRecoveryMetadata.OwnershipMatches(owner, group, 1000, 1000));
 
     [Fact]
+    public void SavedOwnershipMismatchIsRejectedAndLegacyMetadataRemainsReadable()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(Path.GetTempPath(), "RecoveryOwner_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var file = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+            var metadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle); Assert.Equal(28, metadata.Length);
+            var mismatch = metadata.ToArray(); mismatch[20] ^= 1;
+            Assert.Throws<IOException>(() => LinuxRecoveryMetadata.Apply(file.SafeFileHandle, mismatch));
+            Assert.Equal(metadata, LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+            var legacy = metadata[..20]; "BBKLM001"u8.CopyTo(legacy);
+            LinuxRecoveryMetadata.Apply(file.SafeFileHandle, legacy);
+            Assert.Equal(metadata, LinuxRecoveryMetadata.Capture(file.SafeFileHandle));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void PermissionsAndTimestampRoundTripThroughAuthorizedHandles()
     {
         if (!OperatingSystem.IsLinux()) return;
