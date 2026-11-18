@@ -287,6 +287,7 @@ public partial class ShellViewModel
 
     partial void OnIsBackupRunningChanged(bool value)
     {
+        OnPropertyChanged(nameof(ShowBackupActions));
         NotifyExportAvailability();
     }
 
@@ -295,6 +296,7 @@ public partial class ShellViewModel
     partial void OnBackupMessageChanged(string value)
     {
         OnPropertyChanged(nameof(HasBackupFeedback));
+        OnPropertyChanged(nameof(ShowBackupActions));
         OnPropertyChanged(nameof(StatusText));
     }
 

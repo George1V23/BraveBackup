@@ -24,10 +24,22 @@ public sealed class ShellViewModelTests : IDisposable
         };
     }
 
+    /// <summary>Creates minimal data for every backup category so fixture profiles list all of them (existence only).</summary>
+    private static void AddAllCategoryData(string profile)
+    {
+        if (File.Exists(Path.Combine(profile, "Bookmarks"))) return;
+        Directory.CreateDirectory(Path.Combine(profile, "Extensions", "synthetic")); Directory.CreateDirectory(Path.Combine(profile, "Sessions"));
+        Directory.CreateDirectory(Path.Combine(profile, "Local Extension Settings", BraveBackup.Extensions.TabManagerPlus.SavedWindows.OfficialExtensionId));
+        foreach (var file in new[] { "Bookmarks", "Preferences", "Login Data", Path.Combine("Sessions", "Session_1"), Path.Combine("Extensions", "synthetic", "x"),
+                     Path.Combine("Local Extension Settings", BraveBackup.Extensions.TabManagerPlus.SavedWindows.OfficialExtensionId, "000003.log") })
+            File.WriteAllText(Path.Combine(profile, file), "synthetic");
+    }
+
     private ShellViewModel CreateShell(Func<string, Task<string?>>? picker = null) => new(
         detect: () => _failDetection ? throw new IOException("fixture failure") : _apps.ToArray(),
         findProfiles: app =>
         {
+            foreach (var name in new[] { "Default", "Profile 1", "Profile 2" }) AddAllCategoryData(Path.Combine(app.UserDataDirectory, name));
             if (_failBetaProfiles && app.Channel == BraveAppChannel.Beta) throw new IOException("fixture failure");
             var profiles = new List<BraveProfileInfo>
             {
@@ -135,6 +147,7 @@ public sealed class ShellViewModelTests : IDisposable
     {
         using var shell = CreateShell();
         await shell.RefreshAsync();
+        var fixtureEntries = Directory.GetFileSystemEntries(_root, "*", SearchOption.AllDirectories).Order().ToArray();
         var stable = shell.Installations[0];
         var beta = shell.Installations[1];
         stable.ToggleBulkSelectionCommand.Execute(null);
@@ -155,7 +168,7 @@ public sealed class ShellViewModelTests : IDisposable
         Assert.All(stable.Profiles, profile => Assert.False(profile.IsSelected));
         Assert.All(beta.Profiles, profile => Assert.True(profile.IsSelected));
         Assert.All(shell.Installations, app => Assert.True(app.IsChecked));
-        Assert.Empty(Directory.GetFileSystemEntries(_root));
+        Assert.Equal(fixtureEntries, Directory.GetFileSystemEntries(_root, "*", SearchOption.AllDirectories).Order().ToArray()); // selection creates nothing
     }
 
     [Fact]

@@ -94,6 +94,20 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 using (var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 { bitmap.Render(window); bitmap.Save(screenshot, PngBitmapEncoderOptions.Default); }
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "synthetic source bytes unchanged");
+                // Backup tab: steps 2 and below stay hidden until a profile is selected; only existing categories are offered.
+                shell.SelectedTabIndex = ShellViewModel.BackupTabIndex; await Task.Delay(200);
+                bool Visible(string text) => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == text && t.IsEffectivelyVisible);
+                Check(Visible("1   Select profiles"), "Backup step 1 is visible without a selection");
+                Check(!Visible("2   Select data to include") && !Visible("3   Backup options") && !Visible("4   Backup summary"), "Backup steps 2-4 are hidden until a profile is selected");
+                Check(!window.GetVisualDescendants().OfType<Button>().Any(b => Equals(b.Content, "Create Backup") && b.IsEffectivelyVisible), "Create Backup is hidden until a profile is selected");
+                shell.Installations[0].Profiles[0].IsSelected = true; await Task.Delay(200);
+                Check(Visible("2   Select data to include") && Visible("3   Backup options") && Visible("4   Backup summary"), "Backup steps 2-4 appear once a profile is selected");
+                var titles = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible && t.FontWeight == Avalonia.Media.FontWeight.SemiBold)
+                    .Select(t => t.Text).ToHashSet();
+                Check(titles.Contains("Bookmarks") && titles.Contains("Passwords") &&
+                      !new[] { "Sessions", "Extensions", "Settings", "TabManagerPlus" }.Any(titles.Contains), "only categories existing in the selected profile are listed");
+                shell.Installations[0].Profiles[0].IsSelected = false; await Task.Delay(200);
+                Check(!Visible("2   Select data to include"), "deselecting the profile hides steps 2-4 again");
                 // Exercise real archive-CSV dialogs without native key access.
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
                 shell.Installations[0].Profiles[0].IsSelected = true;

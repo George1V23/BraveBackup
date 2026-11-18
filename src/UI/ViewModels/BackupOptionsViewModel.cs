@@ -21,8 +21,29 @@ public partial class BackupCategoryItem : ViewModelBase
     /// <summary>Gets the category's intended contents.</summary>
     public string Description { get; }
 
-    /// <summary>Gets or sets whether the category is selected across all profiles in scope.</summary>
-    [ObservableProperty] private bool _isSelected;
+    private bool _isSelected;
+
+    /// <summary>Gets or sets whether the category is selected across all profiles in scope; unavailable categories cannot be selected.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value && IsAvailable);
+    }
+
+    /// <summary>Gets whether any selected profile has data for this category, so it is listed at all.</summary>
+    [ObservableProperty] private bool _isShown = true;
+
+    /// <summary>Gets whether every selected profile has data for this category, so it can be checked.</summary>
+    [ObservableProperty] private bool _isAvailable = true;
+
+    /// <summary>Gets why a listed category cannot be checked, naming the selected profiles that lack it.</summary>
+    [ObservableProperty] private string _availabilityNote = string.Empty;
+
+    /// <summary>Gets whether an availability note is shown.</summary>
+    public bool HasAvailabilityNote => AvailabilityNote.Length != 0;
+
+    partial void OnIsAvailableChanged(bool value) { if (!value) IsSelected = false; }
+    partial void OnAvailabilityNoteChanged(string value) => OnPropertyChanged(nameof(HasAvailabilityNote));
 
     /// <summary>Creates a selectable category with its initial selection.</summary>
     public BackupCategoryItem(string id, string name, string description, bool selected = false)
@@ -153,12 +174,39 @@ public partial class BackupOptionsViewModel : ViewModelBase
     /// <summary>Gets the combined state, or sets all categories; assigning mixed state does nothing.</summary>
     public bool? AllCategoriesSelected
     {
-        get => Categories.All(item => item.IsSelected) ? true : Categories.All(item => !item.IsSelected) ? false : null;
+        get
+        {
+            var eligible = Categories.Where(item => item.IsShown && item.IsAvailable).ToArray();
+            return eligible.Length == 0 ? false : eligible.All(item => item.IsSelected) ? true : eligible.All(item => !item.IsSelected) ? false : null;
+        }
         set
         {
             if (!value.HasValue) return;
-            foreach (var item in Categories) item.IsSelected = value.Value;
+            foreach (var item in Categories.Where(item => item.IsShown && item.IsAvailable)) item.IsSelected = value.Value;
         }
+    }
+
+    /// <summary>Gets the categories found in at least one selected profile; all are listed while no profile is selected.</summary>
+    public IReadOnlyList<BackupCategoryItem> ShownCategories => Categories.Where(item => item.IsShown).ToArray();
+
+    /// <summary>Gets whether any category is listed for the selected profiles.</summary>
+    public bool HasShownCategories => Categories.Any(item => item.IsShown);
+
+    /// <summary>
+    /// Lists only categories found in at least one selected profile and allows checking only those found in every selected profile.
+    /// A category that becomes unavailable is unchecked. With no profiles selected nothing is restricted.
+    /// </summary>
+    public void ApplyAvailability(IReadOnlyList<(string ProfileName, IReadOnlySet<string> Categories)> profiles)
+    {
+        foreach (var item in Categories)
+        {
+            var missing = profiles.Where(profile => !profile.Categories.Contains(item.Id)).Select(profile => profile.ProfileName).ToArray();
+            item.IsShown = profiles.Count == 0 || missing.Length < profiles.Count;
+            item.IsAvailable = missing.Length == 0;
+            item.AvailabilityNote = item.IsShown && missing.Length > 0 ? "Not found in: " + string.Join(", ", missing) : string.Empty;
+        }
+        OnPropertyChanged(nameof(ShownCategories)); OnPropertyChanged(nameof(HasShownCategories));
+        OnPropertyChanged(nameof(AllCategoriesSelected));
     }
 
     /// <summary>Gets whether plaintext credentials would need a warning and confirmation before any save.</summary>

@@ -23,6 +23,19 @@ public sealed class ShellBackupTests : IDisposable
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Bookmarks.sample.json"), _profile.BookmarksPath);
     }
 
+    /// <summary>Gives the fixture profile minimal data so the category is listed and checkable (existence only).</summary>
+    private void AddData(params string[] categories)
+    {
+        foreach (var category in categories)
+            switch (category)
+            {
+                case "passwords": File.WriteAllText(Path.Combine(_profile.ProfileDirectory, "Login Data"), "synthetic"); break;
+                case "extensions":
+                    var storage = Path.Combine(_profile.ProfileDirectory, "Local Extension Settings", "abcdefghijklmnopabcdefghijklmnop");
+                    Directory.CreateDirectory(storage); File.WriteAllBytes(Path.Combine(storage, "opaque-test.bin"), [1, 2, 3]); break;
+            }
+    }
+
     private async Task<ShellViewModel> Create()
     {
         var shell = new ShellViewModel(() => new[] { _app }, _ => new[] { _profile },
@@ -36,6 +49,7 @@ public sealed class ShellBackupTests : IDisposable
     [Fact]
     public async Task CreateValidation_RequiresProfileSupportedCategoryAndMatchingPassword()
     {
+        AddData("passwords");
         using var shell = await Create();
         Assert.False(shell.CreateBackupCommand.CanExecute(null));
         shell.Installations[0].Profiles[0].IsSelected = true;
@@ -156,6 +170,7 @@ public sealed class ShellBackupTests : IDisposable
     [Fact]
     public async Task ExtensionUi_RequiresConsentForPlaintextAndShowsActualOutcome()
     {
+        AddData("extensions");
         using var shell = await Create();
         shell.ExtensionBrowserState = () => BraveBackup.Platform.ProcessPresence.Stopped;
         shell.Options.EncryptBackup = false;
@@ -188,6 +203,7 @@ public sealed class ShellBackupTests : IDisposable
     public async Task ExtensionUi_BlocksLiveOrIndeterminateBrowserWithSafeFeedback(
         BraveBackup.Platform.ProcessPresence state)
     {
+        AddData("extensions");
         using var shell = await Create();
         shell.ExtensionBrowserState = () => state;
         shell.Options.EncryptBackup = false;
@@ -314,6 +330,7 @@ public sealed class ShellBackupTests : IDisposable
     [Fact]
     public async Task PasswordProtectionValidationExplainsTheActualChoiceWithoutCreatingFiles()
     {
+        AddData("passwords");
         using var shell = await Create();
         shell.Installations[0].Profiles[0].IsSelected = true;
         shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
@@ -330,6 +347,7 @@ public sealed class ShellBackupTests : IDisposable
     [Fact]
     public async Task ExplicitPasswordSourceEnablesProtectedArchiveAndUsesHostAdapterOnlyOnStart()
     {
+        AddData("passwords");
         using var shell = await Create();
         shell.Installations[0].Profiles[0].IsSelected = true;
         shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
@@ -337,7 +355,7 @@ public sealed class ShellBackupTests : IDisposable
         Assert.Null(shell.Options.SelectedPasswordSource); Assert.False(shell.CreateBackupCommand.CanExecute(null));
         var source = Assert.Single(shell.Options.PasswordSources); shell.Options.SelectedPasswordSource = source;
         var fixtureOs = source.Provider == PasswordEncryptionProvider.WindowsDpapiV10 ? "windows" : "linux";
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Passwords", "LoginData.v43." + fixtureOs + ".sqlite"), Path.Combine(_profile.ProfileDirectory, "Login Data"));
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Passwords", "LoginData.v43." + fixtureOs + ".sqlite"), Path.Combine(_profile.ProfileDirectory, "Login Data"), true);
         if (fixtureOs == "windows") File.WriteAllText(Path.Combine(_app.UserDataDirectory, "Local State"), "{\"os_crypt\":{\"encrypted_key\":\"" + Convert.ToBase64String("DPAPIsynthetic"u8) + "\"}}");
         var calls = 0;
         shell.PasswordBrowserState = () => ProcessPresence.Stopped;
@@ -356,6 +374,7 @@ public sealed class ShellBackupTests : IDisposable
     [Fact]
     public async Task PasswordRawFallbackIsExplicitThroughHostCallback()
     {
+        AddData("passwords");
         using var shell = await Create(); shell.Installations[0].Profiles[0].IsSelected = true;
         shell.Options.Categories.Single(item => item.Id == "passwords").IsSelected = true;
         shell.Options.SelectedPasswordSource = Assert.Single(shell.Options.PasswordSources);

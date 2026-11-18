@@ -20,8 +20,6 @@ public sealed class ShellCsvArchiveTests : IDisposable
         var shell = new ShellViewModel(() => [new(BraveAppChannel.Stable, version, "synthetic", data)],
             _ => [new("Synthetic", directory, Path.Combine(directory, "Bookmarks"))], _ => new(0, 0));
         await shell.RefreshAsync(); shell.Activate(shell.Installations[0]);
-        shell.Installations[0].Profiles[0].IsSelected = true;
-        foreach (var category in shell.Options.Categories) category.IsSelected = category.Id == "passwords";
         var source = Assert.Single(shell.Options.PasswordSources);
         var os = source.Provider == PasswordEncryptionProvider.WindowsDpapiV10 ? "windows" : "linux";
         var database = Path.Combine(directory, "Login Data");
@@ -30,6 +28,9 @@ public sealed class ShellCsvArchiveTests : IDisposable
         { db.Open(); using var command = db.CreateCommand(); command.CommandText = "UPDATE password_notes SET key=''"; command.ExecuteNonQuery(); }
         File.Copy(Path.Combine(Fixtures, "Affiliations", "Affiliation.v7.synthetic.sqlite"), Path.Combine(directory, BraveAffiliationSnapshot.DatabaseFileName));
         if (os == "windows") File.WriteAllText(Path.Combine(data, "Local State"), "{\"os_crypt\":{\"encrypted_key\":\"" + Convert.ToBase64String("DPAPIsynthetic"u8) + "\"}}");
+        // The profile is selected only after its data exists, so the passwords category is listed and checkable.
+        shell.Installations[0].Profiles[0].IsSelected = true;
+        foreach (var category in shell.Options.Categories) category.IsSelected = category.Id == "passwords";
         shell.Options.SelectedPasswordSource = source;
         shell.Options.BackupPath = Destination; shell.Options.ProtectPasswords = false; shell.Options.EncryptBackup = false;
         shell.PasswordBrowserState = () => ProcessPresence.Stopped;

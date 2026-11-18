@@ -293,13 +293,15 @@
                                         </ItemsControl>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}" IsVisible="{Binding HasSelectedBackupProfiles}">
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="2   Select data to include" Classes="section" />
+                                        <TextBlock Text="The selected profiles contain no data that can be backed up." Classes="muted"
+                                                   TextWrapping="Wrap" IsVisible="{Binding !Options.HasShownCategories}" />
                                         <CheckBox Content="Select all categories"
                                                   IsChecked="{Binding Options.AllCategoriesSelected}"
                                                   IsThreeState="False" />
-                                        <ItemsControl ItemsSource="{Binding Options.Categories}">
+                                        <ItemsControl ItemsSource="{Binding Options.ShownCategories}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
                                                     <UniformGrid Columns="2" />
@@ -308,12 +310,14 @@
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="vm:BackupCategoryItem">
                                                     <Border Classes="category" Classes.checked="{Binding IsSelected}">
-                                                        <CheckBox IsChecked="{Binding IsSelected}"
+                                                        <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding IsAvailable}"
                                                                   HorizontalAlignment="Stretch">
                                                             <StackPanel Spacing="3">
                                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                                                                 <TextBlock Text="{Binding Description}" Classes="muted"
                                                                            FontSize="11" TextWrapping="Wrap" />
+                                                                <TextBlock Text="{Binding AvailabilityNote}" Classes="muted" FontSize="11"
+                                                                           TextWrapping="Wrap" IsVisible="{Binding HasAvailabilityNote}" />
                                                             </StackPanel>
                                                         </CheckBox>
                                                     </Border>
@@ -343,7 +347,7 @@
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}" IsVisible="{Binding HasSelectedBackupProfiles}">
                                     <StackPanel Spacing="14">
                                         <TextBlock Text="3   Backup options" Classes="section" />
                                         <Grid ColumnDefinitions="110,*,Auto">
@@ -406,7 +410,7 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}" IsVisible="{Binding HasSelectedBackupProfiles}">
                                     <StackPanel Spacing="12">
                                         <TextBlock Text="4   Backup summary" Classes="section" />
                                         <TextBlock Text="{Binding BackupSelectionSummary}" TextWrapping="Wrap" />
@@ -426,7 +430,7 @@
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
-                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}">
+                                <Border Classes="card" IsEnabled="{Binding !IsBackupRunning}" IsVisible="{Binding HasSelectedBackupProfiles}">
                                     <Grid ColumnDefinitions="Auto,*">
                                         <!-- Decorative placeholder branding; contains no interactive controls. -->
                                         <Border Width="64" Height="72" CornerRadius="12" Background="#604184"
@@ -444,7 +448,7 @@
                                         </StackPanel>
                                     </Grid>
                                 </Border>
-                                <StackPanel Spacing="12">
+                                <StackPanel Spacing="12" IsVisible="{Binding ShowBackupActions}">
                                     <TextBlock Text="{Binding BackupAvailability}" TextWrapping="Wrap" Classes="muted" />
                                     <Grid ColumnDefinitions="Auto,*,Auto">
                                         <Button Content="Reset" Command="{Binding ResetBackupFormCommand}"

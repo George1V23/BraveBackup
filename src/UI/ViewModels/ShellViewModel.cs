@@ -169,8 +169,33 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the actual host OS through the Platform project.</summary>
     public string OperatingSystemText => HostEnvironment.OperatingSystemDescription;
 
+    private bool _updatingCategoryAvailability;
+
+    /// <summary>Lists and allows only categories that exist in the selected profiles, using read-only existence checks.</summary>
+    private void UpdateCategoryAvailability()
+    {
+        if (_updatingCategoryAvailability) return;
+        _updatingCategoryAvailability = true;
+        try
+        {
+            Options.ApplyAvailability(BackupInstallations.SelectMany(item => item.Profiles).Where(profile => profile.IsSelected)
+                .Select(profile => (profile.DisplayName, BraveProfileCategoryAvailability.Detect(profile.ProfileInfo.ProfileDirectory, profile.ProfileInfo.BookmarksPath)))
+                .ToArray());
+        }
+        finally { _updatingCategoryAvailability = false; }
+    }
+
+    /// <summary>Gets whether at least one backup profile is selected; steps 2 and later appear only then.</summary>
+    public bool HasSelectedBackupProfiles => BackupInstallations.Any(item => item.Profiles.Any(profile => profile.IsSelected));
+
+    /// <summary>Gets whether the final action panel shows: with a selection, or while a result or progress is on screen.</summary>
+    public bool ShowBackupActions => HasSelectedBackupProfiles || IsBackupRunning || HasBackupFeedback;
+
     private void NotifyBackupSummary()
     {
+        UpdateCategoryAvailability();
+        OnPropertyChanged(nameof(HasSelectedBackupProfiles));
+        OnPropertyChanged(nameof(ShowBackupActions));
         OnPropertyChanged(nameof(BackupSelectionSummary));
         OnPropertyChanged(nameof(BackupCategorySummary));
         OnPropertyChanged(nameof(ActiveVersionText));
