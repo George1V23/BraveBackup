@@ -8,9 +8,9 @@ public sealed class BraveRestoreContext
 {
     private readonly string _source;
     private readonly (BraveAppInfo Installation, BraveProfileInfo Profile)[] _targets;
-    private readonly Func<ProcessPresence> _observe;
+    private readonly Func<ProcessPresence>? _observe;
     private readonly string _fingerprint;
-    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence> observe, string fingerprint)
+    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence>? observe, string fingerprint)
     { _source = source; _targets = targets; _observe = observe; _fingerprint = fingerprint; }
     /// <summary>Freezes authorized mappings and source bytes only after closed-browser/path validation; performs no writes.</summary>
     /// <remarks>Archive authentication and explicit final restore approval are separate prerequisites owned by the host.</remarks>
@@ -23,15 +23,14 @@ public sealed class BraveRestoreContext
             Profile: target.Profile with { ProfileDirectory = Path.GetFullPath(target.Profile.ProfileDirectory) })).ToArray();
         if (frozen.Length == 0) throw new InvalidDataException("Select restore destinations first.");
         var source = Path.GetFullPath(sourceArchive);
-        var observer = observe ?? (() => ProcessPresenceProbe.Observe(["brave"], token));
-        var context = new BraveRestoreContext(source, frozen, observer, Fingerprint(source, token));
+        var context = new BraveRestoreContext(source, frozen, observe, Fingerprint(source, token));
         context.Verify(token); return context;
     }
     /// <summary>Rejects observed source changes, duplicate/unsafe target paths and running or unknown browser state.</summary>
     public void Verify(CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
-        if (_observe() != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
+        if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
         var paths = new HashSet<string>(HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var directories = new List<RecoveryDirectoryIdentity>();
         try
@@ -57,8 +56,12 @@ public sealed class BraveRestoreContext
         finally { foreach (var identity in directories) identity.Dispose(); }
         if (Fingerprint(_source, token) != _fingerprint) throw new IOException("The restore source archive changed.");
         token.ThrowIfCancellationRequested();
-        if (_observe() != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
+        if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
     }
+    /// <summary>Uses the current verification token for native process observation.</summary>
+    private ProcessPresence Observe(CancellationToken token) =>
+        _observe?.Invoke() ?? ProcessPresenceProbe.Observe(["brave"], token);
+
     private static string Fingerprint(string source, CancellationToken token)
     {
         using var input = SnapshotFileAccess.OpenRead(source);
