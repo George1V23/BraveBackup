@@ -10,8 +10,9 @@ public sealed class BraveRestoreContext
     private readonly (BraveAppInfo Installation, BraveProfileInfo Profile)[] _targets;
     private readonly Func<ProcessPresence> _observe;
     private readonly string _fingerprint;
-    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence> observe, string fingerprint)
-    { _source = source; _targets = targets; _observe = observe; _fingerprint = fingerprint; }
+    private readonly (long Length, long WriteTicks) _stamp;
+    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence> observe, string fingerprint, (long, long) stamp)
+    { _source = source; _targets = targets; _observe = observe; _fingerprint = fingerprint; _stamp = stamp; }
     /// <summary>Freezes authorized mappings and source bytes only after closed-browser/path validation; performs no writes.</summary>
     /// <remarks>Archive authentication and explicit final restore approval are separate prerequisites owned by the host.</remarks>
     public static BraveRestoreContext Capture(string sourceArchive,
@@ -24,11 +25,21 @@ public sealed class BraveRestoreContext
         if (frozen.Length == 0) throw new InvalidDataException("Select restore destinations first.");
         var source = Path.GetFullPath(sourceArchive);
         var observer = observe ?? (() => ProcessPresenceProbe.Observe(["brave"], token));
-        var context = new BraveRestoreContext(source, frozen, observer, Fingerprint(source, token));
+        // The stamp is read before and after hashing so an edit during capture is rejected rather than frozen.
+        var before = Stamp(source);
+        var fingerprint = Fingerprint(source, token);
+        if (Stamp(source) != before) throw new IOException("The restore source archive changed during capture.");
+        var context = new BraveRestoreContext(source, frozen, observer, fingerprint, before);
         context.Verify(token); return context;
     }
-    /// <summary>Rejects observed source changes, duplicate/unsafe target paths and running or unknown browser state.</summary>
-    public void Verify(CancellationToken token = default)
+    /// <summary>Full verification: rereads and hashes the entire source archive. Use before any write.</summary>
+    public void Verify(CancellationToken token = default) => Verify(token, full: true);
+    /// <summary>
+    /// Routine verification: checks the source archive's length and modified time instead of hashing it. It catches ordinary edits and
+    /// replacements but not a deliberate same-size rewrite that preserves the modified time; <see cref="Verify(CancellationToken)"/> does.
+    /// </summary>
+    public void VerifyQuick(CancellationToken token = default) => Verify(token, full: false);
+    private void Verify(CancellationToken token, bool full)
     {
         token.ThrowIfCancellationRequested();
         if (_observe() != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
@@ -55,9 +66,15 @@ public sealed class BraveRestoreContext
             foreach (var identity in directories) identity.Verify();
         }
         finally { foreach (var identity in directories) identity.Dispose(); }
-        if (Fingerprint(_source, token) != _fingerprint) throw new IOException("The restore source archive changed.");
+        if (full ? Fingerprint(_source, token) != _fingerprint : Stamp(_source) != _stamp)
+            throw new IOException("The restore source archive changed.");
         token.ThrowIfCancellationRequested();
         if (_observe() != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
+    }
+    private static (long Length, long WriteTicks) Stamp(string source)
+    {
+        using var input = SnapshotFileAccess.OpenRead(source);
+        return (input.Length, File.GetLastWriteTimeUtc(input.SafeFileHandle).Ticks);
     }
     private static string Fingerprint(string source, CancellationToken token)
     {

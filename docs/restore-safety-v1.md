@@ -612,3 +612,15 @@ closed. **None of this has run on Windows**: the build succeeds and two Windows-
 the Windows-labelled project). Treat Windows restore as unusable until those pass natively. A
 platform-neutral fake-based store test was added (996 Core tests pass; 44 Linux, 4 skipped). No
 restore command is enabled.
+
+## Quick context verification
+
+`BraveRestoreContext.Verify` still fully re-hashes the source archive. A new `VerifyQuick` compares only
+the archive's length and modified time (captured before and after the initial hash, so an edit during
+capture is rejected). `RestoreTransactionStore.VerifyContext` now uses the quick check, and
+`WriteTargetAtomic` runs the full hash immediately before every write, so a large archive is hashed
+once per written file instead of many times per file.
+
+Trade-off: routine checks miss a deliberate same-size rewrite that preserves the modified time; that is
+caught by the full check before any write (tested). Rollback writes also run the full check, so a changed
+source archive blocks rollback writes as before. 997 Core and 52 Linux tests pass.

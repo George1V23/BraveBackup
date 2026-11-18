@@ -88,5 +88,23 @@ public sealed class RestoreTransactionStoreLinuxTests : IDisposable
         Assert.Throws<IOException>(() => RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") }));
     }
 
+    [Fact]
+    public void TimePreservingSourceRewriteIsCaughtBeforeAnyTargetWrite()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var existing = Path.Combine(_profile, "Bookmarks"); File.WriteAllText(existing, "synthetic-original");
+        var metadata = Metadata(existing);
+        var (context, lease, _) = Open(); using var _ = lease;
+        var id = Guid.NewGuid();
+        using var store = RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") });
+        using var replacement = new RestoreFileImage(true, "synthetic-new"u8, metadata);
+        using var transaction = new RestoreTransaction([new(id, Guid.NewGuid(), Guid.NewGuid(), "bookmarks", replacement)], store, "synthetic-password");
+        transaction.Prepare();
+        var written = File.GetLastWriteTimeUtc(_source);
+        File.WriteAllText(_source, "SYNTHETIC-SOURCE"); File.SetLastWriteTimeUtc(_source, written);
+        Assert.Throws<IOException>(() => transaction.Run());
+        Assert.Equal("synthetic-original", File.ReadAllText(existing));
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }

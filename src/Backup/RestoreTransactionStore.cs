@@ -24,8 +24,8 @@ public interface IRestoreArtifacts
 /// <remarks>
 /// Use <see cref="Create"/> for the host platform. Targets are single files directly inside authorized directories and are retained
 /// from construction. Writes act only on the retained file identity, so external edits or replacements are reported instead of
-/// overwritten. The host must authenticate the archive, obtain final approval and keep the artifacts alive. Context verification
-/// rereads the source archive on every call. Windows support is not natively validated.
+/// overwritten. The host must authenticate the archive, obtain final approval and keep the artifacts alive. Routine context checks are quick
+/// (source length/time); the source is fully re-hashed at construction and before each write. Windows support is not natively validated.
 /// </remarks>
 public sealed class RestoreTransactionStore : IRestoreTransactionStore, IDisposable
 {
@@ -71,12 +71,17 @@ public sealed class RestoreTransactionStore : IRestoreTransactionStore, IDisposa
         public int GetHashCode((string, string) value) => HashCode.Combine(value.Item1.ToUpperInvariant(), value.Item2.ToUpperInvariant());
     }
 
-    /// <summary>Checks frozen source/paths/browser state and artifact ownership. Per-target conflicts surface on read/write.</summary>
-    public void VerifyContext(CancellationToken token) { ObjectDisposedException.ThrowIf(_disposed, this); _context.Verify(token); _artifacts.Verify(); }
+    /// <summary>Quick check of frozen source (length/time), paths, browser state and artifact ownership; writes re-verify the source fully.</summary>
+    public void VerifyContext(CancellationToken token) { ObjectDisposedException.ThrowIf(_disposed, this); _context.VerifyQuick(token); _artifacts.Verify(); }
     /// <summary>Returns the verified current target image; any unexpected change throws instead of being adopted.</summary>
     public RestoreFileImage ReadTarget(Guid mutationId, CancellationToken token) => Target(mutationId).ReadCurrent(token);
     /// <summary>Replaces, creates or deletes the target only from its retained expected state.</summary>
-    public void WriteTargetAtomic(Guid mutationId, RestoreFileImage image) => Target(mutationId).Publish(image);
+    public void WriteTargetAtomic(Guid mutationId, RestoreFileImage image)
+    {
+        var target = Target(mutationId);
+        _context.Verify(); // full source hash immediately before every write; routine checks are quick
+        target.Publish(image);
+    }
     public void SaveSafety(ReadOnlyMemory<byte> encryptedBytes) => _artifacts.SaveSafety(encryptedBytes);
     public byte[] ReadSafety() => _artifacts.ReadSafety();
     public void SaveJournal(ReadOnlyMemory<byte> encryptedBytes) => _artifacts.SaveJournal(encryptedBytes);
