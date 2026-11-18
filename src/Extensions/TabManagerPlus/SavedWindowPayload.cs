@@ -29,11 +29,7 @@ public static class SavedWindowPayload
             schemaVersion = 1, captureKind = "extension-saved-windows", capturedUtc,
             extensionId = SavedWindows.OfficialExtensionId, extensionVersion = data.ExtensionVersion,
             source = "local-extension-settings", sourceFileCount,
-            windows = data.Windows.Select(window => new
-            {
-                window.Id, window.Name, window.Color, window.Date, window.SessionStartTime, window.Updated,
-                window.Order, window.CustomName, window.Incognito, windowsInfo = window.Geometry, window.Tabs
-            })
+            windows = data.Windows.Select(ProjectWindow)
         }, Options);
         var bytes = output.ToArray();
         try { Parse(bytes, token); return bytes; }
@@ -83,6 +79,30 @@ public static class SavedWindowPayload
             finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(source); }
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException) { throw Invalid(); }
+    }
+
+    private static object ProjectWindow(SavedWindow window) => new
+    {
+        window.Id, window.Name, window.Color, window.Date, window.SessionStartTime, window.Updated,
+        window.Order, window.CustomName, window.Incognito, windowsInfo = window.Geometry, window.Tabs
+    };
+
+    /// <summary>Encodes the extension's ID-keyed sessions map using only approved portable fields.</summary>
+    internal static byte[] SerializeStoredMap(SavedWindowCollection data, CancellationToken token)
+    {
+        using var output = new LimitedBuffer();
+        using (var writer = new Utf8JsonWriter(output, new JsonWriterOptions { Encoder = Options.Encoder }))
+        {
+            writer.WriteStartObject();
+            foreach (var window in data.Windows)
+            {
+                token.ThrowIfCancellationRequested();
+                writer.WritePropertyName(window.Id);
+                JsonSerializer.Serialize(writer, ProjectWindow(window), Options);
+            }
+            writer.WriteEndObject();
+        }
+        return output.ToArray();
     }
 
     private sealed record Envelope(int SchemaVersion, string CaptureKind, DateTimeOffset CapturedUtc,

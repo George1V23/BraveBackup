@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace BraveBackup.Extensions.TabManagerPlus;
@@ -34,6 +35,69 @@ public static class OfflineLevelDb
         new Reader(files, null, cancellationToken).Read();
     }
 
+    /// <summary>Builds one recovery log for a validated, closed database snapshot. Performs no I/O.</summary>
+    internal static (string FileName, byte[] Bytes) CreatePutLog(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        ReadOnlySpan<byte> key, ReadOnlySpan<byte> value, CancellationToken cancellationToken)
+    {
+        var reader = new Reader(files, null, cancellationToken);
+        reader.Read();
+        var filename = reader.GetNewLogName();
+        if (reader.HighestSequence >= MaximumSequence || files.Count >= 4096)
+            throw Invalid();
+
+        Span<byte> lengths = stackalloc byte[10];
+        var keyLengthBytes = WriteVarint(lengths, (uint)key.Length);
+        var valueLengthBytes = WriteVarint(lengths[keyLengthBytes..], (uint)value.Length);
+        var batchLength = 13L + keyLengthBytes + key.Length + valueLengthBytes + value.Length;
+        if (batchLength > MaximumRecordBytes) throw Invalid();
+        var batch = new byte[(int)batchLength];
+        try
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(batch, reader.HighestSequence + 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(batch.AsSpan(8), 1);
+            batch[12] = 1;
+            lengths[..keyLengthBytes].CopyTo(batch.AsSpan(13));
+            key.CopyTo(batch.AsSpan(13 + keyLengthBytes));
+            var valueOffset = 13 + keyLengthBytes + key.Length;
+            lengths.Slice(keyLengthBytes, valueLengthBytes).CopyTo(batch.AsSpan(valueOffset));
+            value.CopyTo(batch.AsSpan(valueOffset + valueLengthBytes));
+
+            const int header = 7;
+            const int capacity = 32768 - header;
+            var fragments = (batch.Length + capacity - 1) / capacity;
+            var output = new byte[batch.Length + fragments * header];
+            try
+            {
+                for (int offset = 0, slot = 0; offset < batch.Length; offset += capacity, slot++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var count = Math.Min(capacity, batch.Length - offset);
+                    var record = output.AsSpan(slot * 32768, header + count);
+                    BinaryPrimitives.WriteUInt16LittleEndian(record[4..], (ushort)count);
+                    record[6] = (byte)(fragments == 1 ? 1 : slot == 0 ? 2 : slot == fragments - 1 ? 4 : 3);
+                    batch.AsSpan(offset, count).CopyTo(record[header..]);
+                    BinaryPrimitives.WriteUInt32LittleEndian(record, Mask(Crc(record[6..])));
+                }
+
+                return (filename, output);
+            }
+            catch { CryptographicOperations.ZeroMemory(output); throw; }
+        }
+        finally { CryptographicOperations.ZeroMemory(batch); }
+    }
+
+    private static int WriteVarint(Span<byte> output, uint value)
+    {
+        var index = 0;
+        while (value >= 128)
+        {
+            output[index++] = (byte)((value & 127) | 128);
+            value >>= 7;
+        }
+        output[index++] = (byte)value;
+        return index;
+    }
+
     private static InvalidDataException Invalid() =>
         new("Unsupported, corrupt or over-limit extension storage snapshot.");
 
@@ -51,6 +115,7 @@ public static class OfflineLevelDb
         private bool _comparator, _hasLog, _hasSequence, _hasNext;
         private ulong? _winningSequence;
         private byte[]? _value;
+        public ulong HighestSequence { get; private set; }
 
         public Reader(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files, byte[]? wanted,
             CancellationToken cancellation)
@@ -94,6 +159,7 @@ public static class OfflineLevelDb
             foreach (var record in Logs(File(manifest))) Manifest(record.Span);
             if (!_comparator || !_hasLog || !_hasNext || !_hasSequence || _lastSequence > MaximumSequence ||
                 _log >= _nextFile || _previousLog >= _nextFile) throw Invalid();
+            HighestSequence = _lastSequence;
             foreach (var level in _tables.Values.Where(t => t.Level != 0).GroupBy(t => t.Level))
             {
                 TableInfo? previous = null;
@@ -132,6 +198,25 @@ public static class OfflineLevelDb
             foreach (var record in Logs(log))
                 Batch(record.Span, ref previousEnd);
             return _value;
+        }
+
+        public string GetNewLogName()
+        {
+            var number = _nextFile;
+            foreach (var (name, content) in _files)
+            {
+                Tick();
+                if (name is "CURRENT" or "LOG" or "LOG.old") continue;
+                if (name == "LOCK" && content.IsEmpty) continue;
+                var digits = name.StartsWith("MANIFEST-", StringComparison.Ordinal)
+                    ? name[9..]
+                    : name.EndsWith(".log", StringComparison.Ordinal) || name.EndsWith(".ldb", StringComparison.Ordinal) ||
+                      name.EndsWith(".sst", StringComparison.Ordinal) ? name[..^4] : string.Empty;
+                if (!Number(digits, out var existing) || existing >= long.MaxValue) throw Invalid();
+                number = Math.Max(number, existing + 1);
+            }
+            if (number >= long.MaxValue) throw Invalid();
+            return number.ToString("D6", CultureInfo.InvariantCulture) + ".log";
         }
 
         private static bool Number(string value, out ulong number)
@@ -285,6 +370,7 @@ public static class OfflineLevelDb
 
         private void Consider(ReadOnlySpan<byte> key, ulong sequence, byte kind, ReadOnlySpan<byte> value)
         {
+            HighestSequence = Math.Max(HighestSequence, sequence);
             if (_wanted is null || !key.SequenceEqual(_wanted)) return;
             if (_winningSequence == sequence)
             {

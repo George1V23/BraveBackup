@@ -2,7 +2,9 @@
 
 Implemented for review, 2026-11-17. The existing Backup category now saves validated
 Tab Manager Plus 7.0.0 saved windows, alone or with Bookmarks, Settings, Extensions and
-persisted Sessions. Passwords, restore/import and merge remain separate increments.
+persisted Sessions. The [saved-window restore backend](tabmanagerplus-restore.md)
+uses this portable payload. Profile restore, import and merge have separate
+checkpoints.
 
 ## User-visible behavior
 
