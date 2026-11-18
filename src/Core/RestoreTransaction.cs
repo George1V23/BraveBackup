@@ -184,6 +184,9 @@ public sealed class RestoreTransaction : IDisposable
                         if (!Same(current, _snapshot!.Entries[index].Original)) throw new IOException("Restore target changed; no conflicting data was overwritten.");
                     _entries[index] = RestoreEntryState.Intent; Journal();
                     _store.VerifyContext(CancellationToken.None);
+                    using (var current = _store.ReadTarget(mutation.Id, CancellationToken.None))
+                        if (!Same(current, _snapshot!.Entries[index].Original))
+                            throw new IOException("Restore target changed while recording write intent.");
                     if (Volatile.Read(ref _pause) != 0) { State = RestoreTransactionState.Paused; Journal(); return; }
                     _store.WriteTargetAtomic(mutation.Id, mutation.Replacement);
                     using (var published = _store.ReadTarget(mutation.Id, CancellationToken.None))
@@ -221,7 +224,12 @@ public sealed class RestoreTransaction : IDisposable
                     {
                         if (!Same(current, mutation.Replacement)) throw new IOException("Rollback target conflict.");
                         // Recovery intent is already represented by the persisted touched entry and RollingBack state.
-                        Journal(); _store.VerifyContext(CancellationToken.None); _store.WriteTargetAtomic(mutation.Id, original);
+                        Journal();
+                        _store.VerifyContext(CancellationToken.None);
+                        using (var afterJournal = _store.ReadTarget(mutation.Id, CancellationToken.None))
+                            if (!Same(afterJournal, current))
+                                throw new IOException("Rollback target changed while recording recovery intent.");
+                        _store.WriteTargetAtomic(mutation.Id, original);
                         using var restored = _store.ReadTarget(mutation.Id, CancellationToken.None);
                         if (!Same(restored, original)) throw new IOException("Rollback publication verification failed.");
                     }

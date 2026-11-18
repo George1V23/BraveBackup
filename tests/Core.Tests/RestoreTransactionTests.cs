@@ -139,6 +139,48 @@ public sealed class RestoreTransactionTests : IDisposable
         Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
     }
 
+    [Fact]
+    public void ChangeDuringRestoreIntentPublicationPreservesExternalData()
+    {
+        using var transaction = Create();
+        transaction.Prepare();
+        var target = _store.Paths.Values.First();
+        _store.OnJournal = () =>
+        {
+            if (transaction.State == RestoreTransactionState.Running &&
+                transaction.EntryStates[0] == RestoreEntryState.Intent)
+                File.WriteAllText(target, "external");
+        };
+
+        Assert.Throws<IOException>(() => transaction.Run());
+
+        Assert.Equal(0, _store.Writes);
+        Assert.Equal(RestoreTransactionState.Failed, transaction.State);
+        Assert.Equal("external", File.ReadAllText(target));
+    }
+
+    [Fact]
+    public void ChangeDuringRollbackIntentPublicationPreservesExternalData()
+    {
+        using var transaction = Create();
+        transaction.Prepare();
+        transaction.Run();
+        var target = _store.Paths.Values.Last();
+        var rollingBackRevisions = 0;
+        _store.OnJournal = () =>
+        {
+            if (transaction.State == RestoreTransactionState.RollingBack && ++rollingBackRevisions == 2)
+                File.WriteAllText(target, "external");
+        };
+
+        transaction.Rollback(true);
+
+        Assert.Equal(RestoreTransactionState.RecoveryIncomplete, transaction.State);
+        Assert.Equal(RestoreEntryState.Applied, transaction.EntryStates[1]);
+        Assert.Equal("external", File.ReadAllText(target));
+        Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
+    }
+
     public void Dispose() { foreach (var image in _images) image.Dispose(); _store.Dispose(); }
 
     // Synthetic file-only adapter: deliberately has no production destination/path or metadata guarantees.

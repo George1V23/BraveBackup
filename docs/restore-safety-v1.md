@@ -624,3 +624,17 @@ once per written file instead of many times per file.
 Trade-off: routine checks miss a deliberate same-size rewrite that preserves the modified time; that is
 caught by the full check before any write (tested). Rollback writes also run the full check, so a changed
 source archive blocks rollback writes as before. 997 Core and 52 Linux tests pass.
+
+## Target revalidation after journaling
+
+The coordinator rereads the target after recording intent and verifying context, just
+before the store publishes a restore or rollback write. It compares the observed bytes,
+metadata and existence with the expected pre-write image. A restore conflict stops the
+operation. A rollback conflict preserves the changed target, leaves its entry unresolved
+and allows recovery of other targets. Tests inject edits during journal publication and
+check those outcomes using synthetic files.
+
+This extra read narrows the interval in which the target can change. The store still
+needs to enforce target identity and conflict checks at its own publication boundary.
+Native browser observation now uses the current context verification's cancellation
+token, including during resumption, instead of retaining the token from capture.

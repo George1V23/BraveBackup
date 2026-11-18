@@ -8,10 +8,10 @@ public sealed class BraveRestoreContext
 {
     private readonly string _source;
     private readonly (BraveAppInfo Installation, BraveProfileInfo Profile)[] _targets;
-    private readonly Func<ProcessPresence> _observe;
+    private readonly Func<ProcessPresence>? _observe;
     private readonly string _fingerprint;
     private readonly (long Length, long WriteTicks) _stamp;
-    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence> observe, string fingerprint, (long, long) stamp)
+    private BraveRestoreContext(string source, (BraveAppInfo, BraveProfileInfo)[] targets, Func<ProcessPresence>? observe, string fingerprint, (long, long) stamp)
     { _source = source; _targets = targets; _observe = observe; _fingerprint = fingerprint; _stamp = stamp; }
     /// <summary>Freezes authorized mappings and source bytes only after closed-browser/path validation; performs no writes.</summary>
     /// <remarks>Archive authentication and explicit final restore approval are separate prerequisites owned by the host.</remarks>
@@ -24,12 +24,11 @@ public sealed class BraveRestoreContext
             Profile: target.Profile with { ProfileDirectory = Path.GetFullPath(target.Profile.ProfileDirectory) })).ToArray();
         if (frozen.Length == 0) throw new InvalidDataException("Select restore destinations first.");
         var source = Path.GetFullPath(sourceArchive);
-        var observer = observe ?? (() => ProcessPresenceProbe.Observe(["brave"], token));
         // The stamp is read before and after hashing so an edit during capture is rejected rather than frozen.
         var before = Stamp(source);
         var fingerprint = Fingerprint(source, token);
         if (Stamp(source) != before) throw new IOException("The restore source archive changed during capture.");
-        var context = new BraveRestoreContext(source, frozen, observer, fingerprint, before);
+        var context = new BraveRestoreContext(source, frozen, observe, fingerprint, before);
         context.Verify(token); return context;
     }
     /// <summary>Full verification: rereads and hashes the entire source archive. Use before any write.</summary>
@@ -42,7 +41,7 @@ public sealed class BraveRestoreContext
     private void Verify(CancellationToken token, bool full)
     {
         token.ThrowIfCancellationRequested();
-        if (_observe() != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
+        if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
         var paths = new HashSet<string>(HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var directories = new List<RecoveryDirectoryIdentity>();
         try
@@ -69,13 +68,17 @@ public sealed class BraveRestoreContext
         if (full ? Fingerprint(_source, token) != _fingerprint : Stamp(_source) != _stamp)
             throw new IOException("The restore source archive changed.");
         token.ThrowIfCancellationRequested();
-        if (_observe() != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
+        if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
     }
     private static (long Length, long WriteTicks) Stamp(string source)
     {
         using var input = SnapshotFileAccess.OpenRead(source);
         return (input.Length, File.GetLastWriteTimeUtc(input.SafeFileHandle).Ticks);
     }
+    /// <summary>Uses the current verification token for native process observation.</summary>
+    private ProcessPresence Observe(CancellationToken token) =>
+        _observe?.Invoke() ?? ProcessPresenceProbe.Observe(["brave"], token);
+
     private static string Fingerprint(string source, CancellationToken token)
     {
         using var input = SnapshotFileAccess.OpenRead(source);
