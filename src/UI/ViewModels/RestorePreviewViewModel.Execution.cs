@@ -105,7 +105,7 @@ public partial class RestorePreviewViewModel
                 opened = BraveProfileRestorePlan.Open(review.ArchivePath, review.ArchiveId, sourcePassword,
                     Path.GetDirectoryName(review.SafetyPath)!, password,
                     review.Targets.Select(mapping => new BraveRestoreMapping(mapping.SourceProfileId,
-                        mapping.Installation, mapping.Profile, mapping.Category) { Extension = mapping.Extension }).ToArray(),
+                        mapping.Installation, mapping.Profile, mapping.Category) { Extension = mapping.Extension, Session = mapping.Session }).ToArray(),
                     roots, review.OperationId, review.SourceSha256, observe, pause.Token);
                 opened.Transaction.Progress = progress.Report;
                 opened.Transaction.Prepare(pause.Token);
@@ -197,7 +197,7 @@ public partial class RestorePreviewViewModel
                 if (rollback) session.Transaction.Rollback(true);
                 else
                 {
-                    session.VerifyApplyRegistrations(CancellationToken.None);
+                    session.VerifyApplyTargets(CancellationToken.None);
                     session.Transaction.Run(pause.Token);
                 }
             });
@@ -210,7 +210,10 @@ public partial class RestorePreviewViewModel
                 ? "Rollback stopped. Check that Brave is closed and the targets and safety backup are available."
                 : error is BackupOperationException { Code: "restore-extension-registration" }
                     ? "The reviewed extension registration changed. Restore the previous package registration or roll back."
-                    : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
+                    : error is BackupOperationException { Code: "restore-session-target" or "restore-session-missing"
+                        or "restore-session-encrypted" or "restore-session-destination-format" }
+                        ? "The destination Session file is no longer eligible. The restore remains paused and rollback is available."
+                        : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
             RestoreErrorCode = RestoreFailureCode(error);
         }
         finally
@@ -319,6 +322,11 @@ public partial class RestorePreviewViewModel
             "The registered extension or its Local store changed after Recheck. Recheck the destination and review again.",
         BackupOperationException { Code: "restore-extension-storage" } =>
             "An archived Local store could not be validated for restore. Clear Extensions and review again.",
+        BackupOperationException { Code: "restore-session-source" } =>
+            "The reviewed native Session snapshot is unavailable. Inspect the backup again.",
+        BackupOperationException { Code: "restore-session-target" or "restore-session-missing"
+            or "restore-session-encrypted" or "restore-session-destination-format" } =>
+            "The destination Session file changed or became unsupported. Recheck the profile and review again.",
         System.Security.Cryptography.CryptographicException => "Could not authenticate the source archive or safety backup.",
         _ => "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status."
     };
@@ -331,6 +339,8 @@ public partial class RestorePreviewViewModel
             or "restore-settings-missing" or "restore-settings-parent" or "restore-settings-value" or "restore-settings-size" } settings => settings.Code,
         BackupOperationException { Code: "restore-extension-registration" or "restore-extension-target"
             or "restore-extension-storage" } extension => extension.Code,
+        BackupOperationException { Code: "restore-session-source" or "restore-session-target" or "restore-session-missing"
+            or "restore-session-encrypted" or "restore-session-destination-format" } session => session.Code,
         InvalidDataException or System.Text.Json.JsonException or ArgumentException or NotSupportedException => "RESTORE_DATA_REJECTED",
         IOException => "RESTORE_CONTEXT_OR_IO_FAILED",
         _ => "RESTORE_OPERATION_FAILED"

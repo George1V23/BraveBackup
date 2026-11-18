@@ -11,8 +11,9 @@ Phase 5 now supports [Linux Settings restore](restore-settings.md), including mi
 Bookmarks and Settings selections. [Extensions restore on Linux](restore-extensions.md)
 supports existing Local stores for matching registered packages through
 [whole-directory exchange and rollback](restore-directory-exchange.md). Extension
-installation and Sync storage restoration are pending. Sessions is the next category
-checkpoint.
+installation and Sync storage restoration are pending. [Sessions restore on Linux](restore-sessions.md)
+supports the verified native plaintext snapshot on compatible destinations. Portable
+reconstruction and encrypted native restore remain pending.
 Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before

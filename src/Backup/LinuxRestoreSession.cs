@@ -73,6 +73,8 @@ internal sealed class LinuxRestoreSession : IDisposable
                 throw new ArgumentException("A single restore target name is required.");
             if (target.IsLocalExtensionDirectory && (target.Mutation.Category != "extensions" || !BraveExtensionBackup.ValidId(name)))
                 throw new InvalidDataException("An extension directory restore requires the mapped extension identity.");
+            if (target.Mutation.Category == "sessions" && !BraveSessionBackup.ModernName(name, sessionOnly: true))
+                throw new InvalidDataException("A native Session restore requires a modern Session filename.");
             if (!paths.Add(Path.Combine(TargetParent(target), name)) || !ids.Add(target.Mutation.Id))
                 throw new InvalidDataException("Restore target mappings must be unique.");
         }
@@ -112,15 +114,19 @@ internal sealed class LinuxRestoreSession : IDisposable
         }
     }
 
-    private static string TargetParent(LinuxRestoreDestination target) => target.IsLocalExtensionDirectory
-        ? Path.Combine(target.Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName)
-        : target.Profile.ProfileDirectory;
+    private static string TargetParent(LinuxRestoreDestination target) => target.Mutation.Category switch
+    {
+        "extensions" when target.IsLocalExtensionDirectory =>
+            Path.Combine(target.Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName),
+        "sessions" => Path.Combine(target.Profile.ProfileDirectory, BraveNativeSessionRestore.ParentName),
+        _ => target.Profile.ProfileDirectory
+    };
 
     /// <summary>Requires the transaction to use the same source bytes as its category planner.</summary>
     internal void VerifySource(BraveRestoreContext expected) => _store.VerifySource(expected);
 
-    /// <summary>Revalidates frozen extension registrations before resuming a paused forward transaction.</summary>
-    internal void VerifyApplyRegistrations(CancellationToken token)
+    /// <summary>Revalidates frozen category-specific destination checks before resuming a paused forward transaction.</summary>
+    internal void VerifyApplyTargets(CancellationToken token)
     {
         if (_store.ApplyGuards.Count == 0) return;
         _store.VerifyBrowserStopped(token);

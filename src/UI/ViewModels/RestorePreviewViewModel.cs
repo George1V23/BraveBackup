@@ -111,7 +111,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories
-                            .Select(category => Category(category, result.ExtensionInventories.GetValueOrDefault(profile.Id))).ToArray())).ToArray()));
+                            .Select(category => Category(category, result.ExtensionInventories.GetValueOrDefault(profile.Id),
+                                result.Sessions.GetValueOrDefault(profile.Id))).ToArray())).ToArray()));
             _sourceSecret = result.Encrypted ? secret : null;
             Planning.LoadInspected(result);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
@@ -131,8 +132,14 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private static RestoreCategoryPreview Category(ArchiveCategory category, ArchivedExtensionInventory? extensions)
+    private static RestoreCategoryPreview Category(ArchiveCategory category, ArchivedExtensionInventory? extensions,
+        ArchivedSessionInventory? sessions)
     {
+        if (category.Id == "sessions" && sessions is not null)
+        {
+            var scope = sessions.NativeSource is null ? "Portable contents only." : "Verified native SNSS v3 snapshot included.";
+            return new("Sessions", $"{sessions.Windows} persisted windows and {sessions.Tabs} tabs. {scope}");
+        }
         var representation = category.Id == "passwords" ? category.Files.Any(file => file.Role == "plaintext-password-csv")
             ? "CSV passwords; readable after extraction. Destination compatibility must be verified."
             : category.Files.Any(file => file.Role == "raw-password-index")

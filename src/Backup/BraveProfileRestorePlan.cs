@@ -9,6 +9,7 @@ namespace BraveBackup.Core;
 internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile, string Category)
 {
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
+    internal NativeSessionRestoreSelection? Session { get; init; }
 }
 
 /// <summary>Builds a Linux restore session from supported categories in a reviewed archive.</summary>
@@ -57,6 +58,8 @@ internal static class BraveProfileRestorePlan
                 mapping.Installation != group.First().Installation || mapping.Profile != group.First().Profile)) ||
             targets.Select(target => target.Profile.ProfileDirectory).Distinct(StringComparer.Ordinal).Count() != targets.Length ||
             selected.Any(mapping => (mapping.Category == "extensions") != (mapping.Extension is not null) ||
+                (mapping.Category == "sessions") != (mapping.Session is not null) ||
+                (mapping.Session is { } session && !BraveSessionBackup.ModernName(session.FileName, sessionOnly: true)) ||
                 (mapping.Extension is { } extension && !BraveExtensionBackup.ValidId(extension.Id))) ||
             selected.Select(mapping => (mapping.SourceProfileId, mapping.Category, mapping.Extension?.Id))
                 .Distinct().Count() != selected.Length)
@@ -123,20 +126,29 @@ internal static class BraveProfileRestorePlan
                         continue;
                     }
 
-                    var fileName = TargetFileName(mapping.Category);
-                    var bookmarks = mapping.Category == "bookmarks";
-                    var role = bookmarks ? "native-source" : "portable-settings";
-                    var descriptor = archived.profile.Categories.SingleOrDefault(category => category.Id == mapping.Category)
-                        ?.Files.Single(file => file.Role == role)
+                    var categoryData = archived.profile.Categories.SingleOrDefault(category => category.Id == mapping.Category)
                         ?? throw new InvalidDataException("The selected archive profile lacks the requested category.");
+                    var bookmarks = mapping.Category == "bookmarks";
+                    var native = mapping.Session;
+                    var fileName = native?.FileName ?? TargetFileName(mapping.Category);
+                    var directory = mapping.Profile.ProfileDirectory;
+                    var role = bookmarks ? "native-source" : "portable-settings";
+                    var descriptor = native is null
+                        ? categoryData.Files.Single(file => file.Role == role)
+                        : BraveNativeSessionRestore.ReviewedSourceFile(zip, categoryData, native, token);
+                    if (native is not null)
+                    {
+                        BraveNativeSessionRestore.VerifyLatest(directory, native.FileName, token);
+                        directory = Path.Combine(directory, BraveNativeSessionRestore.ParentName);
+                    }
                     if (retained + descriptor.Length > RestoreSafetyFormat.MaximumBytes)
                         throw new InvalidDataException("Selected snapshots exceed the restore retention limit.");
 
                     var bytes = ReadSnapshot(zip, descriptor,
-                        bookmarks ? LinuxRestoreFileCapture.MaximumBytes : ArchiveLimits.MaxSettingsBytes, token);
+                        bookmarks || native is not null ? LinuxRestoreFileCapture.MaximumBytes : ArchiveLimits.MaxSettingsBytes, token);
                     try
                     {
-                        var baseline = LinuxRestoreTargetLease.Capture(mapping.Profile.ProfileDirectory, fileName, token);
+                        var baseline = LinuxRestoreTargetLease.Capture(directory, fileName, token);
                         baselines.Add(baseline);
                         using var original = baseline.CopyOriginal();
                         retainedOriginals += original.Content.Bytes.Length + original.Metadata.Bytes.Length;
@@ -144,7 +156,11 @@ internal static class BraveProfileRestorePlan
                             throw new InvalidDataException("Original files exceed the restore retention limit.");
                         var image = BuildReplacement(mapping, original, bytes, token);
                         destinations.Add(new(new RestoreMutation(Guid.NewGuid(), archived.installation.Id,
-                            archived.profile.Id, mapping.Category, image), mapping.Installation, mapping.Profile, fileName));
+                            archived.profile.Id, mapping.Category, image), mapping.Installation, mapping.Profile, fileName)
+                        {
+                            VerifyApplyContext = native is null ? null : cancellation =>
+                                BraveNativeSessionRestore.VerifyLatest(mapping.Profile.ProfileDirectory, native.FileName, cancellation)
+                        });
                         retained += image.Content.Bytes.Length + image.Metadata.Bytes.Length;
                         if (retained > RestoreSafetyFormat.MaximumBytes)
                             throw new InvalidDataException("Replacements exceed the restore retention limit.");
@@ -181,6 +197,12 @@ internal static class BraveProfileRestorePlan
             if (original.Exists) ValidateNativeSnapshot(original.Content.Bytes, token);
             var metadata = original.Exists ? original.Metadata.Bytes.ToArray() : CaptureTemplateMetadata(mapping.Profile.ProfileDirectory);
             return new RestoreFileImage(true, payload, metadata);
+        }
+
+        if (mapping.Session is { } session)
+        {
+            BraveNativeSessionRestore.VerifyOriginal(original, session);
+            return new RestoreFileImage(true, payload, original.Metadata.Bytes.Span);
         }
 
         if (!original.Exists)

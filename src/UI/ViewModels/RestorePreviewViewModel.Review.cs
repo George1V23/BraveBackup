@@ -17,15 +17,19 @@ public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo In
     {
         "bookmarks" => "Bookmarks",
         "settings" => "Settings",
+        "sessions" => "Persisted Sessions",
         _ => "Extension local storage"
     };
 
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
+    internal NativeSessionRestoreSelection? Session { get; init; }
 
     /// <summary>Gets the exact file or directory that the confirmed restore can replace.</summary>
     public string DestinationPath => Extension is { } extension
         ? Path.Combine(Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName, extension.Id)
-        : Path.Combine(Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(Category));
+        : Session is { } session
+            ? Path.Combine(Profile.ProfileDirectory, BraveNativeSessionRestore.ParentName, session.FileName)
+            : Path.Combine(Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(Category));
 }
 
 /// <summary>A write-free review of the exact archive, destinations and encrypted artifact paths.</summary>
@@ -87,7 +91,8 @@ public partial class RestorePreviewViewModel
                         ? row.Profile.ExtensionTargets.Select(extension =>
                             new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
                                 { Extension = extension })
-                        : [new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)]);
+                        : [new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
+                            { Session = category.Id == "sessions" ? row.Profile.SessionTarget : null }]);
             }).ToArray();
 
             var targetsBySource = targets.ToLookup(target => target.SourceProfileId);
@@ -99,6 +104,7 @@ public partial class RestorePreviewViewModel
                     {
                         "bookmarks" => $"Replace Bookmarks at {target.DestinationPath}",
                         "settings" => $"Apply stored Settings to {target.DestinationPath}",
+                        "sessions" => $"Replace the persisted Session file at {target.DestinationPath}",
                         _ => $"Replace Local store for extension {target.Extension!.Id} (version {target.Extension.Version}) at {target.DestinationPath}"
                     };
                 });
@@ -110,6 +116,8 @@ public partial class RestorePreviewViewModel
                 description += "\n\nSettings applies the choices stored in the archive. A choice absent from the archive keeps its destination value.";
             if (targets.Any(target => target.Extension is not null))
                 description += "\n\nExtension selection replaces only the listed existing Local stores with the archived snapshots.";
+            if (targets.Any(target => target.Session is not null))
+                description += "\n\nSessions replaces the listed last-persisted window and tab snapshot. Brave's startup settings control whether those windows reopen.";
             Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath,
                 Array.AsReadOnly(targets), description);
         }

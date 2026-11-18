@@ -12,6 +12,10 @@ public sealed record BraveArchiveInspectionResult(string SourcePath, bool Encryp
     /// <summary>Verified package fingerprints and storage presence from the inspected archive.</summary>
     internal IReadOnlyDictionary<Guid, ArchivedExtensionInventory> ExtensionInventories { get; init; } =
         new Dictionary<Guid, ArchivedExtensionInventory>();
+
+    /// <summary>Persisted session counts and verified provenance without archived URLs or titles.</summary>
+    internal IReadOnlyDictionary<Guid, ArchivedSessionInventory> Sessions { get; init; } =
+        new Dictionary<Guid, ArchivedSessionInventory>();
 }
 
 /// <summary>Inspects existing archive contracts without extracting payloads or accessing destination profiles.</summary>
@@ -32,6 +36,7 @@ public static class BraveArchiveInspection
         var before = Hash(source, token);
         source.Position = 0;
         var extensionInventories = new Dictionary<Guid, ArchivedExtensionInventory>();
+        var sessions = new Dictionary<Guid, ArchivedSessionInventory>();
         var remainingExtensionEntries = ArchiveLimits.MaxEntries;
         long remainingLocalBytes = RestoreSafetyFormat.MaximumBytes;
         var manifest = BraveSettingsBackup.ValidateArchive(source, password, token, (profileId, inventory, zip) =>
@@ -40,13 +45,13 @@ public static class BraveArchiveInspection
                 ArchivedExtensionInventory.Describe(inventory, ref remainingExtensionEntries, token,
                     extension => HostEnvironment.IsLinux &&
                         BraveExtensionLocalRestore.CanReadArchivedStore(zip, extension, ref remainingLocalBytes, token)));
-        });
+        }, (profileId, session) => sessions.Add(profileId, ArchivedSessionInventory.FromValidated(session)));
         if (Hash(source, token) != before)
             throw new IOException("The source archive changed during inspection.");
         using (var current = SnapshotFileAccess.OpenRead(sourcePath))
             if (Hash(current, token) != before) throw new IOException("The source archive changed during inspection.");
         token.ThrowIfCancellationRequested();
-        return new(sourcePath, encrypted, manifest) { SourceSha256 = before, ExtensionInventories = extensionInventories };
+        return new(sourcePath, encrypted, manifest) { SourceSha256 = before, ExtensionInventories = extensionInventories, Sessions = sessions };
     }
 
     private static string Hash(Stream source, CancellationToken token)

@@ -96,9 +96,10 @@ public static class BraveSettingsBackup
     public static ArchiveManifest ValidateArchive(Stream source, string? password = null,
         CancellationToken token = default) => ValidateArchive(source, password, token, null);
 
-    /// <summary>Validates the archive and supplies each verified Extensions inventory to an optional reader.</summary>
+    /// <summary>Validates the archive and supplies verified category metadata to optional inspection readers.</summary>
     internal static ArchiveManifest ValidateArchive(Stream source, string? password, CancellationToken token,
-        Action<Guid, ExtensionSnapshotInventory, ZipArchive>? readExtensions)
+        Action<Guid, ExtensionSnapshotInventory, ZipArchive>? readExtensions,
+        Action<Guid, PortableSession>? readSessions = null)
     {
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
@@ -123,7 +124,8 @@ public static class BraveSettingsBackup
 
             if (category.Id == "sessions")
             {
-                BraveSessionBackup.ValidateCategory(zip, category, token);
+                var session = BraveSessionBackup.ReadValidated(zip, category, token);
+                readSessions?.Invoke(profileId, session);
                 continue;
             }
 

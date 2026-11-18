@@ -2,8 +2,9 @@
 
 The user kept all six [Sessions scope choices](sessions-backup-proposal.md). The Backup
 form now supports Sessions alone or with existing supported categories, with optional
-additional native files. No restore, live browser integration or OS-backed decryption
-was added. Existing archive-v1/v2/v3 and HTML/JSON behavior remains compatible.
+additional native files. [Restore on Linux](restore-sessions.md) can apply the
+verified native snapshot to a compatible existing profile. Existing archive-v1/v2/v3
+and HTML/JSON behavior remains compatible.
 
 ## Supported data and capture meaning
 
@@ -161,5 +162,5 @@ for synthetic data, not evidence of a real-browser shutdown. [Review screenshot]
 
 See [pinned research and fixture provenance](sessions-research.md). Native Windows/real
 Brave-version end-to-end validation and independent encryption review remain release checks.
-OS-encrypted/legacy session decoding, native restore, live capture and TabManagerPlus-specific
-saved windows are not implemented. Next checkpoint is user review before the next category.
+OS-encrypted and legacy decoding and live capture are outside the Sessions backup scope.
+The [native restore workflow](restore-sessions.md) uses the verified plaintext snapshot.

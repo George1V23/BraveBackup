@@ -328,6 +328,54 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "Confirm restore installs the exact archived Local store contents");
                 Check(File.ReadAllText(preferencesPath) == registeredPreferences && File.Exists(extensionReview.SafetyPath),
                     "Extension restore preserves registration and retains an encrypted safety artifact");
+                // Restore a validated persisted Session snapshot through the existing controls.
+                var sessionDirectory = Directory.CreateDirectory(Path.Combine(profileDirectory, "Sessions")).FullName;
+                var sessionPath = Path.Combine(sessionDirectory, "Session_10");
+                var closedTabs = Path.Combine(sessionDirectory, "Tabs_20");
+                var archivedSession = File.ReadAllBytes(Path.Combine(fixtures, "Sessions", "Session_10"));
+                var originalSession = File.ReadAllBytes(Path.Combine(fixtures, "Sessions", "Session.empty-v3.bin"));
+                File.WriteAllBytes(sessionPath, archivedSession);
+                File.WriteAllText(closedTabs, "synthetic closed-tabs marker");
+                var sessionsArchive = Path.Combine(root, "output", "sessions.bravebackup");
+                await BraveArchiveBackup.CreateAsync([new(app, [profile])], ["sessions"], sessionsArchive,
+                    extensionPassword, "balanced", [app.UserDataDirectory], "synthetic", _ => Task.FromResult(false),
+                    null, default, new ExtensionBackupOptions(), new SessionBackupOptions { IncludeNativeFiles = true });
+                File.WriteAllBytes(sessionPath, originalSession);
+                restore.SourcePath = sessionsArchive;
+                await WaitUntil(() => restore.NeedsUnlock && !restore.IsBusy, "Sessions archive inspection");
+                restore.Password = extensionPassword;
+                await restore.UnlockAsync();
+                var sessionSource = planning.Groups.Single().Profiles.Single();
+                sessionSource.IsSelected = true;
+                sessionSource.SelectedInstallation = sessionSource.TargetInstallations.Single();
+                sessionSource.SelectedProfile = sessionSource.TargetProfiles.Single();
+                await Task.Delay(100);
+                Click(window, "Recheck");
+                await WaitUntil(() => !planning.IsChecking && sessionSource.SessionCheckResult.Contains("available"),
+                    "Sessions destination assessment");
+                await Task.Delay(100);
+                var sessionChoice = restoreView.GetVisualDescendants().OfType<CheckBox>()
+                    .Single(box => Equals(box.Content, "Sessions"));
+                Check(sessionChoice.IsEffectivelyEnabled && sessionChoice.IsChecked != true,
+                    "Compatible Sessions restore is available and starts unselected");
+                sessionChoice.IsChecked = true;
+                restore.Safety.Folder = Path.Combine(root, "output");
+                restore.Safety.Password = "Synthetic-safety-password";
+                restore.Safety.Confirmation = restore.Safety.Password;
+                await Task.Delay(100);
+                Click(window, "Review restore");
+                await WaitUntil(() => restore.Review is not null, "Sessions restore review");
+                var sessionReview = restore.Review!;
+                Check(sessionReview.DestinationSummary.Contains(sessionPath) && !sessionReview.DestinationSummary.Contains(closedTabs)
+                    && !File.Exists(sessionReview.SafetyPath) && originalSession.AsSpan().SequenceEqual(File.ReadAllBytes(sessionPath)),
+                    "Sessions review lists only the exact destination and does not write");
+                await Task.Delay(100);
+                Click(window, "Confirm restore");
+                await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Confirmed native Sessions restore");
+                Check(restore.RestoreStatus == "Persisted Sessions restored." && archivedSession.AsSpan().SequenceEqual(File.ReadAllBytes(sessionPath)),
+                    "Confirm restore writes the exact archived persisted Session snapshot");
+                Check(File.Exists(sessionReview.SafetyPath) && File.ReadAllText(closedTabs) == "synthetic closed-tabs marker",
+                    "Sessions restore retains encrypted safety data and preserves closed tabs");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;

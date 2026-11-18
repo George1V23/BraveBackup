@@ -41,6 +41,8 @@ The runner drives actual selector bindings and dialog button handlers, checking:
   saves recovery artifacts, and preserves unrelated preference values and profile files.
 - Restore Recheck displays a registered Extensions package match. Review shows the exact
   Local directory and Confirm restore exchanges it with the archived store.
+- Sessions Recheck and Review select the exact persisted native file. Confirm restores
+  its archived bytes while preserving the closed-tab file.
 
 It saves a rendered main-window image to
 [`screenshots/password-csv-section.png`](screenshots/password-csv-section.png).

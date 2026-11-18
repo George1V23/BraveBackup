@@ -54,10 +54,13 @@ public partial class RestoreCategoryChoice : ViewModelBase
             "bookmarks" => "Bookmarks",
             "settings" => "Settings",
             "extensions" => "Extensions",
+            "sessions" => "Sessions",
             _ => category.Id + " (v" + category.Version + ")"
         };
         if (Id == "extensions")
             SupportReason = "Use Recheck to find existing Local stores for matching registered extensions.";
+        if (Id == "sessions")
+            SupportReason = "Use Recheck to look for an existing supported native Session file.";
         _changed = changed;
     }
 
@@ -92,8 +95,10 @@ public partial class RestoreProfileChoice : ViewModelBase
     [ObservableProperty] private RestoreTargetProfile? _selectedProfile;
     [ObservableProperty] private string _checkResult = "Not checked. Choose a destination and use Recheck.";
     [ObservableProperty] private string _extensionCheckResult = string.Empty;
+    [ObservableProperty] private string _sessionCheckResult = string.Empty;
 
     internal IReadOnlyList<ExtensionLocalRestoreSelection> ExtensionTargets { get; private set; } = [];
+    internal NativeSessionRestoreSelection? SessionTarget { get; private set; }
 
     public RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets, Action changed)
         : this(source, targets, changed, changed) { }
@@ -137,6 +142,17 @@ public partial class RestoreProfileChoice : ViewModelBase
         OnPropertyChanged(nameof(HasSupportedCategories));
     }
 
+    /// <summary>Applies reviewed Session evidence for the current profile mapping.</summary>
+    internal void ApplySessionCheck(string description, NativeSessionRestoreSelection? target)
+    {
+        SessionCheckResult = description;
+        SessionTarget = target;
+        Categories.SingleOrDefault(choice => choice.Id == "sessions")?.SetCompatibility(target is not null, target is not null
+            ? "Replaces the newest supported persisted native Session file."
+            : "Use Recheck to look for an existing supported native Session file.");
+        OnPropertyChanged(nameof(HasSupportedCategories));
+    }
+
     partial void OnIsSelectedChanged(bool value) => _changed();
     partial void OnSelectedInstallationChanged(RestoreTargetInstallation? value)
     {
@@ -172,6 +188,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     private string? _sourceHash;
     private IReadOnlyDictionary<Guid, ArchivedExtensionInventory> _extensions =
         new Dictionary<Guid, ArchivedExtensionInventory>();
+    private IReadOnlyDictionary<Guid, ArchivedSessionInventory> _sessions =
+        new Dictionary<Guid, ArchivedSessionInventory>();
     internal event Action? ReviewInputsChanged;
 
     internal (string Path, Guid Id, string Hash)? ReviewedSource =>
@@ -220,24 +238,26 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     public void SetTargets(IEnumerable<RestoreTargetInstallation> targets)
     {
         _targets = targets.ToArray();
-        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash, _extensions);
+        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash, _extensions, _sessions);
     }
     /// <summary>Loads independent source choices; archive names never select a destination.</summary>
     public void Load(ArchiveManifest manifest, string sourcePath) => LoadCore(manifest, sourcePath, null);
 
     internal void LoadInspected(BraveArchiveInspectionResult inspection)
     {
-        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256, inspection.ExtensionInventories);
+        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256, inspection.ExtensionInventories, inspection.Sessions);
     }
 
     private void LoadCore(ArchiveManifest manifest, string sourcePath, string? sourceHash,
-        IReadOnlyDictionary<Guid, ArchivedExtensionInventory>? extensions = null)
+        IReadOnlyDictionary<Guid, ArchivedExtensionInventory>? extensions = null,
+        IReadOnlyDictionary<Guid, ArchivedSessionInventory>? sessions = null)
     {
         Reset();
         _manifest = manifest;
         _sourcePath = sourcePath;
         _sourceHash = sourceHash;
         if (extensions is not null) _extensions = extensions;
+        if (sessions is not null) _sessions = sessions;
         foreach (var installation in manifest.Installations)
         {
             var profiles = installation.Profiles.Select(profile =>
@@ -257,6 +277,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         {
             profile.CheckResult = "Not checked. Use Recheck after changing the plan.";
             profile.ApplyExtensionCheck(string.Empty, []);
+            profile.ApplySessionCheck(string.Empty, null);
         }
         Notify();
     }
@@ -283,44 +304,52 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         var targets = _targets;
         var requests = Profiles.Where(profile => profile.IsSelected).Select(profile =>
             (Row: profile, App: profile.SelectedInstallation, Profile: profile.SelectedProfile,
-                Extensions: _extensions.GetValueOrDefault(profile.SourceId), Compatible: profile.IsCompatibleDestination)).ToArray();
+                Extensions: _extensions.GetValueOrDefault(profile.SourceId), Sessions: _sessions.GetValueOrDefault(profile.SourceId),
+                Compatible: profile.IsCompatibleDestination)).ToArray();
         IsChecking = true;
-        foreach (var request in requests) request.Row.ApplyExtensionCheck(string.Empty, []);
+        foreach (var request in requests)
+        {
+            request.Row.ApplyExtensionCheck(string.Empty, []);
+            request.Row.ApplySessionCheck(string.Empty, null);
+        }
         try
         {
             var results = await Task.Run(() => requests.Select(request =>
             {
                 var token = cancellation.Token;
                 token.ThrowIfCancellationRequested();
-                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty);
+                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty, SessionCheck.Empty);
                 if (!targets.Any(target => ReferenceEquals(target, request.App)) ||
                     !request.App.Profiles.Any(profile => ReferenceEquals(profile, request.Profile)))
-                    return ("Invalid destination mapping.", ExtensionCheck.Empty);
+                    return ("Invalid destination mapping.", ExtensionCheck.Empty, SessionCheck.Empty);
                 try
                 {
                     var path = BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, token);
                     ProcessPresence Observe() => observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], token);
                     var presence = Observe();
                     if (presence == ProcessPresence.Running)
-                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty);
+                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty, SessionCheck.Empty);
                     if (presence != ProcessPresence.Stopped)
-                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty);
+                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty);
 
                     var extensionResult = CompareExtensions(path, request.Extensions, request.Compatible, token);
-                    if (request.Extensions is not null && request.Compatible && Observe() != ProcessPresence.Stopped)
-                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty);
+                    var sessionResult = CheckSessions(path, request.Sessions, request.Compatible, token);
+                    if ((request.Extensions is not null || sessionResult.Target is not null) &&
+                        request.Compatible && Observe() != ProcessPresence.Stopped)
+                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty, SessionCheck.Empty);
                     return ("Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
-                        extensionResult);
+                        extensionResult, sessionResult);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty); }
+                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty); }
             }).ToArray(), cancellation.Token);
             if (_disposed || revision != _revision) return;
             for (var index = 0; index < requests.Length; index++)
             {
-                var (result, extensions) = results[index];
+                var (result, extensions, sessions) = results[index];
                 requests[index].Row.CheckResult = result;
                 requests[index].Row.ApplyExtensionCheck(extensions.Description, extensions.Targets);
+                requests[index].Row.ApplySessionCheck(sessions.Description, sessions.Target);
             }
             Notify();
         }
@@ -331,6 +360,36 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             if (!_disposed && revision == _revision) IsChecking = false;
         }
     }
+    private sealed record SessionCheck(string Description, NativeSessionRestoreSelection? Target)
+    {
+        internal static SessionCheck Empty { get; } = new(string.Empty, null);
+    }
+
+    private static SessionCheck CheckSessions(string profilePath, ArchivedSessionInventory? sessions, bool compatible,
+        CancellationToken token)
+    {
+        if (sessions is null) return SessionCheck.Empty;
+        if (sessions.NativeSource is null)
+            return new("This archive contains a portable session only. Native restore requires the archived Session file.", null);
+        if (!sessions.CanRestore)
+            return new("The archived native Session file exceeds the restore size limit.", null);
+        if (!compatible)
+            return new("Session restore requires a Linux destination with the same recorded Brave product and version.", null);
+        try
+        {
+            var selection = BraveNativeSessionRestore.Review(profilePath, sessions.NativeSource, token);
+            return new("Native Sessions restore is available for this destination.", selection);
+        }
+        catch (BackupOperationException error)
+        {
+            return new(error.Message, null);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or PlatformNotSupportedException)
+        {
+            return new("Unable to verify a supported existing Session file in the destination.", null);
+        }
+    }
+
     private sealed record ExtensionCheck(string Description, IReadOnlyList<ExtensionLocalRestoreSelection> Targets)
     {
         internal static ExtensionCheck Empty { get; } = new(string.Empty, []);
@@ -398,6 +457,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         ++_revision; _checking?.Cancel(); _checking = null; IsChecking = false;
         Groups.Clear(); _manifest = null; _sourcePath = string.Empty; _sourceHash = null;
         _extensions = new Dictionary<Guid, ArchivedExtensionInventory>();
+        _sessions = new Dictionary<Guid, ArchivedSessionInventory>();
         Notify();
     }
     public void Dispose() { if (_disposed) return; Reset(); _disposed = true; ObserveBrowserState = null; _targets = []; }

@@ -31,16 +31,26 @@ public static class BraveSessionBackup
                                                     path.StartsWith("Sessions/", StringComparison.Ordinal) &&
                                                     ModernName(path[9..]);
 
-    /// <summary>Validates browser-specific provenance and, when present, replays the exact archived native source.</summary>
-    public static void ValidateCategory(ZipArchive zip, ArchiveCategory category, CancellationToken token)
+    /// <summary>Reads the bounded portable projection from the declared archive entry.</summary>
+    internal static PortableSession ReadPortable(ZipArchive zip, ArchiveCategory category, CancellationToken token)
     {
         var descriptor = category.Files.Single(file => file.Role == "portable-session");
         using var document = SessionArchiveFormat.ReadJson(zip, descriptor, token);
-        var model = PortableSessionFormat.Parse(document.RootElement);
+        return PortableSessionFormat.Parse(document.RootElement);
+    }
+
+    /// <summary>Validates browser-specific provenance and, when present, replays the exact archived native source.</summary>
+    public static void ValidateCategory(ZipArchive zip, ArchiveCategory category, CancellationToken token) =>
+        ReadValidated(zip, category, token);
+
+    /// <summary>Returns the projection after validating provenance and native replay consistency.</summary>
+    internal static PortableSession ReadValidated(ZipArchive zip, ArchiveCategory category, CancellationToken token)
+    {
+        var model = ReadPortable(zip, category, token);
         if (!model.Source.Path.StartsWith("Sessions/", StringComparison.Ordinal) ||
             !ModernName(model.Source.Path[9..], true) || model.Source.FormatVersion != 3)
             throw new InvalidDataException("Unsupported native session provenance.");
-        if (!model.IncludeNativeFiles) return;
+        if (!model.IncludeNativeFiles) return model;
         var metadata = category.Files.Single(file => file.Role == "native-session-inventory");
         using var inventoryDocument = SessionArchiveFormat.ReadJson(zip, metadata, token);
         var inventory = inventoryDocument.Deserialize<NativeSessionInventory>(ArchiveManifest.JsonOptions)!;
@@ -69,6 +79,7 @@ public static class BraveSessionBackup
         {
             CryptographicOperations.ZeroMemory(bytes);
         }
+        return model;
     }
 }
 
