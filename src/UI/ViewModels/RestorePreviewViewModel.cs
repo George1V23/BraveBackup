@@ -59,13 +59,13 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         UnlockCommand.NotifyCanExecuteChanged();
         ReviewRestoreCommand.NotifyCanExecuteChanged();
     }
-    private bool CanUnlock() => !_disposed && NeedsUnlock && !IsBusy && Password.Length != 0;
+    private bool CanUnlock() => !_disposed && !IsRestoreActive && NeedsUnlock && !IsBusy && Password.Length != 0;
 
     /// <summary>Opens the native source picker without writing files; ignores results after context/lifetime changes.</summary>
     [RelayCommand]
     public async Task BrowseAsync()
     {
-        if (_disposed || PickSource is null) return;
+        if (_disposed || IsRestoreActive || PickSource is null) return;
         var generation = _generation;
         try
         {
@@ -88,7 +88,9 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
 
     private async Task InspectAsync(bool unlock)
     {
-        if (_disposed) return;
+        if (_disposed || IsRestoreActive) return;
+        ClearRestoreSession();
+        _sourceSecret = null;
         _inspection?.Cancel();
         var generation = ++_generation;
         var source = SourcePath;
@@ -108,6 +110,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories.Select(Category).ToArray())).ToArray()));
+            _sourceSecret = result.Encrypted ? secret : null;
             Planning.LoadInspected(result);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
             NeedsUnlock = false;
@@ -140,10 +143,13 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     /// <summary>Cancels pending inspection and clears preview/password state when leaving Restore.</summary>
     public void Leave()
     {
+        if (IsRestoreActive) return;
+        ClearRestoreSession();
+        _sourceSecret = null;
         ++_generation; _inspection?.Cancel(); _inspection = null;
         Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false; IsBusy = false;
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.ReviewInputsChanged -= InvalidateReview; Safety.PropertyChanged -= OnSafetySettingsChanged; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; CloseExecution(); Leave(); _disposed = true; Planning.ReviewInputsChanged -= InvalidateReview; Safety.PropertyChanged -= OnSafetySettingsChanged; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
 }

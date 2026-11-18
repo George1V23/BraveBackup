@@ -29,7 +29,7 @@ public partial class RestorePreviewViewModel
           $"Encrypted safety backup\n{review.SafetyPath}\n\nRecovery journal\n{review.JournalPath}"
         : string.Empty;
 
-    private bool CanReviewRestore() => !_disposed && !IsBusy && Planning.ReadyForReview && Safety.ValidationError is null;
+    private bool CanReviewRestore() => !_disposed && !IsRestoreActive && !IsBusy && Planning.ReadyForReview && Safety.ValidationError is null;
 
     private void OnSafetySettingsChanged(object? sender, PropertyChangedEventArgs args)
     {
@@ -37,6 +37,8 @@ public partial class RestorePreviewViewModel
             or nameof(RestoreSafetyOptionsViewModel.Password) or nameof(RestoreSafetyOptionsViewModel.Confirmation))
             InvalidateReview();
     }
+
+    partial void OnReviewChanged(RestoreReview? value) => ConfirmRestoreCommand.NotifyCanExecuteChanged();
 
     private void InvalidateReview()
     {

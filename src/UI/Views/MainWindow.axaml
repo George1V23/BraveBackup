@@ -179,7 +179,7 @@
         </Border>
         <Grid Grid.Column="1" Margin="26,12,26,14">
             <TabControl SelectedIndex="{Binding SelectedTabIndex}" IsVisible="{Binding HasActiveInstallation}">
-                <TabItem Header="Backup">
+                <TabItem Header="Backup" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <ScrollViewer x:Name="BackupScrollViewer" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Spacing="16" Margin="0,18,0,12" IsEnabled="{Binding !IsRefreshing}">
                             <Border Classes="card" IsVisible="{Binding !HasBackupScope}">
@@ -482,7 +482,7 @@
                 <TabItem Header="Restore">
                     <views:RestorePreviewView DataContext="{Binding RestorePreview}" />
                 </TabItem>
-                <TabItem Header="Export">
+                <TabItem Header="Export" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <ScrollViewer>
                         <StackPanel>
                             <Border IsEnabled="{Binding CanUseBookmarkExport}">
@@ -494,12 +494,12 @@
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
-                <TabItem Header="Import">
+                <TabItem Header="Import" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
                         <TextBlock Text="Import operations will be defined in a later review." Classes="muted" />
                     </Border>
                 </TabItem>
-                <TabItem Header="Profiles">
+                <TabItem Header="Profiles" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <Grid RowDefinitions="Auto,*" Margin="0,18,0,0">
                         <StackPanel Spacing="5" Margin="0,0,0,16">
                             <TextBlock Text="Profiles" Classes="section" />
@@ -557,17 +557,17 @@
                         </Grid>
                     </Grid>
                 </TabItem>
-                <TabItem Header="Backups">
+                <TabItem Header="Backups" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
                         <TextBlock Text="Backup management is not available yet." Classes="muted" />
                     </Border>
                 </TabItem>
-                <TabItem Header="Settings">
+                <TabItem Header="Settings" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
                         <TextBlock Text="Application settings will be defined in a later review." Classes="muted" />
                     </Border>
                 </TabItem>
-                <TabItem Header="About">
+                <TabItem Header="About" IsEnabled="{Binding !RestorePreview.IsRestoreActive}">
                     <Border Classes="card" Margin="0,18,0,0" VerticalAlignment="Top">
                         <TextBlock Text="Brave browsers Backup &amp; Restore custom data" FontWeight="SemiBold"
                                    TextWrapping="Wrap" />

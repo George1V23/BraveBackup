@@ -24,6 +24,9 @@ if (!File.Exists(Path.Combine(repo, "AGENTS.md")) ||
 var root = Path.Combine(Path.GetTempPath(), "bravebackup-password-ui-preview-" + Guid.NewGuid().ToString("N"));
 var profileDirectory = Path.Combine(root, "data", "Default");
 Directory.CreateDirectory(profileDirectory); Directory.CreateDirectory(Path.Combine(root, "output"));
+var screenshotDirectory = Environment.GetEnvironmentVariable("BRAVEBACKUP_SMOKE_SCREENSHOTS")
+    ?? Path.Combine(repo, "docs", "screenshots");
+Directory.CreateDirectory(screenshotDirectory);
 var fixtures = Path.Combine(repo, "tests", "Core.Tests", "Fixtures");
 File.Copy(Path.Combine(fixtures, "Bookmarks.sample.json"), Path.Combine(profileDirectory, "Bookmarks"));
 var database = Path.Combine(profileDirectory, "Login Data");
@@ -90,7 +93,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     @"\ASource logins: [0-9]+; credential groups: [0-9]+; CSV rows: [0-9]+; excluded entries: [0-9]+; bytes: [0-9]+\z"),
                     "visible report contains counts only");
                 await Task.Delay(150); outer.Offset = new Vector(0, outer.Extent.Height); await Task.Delay(200);
-                var screenshot = Path.Combine(repo, "docs", "screenshots", "password-csv-section.png");
+                var screenshot = Path.Combine(screenshotDirectory, "password-csv-section.png");
                 using (var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 { bitmap.Render(window); bitmap.Save(screenshot, PngBitmapEncoderOptions.Default); }
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "synthetic source bytes unchanged");
@@ -125,7 +128,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     {
                         using var warningBitmap = new RenderTargetBitmap(new PixelSize((int)dialog.Bounds.Width, (int)dialog.Bounds.Height), new Vector(96, 96));
                         warningBitmap.Render(dialog);
-                        warningBitmap.Save(Path.Combine(repo, "docs", "screenshots", "password-csv-archive-confirmation.png"), PngBitmapEncoderOptions.Default);
+                        warningBitmap.Save(Path.Combine(screenshotDirectory, "password-csv-archive-confirmation.png"), PngBitmapEncoderOptions.Default);
                     }
                     Click(dialog, "Save backup with CSV"); await saveCsvArchive;
                     Check(shell.BackupSucceeded, "real archive CSV approval publishes backup");
@@ -154,7 +157,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 using (var restoreBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 {
                     restoreBitmap.Render(window);
-                    restoreBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase1-preview.png"), PngBitmapEncoderOptions.Default);
+                    restoreBitmap.Save(Path.Combine(screenshotDirectory, "restore-phase1-preview.png"), PngBitmapEncoderOptions.Default);
                 }
                 var planning = restore.Planning;
                 var planningView = window.GetVisualDescendants().OfType<RestorePlanningView>().Single();
@@ -177,7 +180,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 using (var planningBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 {
                     planningBitmap.Render(window);
-                    planningBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-phase2-mapping.png"), PngBitmapEncoderOptions.Default);
+                    planningBitmap.Save(Path.Combine(screenshotDirectory, "restore-phase2-mapping.png"), PngBitmapEncoderOptions.Default);
                 }
                 var safetyView = window.GetVisualDescendants().OfType<RestoreSafetyOptionsView>().Single();
                 Check(safetyView.GetVisualDescendants().OfType<TextBox>().Count(box => box.PasswordChar == '●') == 2,
@@ -190,12 +193,12 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "safety password mismatch is visible");
                 restore.Safety.Confirmation = restore.Safety.Password;
                 await Task.Delay(100);
-                Check(restore.Safety.Validation.Contains("not enabled"), "safety settings do not enable restoration");
+                Check(!restore.ConfirmRestoreCommand.CanExecute(null), "safety settings do not enable restoration");
                 restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(200);
                 using (var safetyBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 {
                     safetyBitmap.Render(window);
-                    safetyBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-safety-settings.png"), PngBitmapEncoderOptions.Default);
+                    safetyBitmap.Save(Path.Combine(screenshotDirectory, "restore-safety-settings.png"), PngBitmapEncoderOptions.Default);
                 }
                 restore.Password = "synthetic-not-retained";
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
@@ -203,6 +206,40 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "leaving Restore clears independent safety secrets");
                 Check(restore.Password.Length == 0 && restore.Installations.Count == 0, "leaving Restore clears password and preview");
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Restore inspection leaves source profile bytes unchanged");
+                // Confirm native bookmarks restoration using real Avalonia controls and a synthetic archive.
+                var bookmarksArchive = Path.Combine(root, "output", "bookmarks.bravebackup");
+                await BraveArchiveBackup.CreateAsync([new(app, [profile])], ["bookmarks"], bookmarksArchive,
+                    null, "balanced", [app.UserDataDirectory], "synthetic", _ => Task.FromResult(false));
+                File.AppendAllText(profile.BookmarksPath, " ");
+                var changedBookmarks = File.ReadAllBytes(profile.BookmarksPath);
+                shell.SelectedTabIndex = ShellViewModel.RestoreTabIndex;
+                restore.SourcePath = bookmarksArchive;
+                await WaitUntil(() => !restore.IsBusy && restore.Installations.Count == 1, "Bookmarks archive inspection");
+                var bookmarks = planning.Groups.Single().Profiles.Single();
+                bookmarks.IsSelected = true;
+                bookmarks.SelectedInstallation = bookmarks.TargetInstallations.Single();
+                bookmarks.SelectedProfile = bookmarks.TargetProfiles.Single();
+                bookmarks.Categories.Single(category => category.Id == "bookmarks").IsSelected = true;
+                await planning.RecheckAsync();
+                restore.Safety.Folder = Path.Combine(root, "output");
+                restore.Safety.Password = "Synthetic-safety-password";
+                restore.Safety.Confirmation = restore.Safety.Password;
+                await Task.Delay(100);
+                Click(window, "Review restore");
+                await WaitUntil(() => restore.Review is not null, "Bookmarks restore review");
+                var reviewed = restore.Review!;
+                Check(changedBookmarks.AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath))
+                    && !File.Exists(reviewed.SafetyPath), "review through Avalonia leaves bookmarks and safety folder untouched");
+                await Task.Delay(100);
+                Click(window, "Confirm restore");
+                await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Confirmed bookmarks restore");
+                Check(restore.RestoreStatus == "Bookmarks restored." && restore.RestoreReport.Contains("Bookmarks — Restored"),
+                    "Restore displays the completed category after confirmation");
+                Check(File.Exists(reviewed.SafetyPath) && File.Exists(reviewed.JournalPath)
+                    && before[profile.BookmarksPath].AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath)),
+                    "Confirm restore saves recovery artifacts and writes the archived bookmarks bytes");
+                foreach (var file in before.Where(file => file.Key != profile.BookmarksPath))
+                    Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Bookmarks restore preserves unrelated profile data");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
@@ -234,6 +271,16 @@ static void Click(Window window, string label)
 {
     var button = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, label));
     typeof(Button).GetMethod("OnClick", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(button, null);
+}
+/// <summary>Waits for an asynchronous desktop operation while allowing Avalonia to process events.</summary>
+static async Task WaitUntil(Func<bool> ready, string operation)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(30);
+    while (!ready())
+    {
+        if (DateTime.UtcNow >= deadline) throw new TimeoutException(operation);
+        await Task.Delay(25);
+    }
 }
 /// <summary>Waits for a real owned dialog with a bounded deadline.</summary>
 static async Task<Window> WaitDialog(IClassicDesktopStyleApplicationLifetime desktop, string title)

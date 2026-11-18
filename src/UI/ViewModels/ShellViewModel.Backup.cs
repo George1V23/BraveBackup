@@ -64,7 +64,7 @@ public partial class ShellViewModel
     [ObservableProperty] private bool _backupSucceeded;
 
     /// <summary>Gets whether profile/navigation controls may change while no backup is running.</summary>
-    public bool IsWorkspaceEnabled => !IsRefreshing && !IsBackupRunning && !PasswordCsvExport.IsBusy && !ExportViewModel.IsBusy;
+    public bool IsWorkspaceEnabled => !RestorePreview.IsRestoreActive && !IsRefreshing && !IsBackupRunning && !PasswordCsvExport.IsBusy && !ExportViewModel.IsBusy;
 
     /// <summary>Gets whether operation feedback is present.</summary>
     public bool HasBackupFeedback => !string.IsNullOrEmpty(BackupMessage);

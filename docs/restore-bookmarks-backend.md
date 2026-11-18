@@ -5,8 +5,8 @@ before reading native bookmark snapshots. The caller supplies the reviewed archi
 and explicit archived-profile-to-destination mappings. The planner checks the digest of
 the opened source before and after reading snapshots, verifies each selected payload
 against its archive descriptor, and requires the transaction to freeze the same source
-bytes. Final confirmation in the app must also bind the reviewed source to its subsequent
-execution. An archive ID alone is insufficient to authenticate a rewritten plain archive.
+bytes. Final confirmation in the app passes the reviewed digest and operation ID.
+An archive ID alone is insufficient to authenticate a rewritten plain archive.
 
 The first supported shape uses the native `Bookmarks` file with version 1 and the
 `bookmark_bar`, `other` and `synced` roots. Chromium uses the historical `synced`
@@ -28,6 +28,6 @@ govern every write.
 Linux integration tests build actual plain and encrypted archives from synthetic bookmark
 data. They verify exact bytes, restoration into an existing or absent file, rollback,
 preservation of Preferences, and rejection of wrong archive IDs, incompatible versions,
-running Brave, Sync metadata and duplicate keys. The feature is an internal backend
-while the approved final confirmation and lifecycle controls remain pending. Native
-Windows support is outside this checkpoint.
+running Brave, Sync metadata and duplicate keys. The Restore tab uses this session for
+[confirmed restores on Linux](restore-bookmarks-execution.md). Native Windows support
+is outside this checkpoint.

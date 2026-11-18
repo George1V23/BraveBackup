@@ -64,7 +64,7 @@ public static class RestoreJournalFormat
     }
     private static InvalidDataException Invalid() => new("Invalid restore journal.");
 }
-/// <summary>Format-independent restore coordinator, not connected to browser writers. Only injected stores perform I/O.</summary>
+/// <summary>Format-independent restore coordinator. Only injected stores perform I/O.</summary>
 public sealed class RestoreTransaction : IDisposable
 {
     private readonly RestoreMutation[] _mutations;
@@ -79,6 +79,9 @@ public sealed class RestoreTransaction : IDisposable
     private bool _disposed;
     public Guid OperationId { get; }
     public RestoreTransactionState State { get; private set; }
+    /// <summary>Indicates whether this transaction successfully published an encrypted safety artifact.</summary>
+    public bool HasPublishedSafety { get; private set; }
+
     public IReadOnlyList<RestoreEntryState> EntryStates => Array.AsReadOnly(_entries);
     public Action<RestoreTransactionProgress>? Progress { get; set; }
 
@@ -135,7 +138,11 @@ public sealed class RestoreTransaction : IDisposable
                 using var plain = RestoreSafetyFormat.Encode(_snapshot, token);
                 _safetyHash = Convert.ToHexStringLower(SHA256.HashData(plain.Bytes.Span));
                 var encrypted = Encrypt(plain.Bytes.Span, token);
-                try { _store.SaveSafety(encrypted); }
+                try
+                {
+                    _store.SaveSafety(encrypted);
+                    HasPublishedSafety = true;
+                }
                 finally { CryptographicOperations.ZeroMemory(encrypted); }
                 var readback = _store.ReadSafety();
                 try
@@ -165,7 +172,10 @@ public sealed class RestoreTransaction : IDisposable
     public void RequestPause() => Interlocked.Exchange(ref _pause, 1);
 
     /// <summary>Applies prepared work or explicitly resumes paused work; all originals are retained across pauses.</summary>
-    public void Run()
+    public void Run() => Run(CancellationToken.None);
+
+    /// <summary>Runs the transaction and treats cancellation as a pause request, including during resume preflight.</summary>
+    public void Run(CancellationToken pauseRequest)
     {
         lock (_execution)
         {
@@ -183,6 +193,7 @@ public sealed class RestoreTransaction : IDisposable
             try
             {
                 if (State == RestoreTransactionState.Paused) Interlocked.Exchange(ref _pause, 0);
+                using var pauseRegistration = pauseRequest.Register(RequestPause);
                 State = RestoreTransactionState.Running; Journal();
                 for (var index = 0; index < _mutations.Length; index++)
                 {

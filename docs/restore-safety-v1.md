@@ -1,14 +1,15 @@
 # Restore safety snapshot and journal v1
 
 This is an application-owned recovery contract, separate from `.bravebackup` versions 1–8.
-It does not change those versions or define a Brave/Chromium format. The phase-3 engine
-is not connected to profile writers or the UI; only synthetic adapters exercise writes.
+It does not change those versions or define a Brave/Chromium format. The
+[Linux Bookmarks workflow](restore-bookmarks-execution.md) now uses this contract.
+The implementation checkpoints below record earlier engine and native adapter testing.
 
 Both artifacts require the existing authenticated BBKENC1 envelope with a nonempty safety
 password supplied independently from the source archive password. No plaintext artifact
 is written by the engine. Each encoded plaintext buffer is owned and cleared after use.
 The storage adapter must privately create, flush, atomically publish and read back each
-artifact; its implementation is part of a later production integration checkpoint.
+artifact. The Linux restore adapter uses a retained recovery directory lease.
 
 ## Snapshot plaintext
 

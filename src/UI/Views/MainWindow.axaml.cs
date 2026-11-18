@@ -34,6 +34,7 @@ public partial class MainWindow : Window
         csv.PickDestination = PickPasswordCsvPathAsync;
         csv.ConfirmPlaintextSave = ConfirmPasswordCsvSaveAsync;
         Opened += OnOpened;
+        Closing += OnClosing;
         Closed += OnClosed;
     }
 
@@ -266,6 +267,12 @@ public partial class MainWindow : Window
     private async void OnOpened(object? sender, EventArgs args)
     {
         if (DataContext is ShellViewModel viewModel) await viewModel.RefreshAsync();
+    }
+
+    /// <summary>Keeps the transaction available while a write is running or the user is deciding how to continue.</summary>
+    private void OnClosing(object? sender, WindowClosingEventArgs args)
+    {
+        if (DataContext is ShellViewModel { RestorePreview.IsRestoreActive: true }) args.Cancel = true;
     }
 
     /// <summary>Releases shell-owned avatars and clears password text when closing.</summary>

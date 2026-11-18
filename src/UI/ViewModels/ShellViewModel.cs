@@ -29,7 +29,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     public const int BackupTabIndex = 0;
     /// <summary>Gets the Restore tab position.</summary>
     public const int RestoreTabIndex = 1;
-    /// <summary>Read-only archive inspection, independent from backup and live profile selections.</summary>
+    /// <summary>Archive inspection and confirmed restoration, independent from backup selections.</summary>
     public RestorePreviewViewModel RestorePreview { get; } = new();
 
     /// <summary>Gets the Export tab position.</summary>
@@ -42,8 +42,12 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     public MainViewModel ExportViewModel { get; }
     /// <summary>Standalone CSV workflow, sharing the profile selected in the existing bookmark export section.</summary>
     public PasswordCsvExportViewModel PasswordCsvExport { get; } = new();
-    public bool CanUseBookmarkExport => !IsRefreshing && !IsBackupRunning && !PasswordCsvExport.IsBusy;
-    public bool CanUsePasswordCsv => !IsRefreshing && !IsBackupRunning && !ExportViewModel.IsBusy;
+
+    public bool CanUseBookmarkExport => !RestorePreview.IsRestoreActive && !IsRefreshing && !IsBackupRunning &&
+                                        !PasswordCsvExport.IsBusy;
+
+    public bool CanUsePasswordCsv =>
+        !RestorePreview.IsRestoreActive && !IsRefreshing && !IsBackupRunning && !ExportViewModel.IsBusy;
 
     /// <summary>Gets or sets the native JSON save-picker callback supplied by the shell view.</summary>
     public Func<Task<IStorageFile?>>? ExportFilePicker { get; set; }
@@ -140,28 +144,24 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Gets why a reliable archive size cannot yet be calculated.</summary>
     public string BackupSizeEstimate => "Unavailable — compressed archive size depends on the captured profile data.";
 
-    /// <summary>Gets actual discovery or export state without copying paths or secrets into the status bar.</summary>
-    public string StatusText => IsBackupRunning
-        ? BackupStage
-        :
-        HasBackupFeedback && !BackupSucceeded
-            ? "Backup needs attention — see the Backup tab."
-            :
-            IsRefreshing
-                ? "Searching for Brave installations…"
-                :
-                !string.IsNullOrEmpty(DiscoveryMessage)
-                    ? DiscoveryMessage
-                    :
-                    SelectedTabIndex == ExportTabIndex && PasswordCsvExport.IsBusy
-                        ? "Exporting password CSV…"
-                        : SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy
-                        ? "Exporting bookmarks…"
-                        :
-                        SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError
-                            ?
-                            "Export needs attention — see the Export tab."
-                            : "Ready";
+    /// <summary>Gets the current operation status without copying paths or secrets into the status bar.</summary>
+    public string StatusText => RestorePreview.IsRestoreActive
+        ? RestorePreview.RestoreStatus
+        : IsBackupRunning
+            ? BackupStage
+            : HasBackupFeedback && !BackupSucceeded
+                ? "Backup needs attention — see the Backup tab."
+                : IsRefreshing
+                    ? "Searching for Brave installations…"
+                    : !string.IsNullOrEmpty(DiscoveryMessage)
+                        ? DiscoveryMessage
+                        : SelectedTabIndex == ExportTabIndex && PasswordCsvExport.IsBusy
+                            ? "Exporting password CSV…"
+                            : SelectedTabIndex == ExportTabIndex && ExportViewModel.IsBusy
+                                ? "Exporting bookmarks…"
+                                : SelectedTabIndex == ExportTabIndex && ExportViewModel.IsStatusError
+                                    ? "Export needs attention — see the Export tab."
+                                    : "Ready";
 
     /// <summary>Gets the active browser version, separate from bulk scope.</summary>
     public string ActiveVersionText => ActiveInstallation?.VersionText ?? "No active Brave installation";
@@ -200,9 +200,13 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     }
     private void NotifyExportAvailability()
     {
+        RestorePreview.SetRestoreAvailability(!IsRefreshing && !IsBackupRunning && !PasswordCsvExport.IsBusy &&
+                                              !ExportViewModel.IsBusy);
         PasswordCsvExport.IsHostAvailable = CanUsePasswordCsv;
-        OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(IsWorkspaceEnabled));
-        OnPropertyChanged(nameof(CanUseBookmarkExport)); OnPropertyChanged(nameof(CanUsePasswordCsv));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsWorkspaceEnabled));
+        OnPropertyChanged(nameof(CanUseBookmarkExport));
+        OnPropertyChanged(nameof(CanUsePasswordCsv));
         NotifyBackupValidation();
     }
 
@@ -234,6 +238,15 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
                 ?.Profiles.Select(profile => profile.ProfileInfo).ToArray() ?? Array.Empty<BraveProfileInfo>());
         ExportViewModel.PropertyChanged += OnExportStateChanged;
         PasswordCsvExport.PropertyChanged += OnPasswordCsvStateChanged;
+        RestorePreview.PropertyChanged += OnRestoreStateChanged;
+    }
+
+    private void OnRestoreStateChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(RestorePreviewViewModel.IsRestoreActive))
+            NotifyExportAvailability();
+        else if (args.PropertyName == nameof(RestorePreviewViewModel.RestoreStatus) && RestorePreview.IsRestoreActive)
+            OnPropertyChanged(nameof(StatusText));
     }
 
     /// <summary>Rescans off the UI thread, preserving matching active, expanded, bulk and profile selections.</summary>
@@ -241,7 +254,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
-        if (_disposed || IsRefreshing || IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
+        if (_disposed || RestorePreview.IsRestoreActive || IsRefreshing || IsBackupRunning ||
+            PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
         IsRefreshing = true;
         DiscoveryMessage = "Searching for Brave installations…";
         try
@@ -325,7 +339,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates an installation and returns from bulk to its individual workspace.</summary>
     public void Activate(InstallationViewModel installation)
     {
-        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || !Installations.Contains(installation)) return;
+        if (RestorePreview.IsRestoreActive || IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy ||
+            !Installations.Contains(installation)) return;
         foreach (var item in Installations) item.IsActive = ReferenceEquals(item, installation);
         var changed = !ReferenceEquals(ActiveInstallation, installation);
         if (changed) FocusedProfile = installation.Profiles.FirstOrDefault();
@@ -338,7 +353,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Activates the double-clicked installation and toggles only its bulk-export checkmark.</summary>
     public void ToggleBulkSelection(InstallationViewModel installation)
     {
-        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
+        if (RestorePreview.IsRestoreActive || IsBackupRunning || PasswordCsvExport.IsBusy ||
+            ExportViewModel.IsBusy) return;
         Activate(installation);
         installation.IsChecked = !installation.IsChecked;
     }
@@ -355,7 +371,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ExportAll()
     {
-        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || !HasBulkSelection) return;
+        if (RestorePreview.IsRestoreActive || IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy ||
+            !HasBulkSelection) return;
         if (ActiveInstallation == null) Activate(Installations.First(item => item.IsChecked));
         IsBulkMode = true;
         SelectedTabIndex = BackupTabIndex;
@@ -366,7 +383,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public void ResetBackupForm()
     {
-        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy) return;
+        if (RestorePreview.IsRestoreActive || IsBackupRunning || PasswordCsvExport.IsBusy ||
+            ExportViewModel.IsBusy) return;
         Options.Reset();
         foreach (var profile in Installations.SelectMany(item => item.Profiles)) profile.IsSelected = false;
     }
@@ -375,7 +393,8 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     public async Task BrowseBackupPathAsync()
     {
-        if (IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy || _pickBackupPath == null) return;
+        if (RestorePreview.IsRestoreActive || IsBackupRunning || PasswordCsvExport.IsBusy || ExportViewModel.IsBusy ||
+            _pickBackupPath == null) return;
         var path = await _pickBackupPath(Options.BackupPath);
         if (!string.IsNullOrWhiteSpace(path)) Options.BackupPath = path;
     }
@@ -397,6 +416,7 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
         ExportViewModel.PropertyChanged -= OnExportStateChanged;
         PasswordCsvExport.PropertyChanged -= OnPasswordCsvStateChanged;
         PasswordCsvExport.Dispose();
+        RestorePreview.PropertyChanged -= OnRestoreStateChanged;
         RestorePreview.Dispose();
         Options.ClearSecrets();
         ExportViewModel.Dispose();
@@ -481,6 +501,12 @@ public partial class ShellViewModel : ViewModelBase, IDisposable
 
     partial void OnSelectedTabIndexChanged(int value)
     {
+        if (RestorePreview.IsRestoreActive)
+        {
+            if (value != RestoreTabIndex) SelectedTabIndex = RestoreTabIndex;
+            return;
+        }
+
         if (value == RestoreTabIndex) _ = RestorePreview.EnterAsync();
         else RestorePreview.Leave();
         OnPropertyChanged(nameof(WorkspaceTitle));

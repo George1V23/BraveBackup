@@ -14,8 +14,8 @@ source or safety settings discards the review.
 
 The backend accepts a reviewed digest and operation ID. It rejects a source with changed
 bytes even if its archive ID still matches. After opening a session, the safety and journal
-paths carry the operation ID shown in the review. The UI checkpoint is read-only. Executing
-the confirmed operation and retaining a paused session for resume or rollback are pending.
+paths carry the operation ID shown in the review. **Confirm restore** starts the
+[Linux Bookmarks restore workflow](restore-bookmarks-execution.md) for the frozen plan.
 
 Tests cover the exact reviewed paths and digest, mismatching safety passwords, write-free
 review, invalidated reviews, and backend rejection of a mismatched digest.

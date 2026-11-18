@@ -44,6 +44,22 @@ public sealed class RestoreTransactionTests : IDisposable
         Assert.Equal(0, _store.Writes); Assert.Equal(RestoreTransactionState.Failed, transaction.State);
     }
     [Fact]
+    public void CancellationDuringResumePreflightKeepsTheTransactionPaused()
+    {
+        using var transaction = Create();
+        transaction.Prepare();
+        transaction.RequestPause();
+        transaction.Run();
+        using var pause = new CancellationTokenSource();
+        _store.OnVerify = pause.Cancel;
+
+        transaction.Run(pause.Token);
+
+        Assert.Equal(RestoreTransactionState.Paused, transaction.State);
+        Assert.Equal(0, _store.Writes);
+        Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
+    }
+    [Fact]
     public void FailedResumeContextStaysPausedAndCannotOverwriteExternalChanges()
     {
         using var transaction = Create(); transaction.Prepare(); transaction.RequestPause(); transaction.Run();
@@ -214,6 +230,7 @@ public sealed class RestoreTransactionTests : IDisposable
         public Dictionary<Guid, string> Paths { get; } = [];
         public string Safety => Path.Combine(Root, "safety.encrypted");
         public string Journal => Path.Combine(Root, "journal.encrypted");
+        public Action? OnVerify;
         public Action? OnJournal; public bool DropWrite; public bool ThrowBeforeWrite;
         public int Writes; public bool Unsafe; public bool ThrowAfterWrite; public bool FailJournal; public string? Corrupt;
         public Store() => Directory.CreateDirectory(Root);
@@ -221,6 +238,7 @@ public sealed class RestoreTransactionTests : IDisposable
         public void VerifyContext(CancellationToken token)
         {
             VerifyRecoveryContext(token);
+            OnVerify?.Invoke();
             if (SourceUnavailable) throw new IOException("Synthetic source unavailable.");
         }
         public void VerifyRecoveryContext(CancellationToken token)

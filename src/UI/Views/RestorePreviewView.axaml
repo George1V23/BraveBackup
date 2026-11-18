@@ -5,6 +5,39 @@
              x:Class="UI.Views.RestorePreviewView" x:DataType="vm:RestorePreviewViewModel">
     <ScrollViewer>
         <StackPanel Spacing="14" Margin="0,18,0,18">
+          <Border Classes="card" IsVisible="{Binding HasRestoreOutcome}">
+              <StackPanel Spacing="10">
+                  <TextBlock Text="{Binding RestoreStatus}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                  <ProgressBar Minimum="0" Maximum="100" Value="{Binding RestoreProgress}"
+                               IsIndeterminate="{Binding !HasProgressTotal}" IsVisible="{Binding IsRestoreActive}" />
+                  <TextBlock Text="{Binding RestoreCounts}" TextWrapping="Wrap"
+                             IsVisible="{Binding RestoreCounts, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  <SelectableTextBlock Text="{Binding RestoreReport}" TextWrapping="Wrap"
+                                       IsVisible="{Binding RestoreReport, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  <SelectableTextBlock Text="{Binding RestoreErrorCode}"
+                                       IsVisible="{Binding RestoreErrorCode, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  <StackPanel IsVisible="{Binding HasPublishedSafety}" Spacing="6">
+                      <TextBlock Text="Encrypted safety backup" />
+                      <SelectableTextBlock Text="{Binding PublishedSafetyPath}" TextWrapping="Wrap" />
+                      <Button Content="Open safety-backup folder" Command="{Binding OpenSafetyFolderCommand}" HorizontalAlignment="Left" />
+                  </StackPanel>
+                  <WrapPanel Orientation="Horizontal">
+                      <Button Content="Cancel restore" Command="{Binding CancelRestoreCommand}"
+                              IsVisible="{Binding ShowCancelRestore}" Margin="0,0,8,0" />
+                      <Button Content="Resume restoration" Command="{Binding ResumeRestoreCommand}"
+                              IsVisible="{Binding IsRestorePaused}" Margin="0,0,8,0" />
+                      <Button Content="Review rollback" Command="{Binding OfferRollbackCommand}" IsVisible="{Binding RecoveryAvailable}" />
+                  </WrapPanel>
+                  <StackPanel IsVisible="{Binding IsRollbackPromptVisible}" Spacing="8">
+                      <TextBlock Text="Roll back changes made by this restore using its original safety backup?" TextWrapping="Wrap" />
+                      <WrapPanel Orientation="Horizontal">
+                          <Button Content="Decline rollback" Command="{Binding DeclineRollbackCommand}" Margin="0,0,8,0" />
+                          <Button Content="Confirm rollback" Command="{Binding ConfirmRollbackCommand}" />
+                      </WrapPanel>
+                  </StackPanel>
+              </StackPanel>
+          </Border>
+          <StackPanel Spacing="14" IsVisible="{Binding CanEditRestore}">
             <Border Classes="card">
                 <StackPanel Spacing="10">
                     <TextBlock Text="Backup file" Classes="section" />
@@ -62,10 +95,14 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="Review restore" Classes="section" />
                     <SelectableTextBlock Text="{Binding ReviewSummary}" TextWrapping="Wrap" />
-                    <TextBlock Text="Restore execution is pending. Reviewing creates no files." TextWrapping="Wrap" Classes="muted" />
-                    <Button Content="Cancel review" Command="{Binding CancelReviewCommand}" HorizontalAlignment="Left" />
+                    <TextBlock Text="Confirm to verify a safety backup and replace the listed Bookmarks files." TextWrapping="Wrap" Classes="muted" />
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Content="Cancel review" Command="{Binding CancelReviewCommand}" Margin="0,0,8,0" />
+                        <Button Content="Confirm restore" Command="{Binding ConfirmRestoreCommand}" Classes="accent" />
+                    </WrapPanel>
                 </StackPanel>
             </Border>
+          </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

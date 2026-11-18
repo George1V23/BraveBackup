@@ -18,7 +18,7 @@ public partial class RestoreSafetyOptionsViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _confirmation = string.Empty;
     public string FullFolder { get { try { return string.IsNullOrWhiteSpace(Folder) ? string.Empty : Path.GetFullPath(Folder); } catch { return Folder; } } }
     public string Validation => ValidationError ??
-        "Safety settings entered. Restore execution and safety-backup creation are not enabled yet.";
+        "Safety settings entered. The encrypted backup is created after you confirm restoration.";
 
     internal string? ValidationError
     {

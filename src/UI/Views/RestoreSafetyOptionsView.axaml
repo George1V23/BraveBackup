@@ -3,7 +3,7 @@
     <Border Classes="card">
         <StackPanel Spacing="10">
             <TextBlock Text="Mandatory encrypted safety backup" Classes="section" />
-            <TextBlock Text="Restoration must save and verify original destination data first. A failed safety backup blocks restoration. These settings do not create files yet." TextWrapping="Wrap" Classes="muted" />
+            <TextBlock Text="Restoration must save and verify original destination data first. A failed safety backup blocks restoration. " TextWrapping="Wrap" Classes="muted" />
             <TextBlock Text="Safety-backup folder" />
             <Grid ColumnDefinitions="*,Auto">
                 <TextBox Text="{Binding Folder}" PlaceholderText="Choose an existing folder outside browser data" />
