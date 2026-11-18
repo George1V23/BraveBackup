@@ -1,8 +1,8 @@
-# Restore: bookmarks only (Phase 4, library level)
+# Restore: bookmarks only (Phase 4)
 
 `BraveBookmarksRestoreSession` restores the **Bookmarks** category of selected archive profiles into
-explicitly mapped destination profiles through the Phase 3 safety engine. No user interface calls it
-from the Restore page on Linux; see [execution controls](restore-execution-controls-draft.md).
+explicitly mapped destination profiles through the Phase 3 safety engine. The Restore page drives it on Linux; see
+[execution controls](restore-execution-controls-draft.md).
 
 ## Research note: what is written
 
