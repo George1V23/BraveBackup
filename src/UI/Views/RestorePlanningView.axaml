@@ -51,6 +51,8 @@
                                                 <TextBlock Text="{Binding CheckResult}" TextWrapping="Wrap" Classes="muted" />
                                                 <SelectableTextBlock Text="{Binding SessionCheckResult}" TextWrapping="Wrap"
                                                                      IsVisible="{Binding SessionCheckResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                <SelectableTextBlock Text="{Binding TabManagerPlusCheckResult}" TextWrapping="Wrap"
+                                                                     IsVisible="{Binding TabManagerPlusCheckResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                                 <SelectableTextBlock Text="{Binding ExtensionCheckResult}" TextWrapping="Wrap"
                                                                      IsVisible="{Binding ExtensionCheckResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                             </StackPanel>

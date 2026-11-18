@@ -83,9 +83,24 @@ internal static class LinuxFlatDirectoryImage
     {
         if (files.Count > MaximumFiles) throw new InvalidDataException("Too many restore directory files.");
         var fileMetadata = LinuxRecoveryMetadata.CreatePrivateFileMetadata(directoryMetadata.Span);
-        var entries = files.OrderBy(file => file.Key, StringComparer.Ordinal).ToArray();
+        return EncodeEntries(files.Select(file => new Entry(file.Key, file.Value, fileMetadata)), directoryMetadata);
+    }
+
+    /// <summary>Adds a private log while retaining all existing file bytes and supported metadata.</summary>
+    internal static RestoreFileImage AddFile(RestoreFileImage original, string name, ReadOnlyMemory<byte> bytes)
+    {
+        var entries = Decode(original);
+        if (entries.Any(entry => entry.Name == name)) throw new InvalidDataException("Restore directory file already exists.");
+        var metadata = LinuxRecoveryMetadata.CreatePrivateFileMetadata(original.Metadata.Bytes.Span);
+        return EncodeEntries(entries.Append(new Entry(name, bytes, metadata)), original.Metadata.Bytes);
+    }
+
+    private static RestoreFileImage EncodeEntries(IEnumerable<Entry> files, ReadOnlyMemory<byte> directoryMetadata)
+    {
+        var entries = files.OrderBy(file => file.Name, StringComparer.Ordinal).ToArray();
+        if (entries.Length > MaximumFiles) throw new InvalidDataException("Too many restore directory files.");
         long length = 12;
-        foreach (var (name, content) in entries)
+        foreach (var (name, content, fileMetadata) in entries)
         {
             var byteCount = Utf8.GetByteCount(name);
             ValidateName(name, byteCount, null);
@@ -99,13 +114,13 @@ internal static class LinuxFlatDirectoryImage
             using var writer = new BinaryWriter(buffer);
             writer.Write(Magic);
             writer.Write(entries.Length);
-            foreach (var (name, content) in entries)
+            foreach (var (name, content, fileMetadata) in entries)
             {
                 var encoded = Utf8.GetBytes(name);
                 writer.Write(encoded.Length);
                 writer.Write(content.Length);
                 writer.Write(encoded);
-                writer.Write(fileMetadata);
+                writer.Write(fileMetadata.Span);
                 writer.Write(content.Span);
             }
             return new RestoreFileImage(true, bytes, directoryMetadata.Span);

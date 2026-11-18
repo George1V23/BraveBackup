@@ -104,6 +104,14 @@ internal static class BraveExtensionRestoreAssessment
         return matches;
     }
 
+    /// <summary>Reads version, path and file fingerprint for a registered internal package.</summary>
+    internal static ExtensionRegistrationCheck ReadRegisteredPackage(string profilePath, string id, string version,
+        CancellationToken token)
+    {
+        var identity = new ArchivedExtension(id, [new(version, string.Empty)], "absent", "absent");
+        return Check(profilePath, [identity], token).Single();
+    }
+
     private static JsonElement Registration(JsonDocument? preferences)
     {
         if (preferences is null || BraveSettingsBackup.Find(preferences.RootElement, "extensions.settings") is not { } record)
@@ -151,7 +159,8 @@ internal static class BraveExtensionRestoreAssessment
             return candidates.Any(package => package.Fingerprint == fingerprint)
                 ? new(extension, ExtensionRegistrationMatch.PackageMatches, registeredVersion)
                     { RegistrationPath = relative, PackageFingerprint = fingerprint }
-                : new(extension, ExtensionRegistrationMatch.PackageDiffers, registeredVersion);
+                : new(extension, ExtensionRegistrationMatch.PackageDiffers, registeredVersion)
+                    { RegistrationPath = relative, PackageFingerprint = fingerprint };
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {

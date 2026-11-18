@@ -105,7 +105,11 @@ public partial class RestorePreviewViewModel
                 opened = BraveProfileRestorePlan.Open(review.ArchivePath, review.ArchiveId, sourcePassword,
                     Path.GetDirectoryName(review.SafetyPath)!, password,
                     review.Targets.Select(mapping => new BraveRestoreMapping(mapping.SourceProfileId,
-                        mapping.Installation, mapping.Profile, mapping.Category) { Extension = mapping.Extension, Session = mapping.Session }).ToArray(),
+                        mapping.Installation, mapping.Profile, mapping.Category) {
+                            Extension = mapping.Extension,
+                            Session = mapping.Session,
+                            TabManagerPlus = mapping.TabManagerPlus
+                        }).ToArray(),
                     roots, review.OperationId, review.SourceSha256, observe, pause.Token);
                 opened.Transaction.Progress = progress.Report;
                 opened.Transaction.Prepare(pause.Token);
@@ -210,10 +214,12 @@ public partial class RestorePreviewViewModel
                 ? "Rollback stopped. Check that Brave is closed and the targets and safety backup are available."
                 : error is BackupOperationException { Code: "restore-extension-registration" }
                     ? "The reviewed extension registration changed. Restore the previous package registration or roll back."
-                    : error is BackupOperationException { Code: "restore-session-target" or "restore-session-missing"
-                        or "restore-session-encrypted" or "restore-session-destination-format" }
-                        ? "The destination Session file is no longer eligible. The restore remains paused and rollback is available."
-                        : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
+                    : error is BackupOperationException { Code: "restore-tabmanagerplus-target" }
+                        ? "The reviewed Tab Manager Plus destination changed. The restore remains paused and rollback is available."
+                        : error is BackupOperationException { Code: "restore-session-target" or "restore-session-missing"
+                            or "restore-session-encrypted" or "restore-session-destination-format" }
+                            ? "The destination Session file is no longer eligible. The restore remains paused and rollback is available."
+                            : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
             RestoreErrorCode = RestoreFailureCode(error);
         }
         finally
@@ -327,6 +333,8 @@ public partial class RestorePreviewViewModel
         BackupOperationException { Code: "restore-session-target" or "restore-session-missing"
             or "restore-session-encrypted" or "restore-session-destination-format" } =>
             "The destination Session file changed or became unsupported. Recheck the profile and review again.",
+        BackupOperationException { Code: "restore-tabmanagerplus-target" } =>
+            "The Tab Manager Plus package or Local store changed. Recheck the profile and review again.",
         System.Security.Cryptography.CryptographicException => "Could not authenticate the source archive or safety backup.",
         _ => "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status."
     };
@@ -341,6 +349,7 @@ public partial class RestorePreviewViewModel
             or "restore-extension-storage" } extension => extension.Code,
         BackupOperationException { Code: "restore-session-source" or "restore-session-target" or "restore-session-missing"
             or "restore-session-encrypted" or "restore-session-destination-format" } session => session.Code,
+        BackupOperationException { Code: "restore-tabmanagerplus-target" } tabManagerPlus => tabManagerPlus.Code,
         InvalidDataException or System.Text.Json.JsonException or ArgumentException or NotSupportedException => "RESTORE_DATA_REJECTED",
         IOException => "RESTORE_CONTEXT_OR_IO_FAILED",
         _ => "RESTORE_OPERATION_FAILED"

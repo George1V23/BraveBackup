@@ -35,15 +35,26 @@ public static class OfflineLevelDb
         new Reader(files, null, cancellationToken).Read();
     }
 
+    /// <summary>Checks whether a validated database can accept another numbered recovery log.</summary>
+    internal static void ValidatePutTarget(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        CancellationToken cancellationToken) => GetPutTarget(files, cancellationToken);
+
+    private static (string Name, ulong Sequence) GetPutTarget(
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files, CancellationToken cancellationToken)
+    {
+        var reader = new Reader(files, null, cancellationToken);
+        reader.Read();
+        var name = reader.GetNewLogName();
+        if (reader.HighestSequence >= MaximumSequence || files.Count >= 4096)
+            throw Invalid();
+        return (name, reader.HighestSequence + 1);
+    }
+
     /// <summary>Builds one recovery log for a validated, closed database snapshot. Performs no I/O.</summary>
     internal static (string FileName, byte[] Bytes) CreatePutLog(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
         ReadOnlySpan<byte> key, ReadOnlySpan<byte> value, CancellationToken cancellationToken)
     {
-        var reader = new Reader(files, null, cancellationToken);
-        reader.Read();
-        var filename = reader.GetNewLogName();
-        if (reader.HighestSequence >= MaximumSequence || files.Count >= 4096)
-            throw Invalid();
+        var (filename, sequence) = GetPutTarget(files, cancellationToken);
 
         Span<byte> lengths = stackalloc byte[10];
         var keyLengthBytes = WriteVarint(lengths, (uint)key.Length);
@@ -53,7 +64,7 @@ public static class OfflineLevelDb
         var batch = new byte[(int)batchLength];
         try
         {
-            BinaryPrimitives.WriteUInt64LittleEndian(batch, reader.HighestSequence + 1);
+            BinaryPrimitives.WriteUInt64LittleEndian(batch, sequence);
             BinaryPrimitives.WriteUInt32LittleEndian(batch.AsSpan(8), 1);
             batch[12] = 1;
             lengths[..keyLengthBytes].CopyTo(batch.AsSpan(13));

@@ -283,7 +283,7 @@ public sealed class BraveTabManagerPlusCapture : IDisposable
                 throw Unsafe();
     }
 
-    private static bool VersionDirectory(string name)
+    internal static bool VersionDirectory(string name)
     {
         if (name == SavedWindows.SupportedVersion) return true;
         var prefix = SavedWindows.SupportedVersion + "_";
@@ -291,7 +291,7 @@ public sealed class BraveTabManagerPlusCapture : IDisposable
                uint.TryParse(name[prefix.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out _);
     }
 
-    private static void ValidateManifest(ReadOnlyMemory<byte> bytes)
+    internal static void ValidateManifest(ReadOnlyMemory<byte> bytes)
     {
         if (bytes.Length > 1024 * 1024) throw Unsupported();
         using var document = JsonDocument.Parse(bytes);

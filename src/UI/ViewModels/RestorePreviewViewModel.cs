@@ -140,6 +140,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
             var scope = sessions.NativeSource is null ? "Portable contents only." : "Verified native SNSS v3 snapshot included.";
             return new("Sessions", $"{sessions.Windows} persisted windows and {sessions.Tabs} tabs. {scope}");
         }
+        if (category.Id == "tabmanagerplus")
+            return new("Tab Manager Plus", "Portable saved windows. Use Recheck after mapping a profile to verify the destination.");
         var representation = category.Id == "passwords" ? category.Files.Any(file => file.Role == "plaintext-password-csv")
             ? "CSV passwords; readable after extraction. Destination compatibility must be verified."
             : category.Files.Any(file => file.Role == "raw-password-index")

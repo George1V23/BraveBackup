@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using BraveBackup.Extensions.TabManagerPlus;
 using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
@@ -10,6 +11,7 @@ internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo In
 {
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
     internal NativeSessionRestoreSelection? Session { get; init; }
+    internal TabManagerPlusRestoreSelection? TabManagerPlus { get; init; }
 }
 
 /// <summary>Builds a Linux restore session from supported categories in a reviewed archive.</summary>
@@ -59,11 +61,15 @@ internal static class BraveProfileRestorePlan
             targets.Select(target => target.Profile.ProfileDirectory).Distinct(StringComparer.Ordinal).Count() != targets.Length ||
             selected.Any(mapping => (mapping.Category == "extensions") != (mapping.Extension is not null) ||
                 (mapping.Category == "sessions") != (mapping.Session is not null) ||
+                (mapping.Category == "tabmanagerplus") != (mapping.TabManagerPlus is not null) ||
                 (mapping.Session is { } session && !BraveSessionBackup.ModernName(session.FileName, sessionOnly: true)) ||
                 (mapping.Extension is { } extension && !BraveExtensionBackup.ValidId(extension.Id))) ||
             selected.Select(mapping => (mapping.SourceProfileId, mapping.Category, mapping.Extension?.Id))
                 .Distinct().Count() != selected.Length)
             throw new InvalidDataException("Each source profile must have one distinct destination and unique targets.");
+        if (profiles.Any(group => group.Any(mapping => mapping.TabManagerPlus is not null) &&
+            group.Any(mapping => mapping.Extension?.Id == BraveTabManagerPlusRestore.ExtensionId)))
+            throw new InvalidDataException("Extensions and Tab Manager Plus cannot both restore the same Local store.");
 
         var path = Path.GetFullPath(archivePath);
         if (!string.Equals(Path.GetExtension(path), ".bravebackup", StringComparison.OrdinalIgnoreCase))
@@ -128,6 +134,23 @@ internal static class BraveProfileRestorePlan
 
                     var categoryData = archived.profile.Categories.SingleOrDefault(category => category.Id == mapping.Category)
                         ?? throw new InvalidDataException("The selected archive profile lacks the requested category.");
+                    if (mapping.TabManagerPlus is not null)
+                    {
+                        var portable = categoryData.Files.Single(file => file.Role == "portable-extension-windows");
+                        if (portable.Length > RestoreSafetyFormat.MaximumBytes - retained)
+                            throw new InvalidDataException("Selected snapshots exceed the restore retention limit.");
+                        var payload = ReadSnapshot(zip, portable, SavedWindowPayload.MaximumBytes, token);
+                        try
+                        {
+                            var target = BraveTabManagerPlusRestore.Build(mapping, archived.installation.Id, payload, token);
+                            destinations.Add(target);
+                            retained += target.Mutation.Replacement.Content.Bytes.Length + target.Mutation.Replacement.Metadata.Bytes.Length;
+                            if (retained > RestoreSafetyFormat.MaximumBytes)
+                                throw new InvalidDataException("Replacements exceed the restore retention limit.");
+                        }
+                        finally { CryptographicOperations.ZeroMemory(payload); }
+                        continue;
+                    }
                     var bookmarks = mapping.Category == "bookmarks";
                     var native = mapping.Session;
                     var fileName = native?.FileName ?? TargetFileName(mapping.Category);

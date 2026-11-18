@@ -13,10 +13,10 @@ supports existing Local stores for matching registered packages through
 [whole-directory exchange and rollback](restore-directory-exchange.md). Extension
 installation and Sync storage restoration are pending. [Sessions restore on Linux](restore-sessions.md)
 supports the verified native plaintext snapshot on compatible destinations. Portable
-reconstruction and encrypted native restore remain pending. The
-[Tab Manager Plus backend](tabmanagerplus-restore.md) prepares and verifies a
-saved-window-only update. Archive-to-profile integration and final review for that
-category are pending.
+reconstruction and encrypted native restore remain pending.
+[Tab Manager Plus restore on Linux](tabmanagerplus-restore.md) supports explicit
+saved-window replacement in an eligible registered 7.0.0 destination store, with
+final review and encrypted rollback.
 Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
@@ -31,7 +31,9 @@ starting the next phase. Existing backup/export functionality must remain operat
 - Platform code supplies process observation, private-file creation and folder opening.
   Discovery supplies existing destination installation/profile metadata.
 - The Restore tab supports inspection, source/target planning and confirmed Linux
-  Bookmarks and Settings restoration using a verified encrypted safety snapshot and journal.
+  restoration for Bookmarks, Settings, eligible Extensions Local stores, persisted
+  native Sessions and Tab Manager Plus. Writes require a verified encrypted safety
+  snapshot and journal.
   A retained session supports pause, resume and rollback within the app.
 - Backup support does not establish restore compatibility. Portable password payloads,
   raw password files and CSV are different representations; extension/session captures

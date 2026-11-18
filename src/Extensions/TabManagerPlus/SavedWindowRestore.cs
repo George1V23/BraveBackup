@@ -36,18 +36,10 @@ public static class SavedWindowRestore
     {
         ArgumentNullException.ThrowIfNull(files);
         var archived = SavedWindowPayload.Parse(archivedPayload, cancellationToken);
-        var version = OfflineLevelDb.ReadValue(files, "version", cancellationToken);
-        byte[]? prior = null;
+        ValidateStoredMap(files, cancellationToken);
         byte[]? replacement = null;
         try
         {
-            if (version is null || !IsSupportedVersion(version))
-                throw new InvalidDataException("The destination is missing the supported Tab Manager Plus storage version.");
-            prior = OfflineLevelDb.ReadValue(files, "sessions", cancellationToken);
-            if (prior is null)
-                throw new InvalidDataException("The destination has no initialized Tab Manager Plus saved-window map.");
-            SavedWindows.Parse(prior, SavedWindows.SupportedVersion, cancellationToken);
-
             replacement = SavedWindowPayload.SerializeStoredMap(archived.Data, cancellationToken);
             var (name, bytes) = OfflineLevelDb.CreatePutLog(files, "sessions"u8, replacement, cancellationToken);
             try
@@ -68,9 +60,36 @@ public static class SavedWindowRestore
         }
         finally
         {
+            Clear(replacement);
+        }
+    }
+
+    /// <summary>Checks the stored version, initialized map and ability to append a recovery log without writing.</summary>
+    public static void ValidateDestination(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateStoredMap(files, cancellationToken);
+        OfflineLevelDb.ValidatePutTarget(files, cancellationToken);
+    }
+
+    private static void ValidateStoredMap(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        CancellationToken cancellationToken)
+    {
+        var version = OfflineLevelDb.ReadValue(files, "version", cancellationToken);
+        byte[]? prior = null;
+        try
+        {
+            if (version is null || !IsSupportedVersion(version))
+                throw new InvalidDataException("The destination is missing the supported Tab Manager Plus storage version.");
+            prior = OfflineLevelDb.ReadValue(files, "sessions", cancellationToken);
+            if (prior is null)
+                throw new InvalidDataException("The destination has no initialized Tab Manager Plus saved-window map.");
+            SavedWindows.Parse(prior, SavedWindows.SupportedVersion, cancellationToken);
+        }
+        finally
+        {
             Clear(version);
             Clear(prior);
-            Clear(replacement);
         }
     }
 

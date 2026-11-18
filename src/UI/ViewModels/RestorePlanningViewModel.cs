@@ -55,12 +55,15 @@ public partial class RestoreCategoryChoice : ViewModelBase
             "settings" => "Settings",
             "extensions" => "Extensions",
             "sessions" => "Sessions",
+            "tabmanagerplus" => "Tab Manager Plus",
             _ => category.Id + " (v" + category.Version + ")"
         };
         if (Id == "extensions")
             SupportReason = "Use Recheck to find existing Local stores for matching registered extensions.";
         if (Id == "sessions")
             SupportReason = "Use Recheck to look for an existing supported native Session file.";
+        if (Id == "tabmanagerplus")
+            SupportReason = "Use Recheck to verify an existing Tab Manager Plus 7.0.0 Local store.";
         _changed = changed;
     }
 
@@ -96,9 +99,11 @@ public partial class RestoreProfileChoice : ViewModelBase
     [ObservableProperty] private string _checkResult = "Not checked. Choose a destination and use Recheck.";
     [ObservableProperty] private string _extensionCheckResult = string.Empty;
     [ObservableProperty] private string _sessionCheckResult = string.Empty;
+    [ObservableProperty] private string _tabManagerPlusCheckResult = string.Empty;
 
     internal IReadOnlyList<ExtensionLocalRestoreSelection> ExtensionTargets { get; private set; } = [];
     internal NativeSessionRestoreSelection? SessionTarget { get; private set; }
+    internal TabManagerPlusRestoreSelection? TabManagerPlusTarget { get; private set; }
 
     public RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets, Action changed)
         : this(source, targets, changed, changed) { }
@@ -150,6 +155,17 @@ public partial class RestoreProfileChoice : ViewModelBase
         Categories.SingleOrDefault(choice => choice.Id == "sessions")?.SetCompatibility(target is not null, target is not null
             ? "Replaces the newest supported persisted native Session file."
             : "Use Recheck to look for an existing supported native Session file.");
+        OnPropertyChanged(nameof(HasSupportedCategories));
+    }
+
+    /// <summary>Applies the current profile's saved-window destination evidence.</summary>
+    internal void ApplyTabManagerPlusCheck(string description, TabManagerPlusRestoreSelection? target)
+    {
+        TabManagerPlusCheckResult = description;
+        TabManagerPlusTarget = target;
+        Categories.SingleOrDefault(choice => choice.Id == "tabmanagerplus")?.SetCompatibility(target is not null, target is not null
+            ? "Replaces the saved-window collection in the existing Tab Manager Plus Local store."
+            : "Use Recheck to verify an existing Tab Manager Plus 7.0.0 Local store.");
         OnPropertyChanged(nameof(HasSupportedCategories));
     }
 
@@ -227,6 +243,11 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
                     return "Two source profiles cannot use the same destination. Choose different profiles.";
             }
             catch { return "A destination path is invalid."; }
+            if (selected.Any(profile =>
+                profile.Categories.Any(category => category.Id == "tabmanagerplus" && category.IsSelected) &&
+                profile.Categories.Any(category => category.Id == "extensions" && category.IsSelected) &&
+                profile.ExtensionTargets.Any(extension => extension.Id == BraveTabManagerPlusRestore.ExtensionId)))
+                return "Extensions and Tab Manager Plus target the same Local store. Clear one of these categories for that profile.";
             return null;
         }
     }
@@ -278,6 +299,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             profile.CheckResult = "Not checked. Use Recheck after changing the plan.";
             profile.ApplyExtensionCheck(string.Empty, []);
             profile.ApplySessionCheck(string.Empty, null);
+            profile.ApplyTabManagerPlusCheck(string.Empty, null);
         }
         Notify();
     }
@@ -305,12 +327,14 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         var requests = Profiles.Where(profile => profile.IsSelected).Select(profile =>
             (Row: profile, App: profile.SelectedInstallation, Profile: profile.SelectedProfile,
                 Extensions: _extensions.GetValueOrDefault(profile.SourceId), Sessions: _sessions.GetValueOrDefault(profile.SourceId),
+                HasTabManagerPlus: profile.Categories.Any(category => category.Id == "tabmanagerplus"),
                 Compatible: profile.IsCompatibleDestination)).ToArray();
         IsChecking = true;
         foreach (var request in requests)
         {
             request.Row.ApplyExtensionCheck(string.Empty, []);
             request.Row.ApplySessionCheck(string.Empty, null);
+            request.Row.ApplyTabManagerPlusCheck(string.Empty, null);
         }
         try
         {
@@ -318,38 +342,40 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             {
                 var token = cancellation.Token;
                 token.ThrowIfCancellationRequested();
-                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty, SessionCheck.Empty);
+                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
                 if (!targets.Any(target => ReferenceEquals(target, request.App)) ||
                     !request.App.Profiles.Any(profile => ReferenceEquals(profile, request.Profile)))
-                    return ("Invalid destination mapping.", ExtensionCheck.Empty, SessionCheck.Empty);
+                    return ("Invalid destination mapping.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
                 try
                 {
                     var path = BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, token);
                     ProcessPresence Observe() => observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], token);
                     var presence = Observe();
                     if (presence == ProcessPresence.Running)
-                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty, SessionCheck.Empty);
+                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
                     if (presence != ProcessPresence.Stopped)
-                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty);
+                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
 
                     var extensionResult = CompareExtensions(path, request.Extensions, request.Compatible, token);
                     var sessionResult = CheckSessions(path, request.Sessions, request.Compatible, token);
-                    if ((request.Extensions is not null || sessionResult.Target is not null) &&
+                    var tabManagerPlus = CheckTabManagerPlus(path, request.HasTabManagerPlus, request.Compatible, token);
+                    if ((request.Extensions is not null || sessionResult.Target is not null || tabManagerPlus.Target is not null) &&
                         request.Compatible && Observe() != ProcessPresence.Stopped)
-                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty, SessionCheck.Empty);
+                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
                     return ("Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
-                        extensionResult, sessionResult);
+                        extensionResult, sessionResult, tabManagerPlus);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty); }
+                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty); }
             }).ToArray(), cancellation.Token);
             if (_disposed || revision != _revision) return;
             for (var index = 0; index < requests.Length; index++)
             {
-                var (result, extensions, sessions) = results[index];
+                var (result, extensions, sessions, tabManagerPlus) = results[index];
                 requests[index].Row.CheckResult = result;
                 requests[index].Row.ApplyExtensionCheck(extensions.Description, extensions.Targets);
                 requests[index].Row.ApplySessionCheck(sessions.Description, sessions.Target);
+                requests[index].Row.ApplyTabManagerPlusCheck(tabManagerPlus.Description, tabManagerPlus.Target);
             }
             Notify();
         }
@@ -360,6 +386,29 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             if (!_disposed && revision == _revision) IsChecking = false;
         }
     }
+    private sealed record TabManagerPlusCheck(string Description, TabManagerPlusRestoreSelection? Target)
+    {
+        internal static TabManagerPlusCheck Empty { get; } = new(string.Empty, null);
+    }
+
+    private static TabManagerPlusCheck CheckTabManagerPlus(string profilePath, bool included, bool compatible,
+        CancellationToken token)
+    {
+        if (!included) return TabManagerPlusCheck.Empty;
+        if (!compatible)
+            return new("Tab Manager Plus restore requires a Linux destination with the same recorded Brave product and version.", null);
+        try
+        {
+            var selection = BraveTabManagerPlusRestore.Review(profilePath, token);
+            return new("Tab Manager Plus saved-window restore is available for this destination.", selection);
+        }
+        catch (Exception error) when (error is BackupOperationException or IOException or UnauthorizedAccessException
+            or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return new("Unable to verify a registered Tab Manager Plus 7.0.0 package and supported Local store.", null);
+        }
+    }
+
     private sealed record SessionCheck(string Description, NativeSessionRestoreSelection? Target)
     {
         internal static SessionCheck Empty { get; } = new(string.Empty, null);

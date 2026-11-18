@@ -1,46 +1,60 @@
-# Tab Manager Plus saved-window restore backend
+# Restore Tab Manager Plus saved windows on Linux
 
-`SavedWindowRestore.Prepare` in the dedicated TabManagerPlus project prepares a
-single LevelDB recovery log for an existing 7.0.0 store. It takes a stable in-memory
-snapshot of the closed destination database and the validated portable saved-window
-payload. Restore review and profile publication are pending. The backend performs
-no filesystem I/O or browser operations.
+Choose a validated backup containing Tab Manager Plus, map the source profile to
+an existing destination, close all Brave processes and select **Recheck**. The
+destination must use the same recorded Brave product and browser version. Recheck
+looks for the internal registration under the Tab Manager Plus extension ID, the
+7.0.0 Manifest V3 package and its existing Local database. The database must
+contain version 7.0.0 and a valid initialized saved-window map. This check uses
+the registration, manifest and package file fingerprints on disk. It does not
+verify a store signature.
 
-The backend checks the destination's stored `version` and requires an initialized,
-valid `sessions` map. It converts the archived collection to the extension's
-ID-keyed map using the approved portable fields. An explicitly empty collection
-clears the map. The result replaces the saved windows as one value and preserves
-unrelated keys. Extension settings and other data are outside that replacement.
-The portable payload's scope determines which fields are restored.
+Select **Tab Manager Plus** and review the full path under the profile's
+`Local Extension Settings` directory. Restore replaces the entire saved-window
+collection, including clearing it when the archived collection is empty. Other
+Local keys are preserved. If the raw **Extensions** selection also targets this
+store, clear one of the two categories before reviewing. Other eligible categories can use the same transaction.
 
-The update uses one Put in a new numbered LevelDB log. It keeps every existing
-input file byte for byte. The log number follows the manifest and all existing
-numbered files. The sequence follows the highest validated manifest, live table or
-replayed WAL sequence. Small updates use one FULL record. Large updates use
+Confirming rechecks the package and the destination database captured by Recheck.
+The transaction verifies the encrypted safety backup before atomically publishing
+the updated directory. Pause leaves completed profiles visible in Restore. Resume
+rechecks the reviewed package registrations and verifies remaining targets before writing. Rollback uses the encrypted
+original directory images, allowing recovery within the retained Restore session
+even if the source archive or package is gone. Brave must be closed for writes
+and rollback. Windows and restart recovery are pending.
+
+## Storage update
+
+`SavedWindowRestore.ValidateDestination` checks the destination's layout and
+whether its numbering and sequence space can accept another log.
+`SavedWindowRestore.Prepare` converts the validated portable payload to the
+approved ID-keyed map and writes a single `sessions` Put into a new numbered
+LevelDB recovery log in memory. The log number follows the manifest and existing
+numbered files. The sequence follows the highest validated manifest, live table
+or replayed WAL sequence. Small updates use one FULL record. Large updates use
 CRC32C-checked FIRST/MIDDLE/LAST records across 32 KiB log blocks. The backend
-replays the combined image and requires the resulting `sessions` bytes to match
-the serialized collection before returning the proposed log. Disposal clears the
-owned output buffer.
+replays the combined image and requires the new value to match the serialized
+map before returning the log. The verified directory image preserves the existing
+file bytes and their supported Linux recovery metadata. The new log has private
+file permissions.
 [LevelDB WriteBatch format](https://github.com/google/leveldb/blob/main/db/write_batch.cc),
 [LevelDB log format](https://github.com/google/leveldb/blob/main/doc/log_format.md),
 [LevelDB recovery ordering](https://github.com/google/leveldb/blob/main/db/db_impl.cc).
 
 The writer accepts the bounded layouts supported by the [offline reader](tabmanagerplus-storage-reader.md).
-It rejects malformed, missing, unsupported and over-limit data, unknown filenames,
-nonempty lock files, and snapshots containing LevelDB temporary files. It does not
-repair a destination or initialize a missing saved-window map. The app must still
-verify the official registered package and stable destination state before using
-the log. It must also resolve any overlap with a raw Extensions restore targeting
-the same Local store and verify encrypted safety data before publication.
+It rejects malformed and over-limit data, unknown filenames, nonempty lock
+files, and LevelDB temporary files. A missing or unsupported database requires
+a different destination. The portable payload's existing field scope determines
+which window and tab details are restored. The backup format is unchanged.
 
-Tests combine the independently generated LevelDB fixtures under
-`tests/Core.Tests/Fixtures/TabManagerPlus/storage` with synthetic portable payloads.
-They cover replacement, explicit empty state, fragmented log records, consecutive
-updates, ordering after a newer write to a different key, corrupt inputs, and
-preservation of unrelated settings. In a separate Linux probe, Brave 1.96.61
-generated a Local store for a disposable synthetic extension. After the browser
-closed, the probe safely added the new log. When reopened, Brave read the new
-saved-window map and preserved the extension's unrelated setting. The probe used a
-synthetic extension with the same storage shape as Tab Manager Plus. Verification
-of the installed official package and the application's Restore workflow remains
-a separate checkpoint.
+## Verification
+
+Storage tests use independent LevelDB fixtures to check replacement, empty
+collections, fragmented and consecutive writes, sequence ordering, corrupt
+inputs and preservation of unrelated settings. Linux Restore view-model tests
+create encrypted archives from those fixtures, then exercise Recheck, review,
+confirmation, blocked mappings, pause, resume and rollback on disposable
+profiles. A separate Linux probe reopened a Brave 1.96.61 database after adding
+the log and confirmed preservation of an unrelated setting. That probe used a
+synthetic extension with the same storage shape. A live run with the official
+extension remains unverified.

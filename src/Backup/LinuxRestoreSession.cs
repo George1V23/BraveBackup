@@ -71,8 +71,12 @@ internal sealed class LinuxRestoreSession : IDisposable
             var name = target.FileName;
             if (string.IsNullOrEmpty(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0']) >= 0)
                 throw new ArgumentException("A single restore target name is required.");
-            if (target.IsLocalExtensionDirectory && (target.Mutation.Category != "extensions" || !BraveExtensionBackup.ValidId(name)))
+            if (target.IsLocalExtensionDirectory &&
+                (target.Mutation.Category is not ("extensions" or "tabmanagerplus") || !BraveExtensionBackup.ValidId(name)))
                 throw new InvalidDataException("An extension directory restore requires the mapped extension identity.");
+            if (target.Mutation.Category == "tabmanagerplus" &&
+                (!target.IsLocalExtensionDirectory || name != BraveTabManagerPlusRestore.ExtensionId))
+                throw new InvalidDataException("Tab Manager Plus restore requires its registered Local store.");
             if (target.Mutation.Category == "sessions" && !BraveSessionBackup.ModernName(name, sessionOnly: true))
                 throw new InvalidDataException("A native Session restore requires a modern Session filename.");
             if (!paths.Add(Path.Combine(TargetParent(target), name)) || !ids.Add(target.Mutation.Id))
@@ -116,7 +120,7 @@ internal sealed class LinuxRestoreSession : IDisposable
 
     private static string TargetParent(LinuxRestoreDestination target) => target.Mutation.Category switch
     {
-        "extensions" when target.IsLocalExtensionDirectory =>
+        "extensions" or "tabmanagerplus" when target.IsLocalExtensionDirectory =>
             Path.Combine(target.Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName),
         "sessions" => Path.Combine(target.Profile.ProfileDirectory, BraveNativeSessionRestore.ParentName),
         _ => target.Profile.ProfileDirectory

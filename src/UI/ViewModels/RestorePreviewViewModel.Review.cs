@@ -18,18 +18,25 @@ public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo In
         "bookmarks" => "Bookmarks",
         "settings" => "Settings",
         "sessions" => "Persisted Sessions",
+        "tabmanagerplus" => "Tab Manager Plus saved windows",
         _ => "Extension local storage"
     };
 
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
     internal NativeSessionRestoreSelection? Session { get; init; }
+    internal TabManagerPlusRestoreSelection? TabManagerPlus { get; init; }
 
     /// <summary>Gets the exact file or directory that the confirmed restore can replace.</summary>
-    public string DestinationPath => Extension is { } extension
-        ? Path.Combine(Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName, extension.Id)
-        : Session is { } session
-            ? Path.Combine(Profile.ProfileDirectory, BraveNativeSessionRestore.ParentName, session.FileName)
-            : Path.Combine(Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(Category));
+    public string DestinationPath => Category switch
+    {
+        "extensions" when Extension is { } extension =>
+            Path.Combine(Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName, extension.Id),
+        "tabmanagerplus" when TabManagerPlus is not null =>
+            Path.Combine(Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName, BraveTabManagerPlusRestore.ExtensionId),
+        "sessions" when Session is { } session =>
+            Path.Combine(Profile.ProfileDirectory, BraveNativeSessionRestore.ParentName, session.FileName),
+        _ => Path.Combine(Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(Category))
+    };
 }
 
 /// <summary>A write-free review of the exact archive, destinations and encrypted artifact paths.</summary>
@@ -92,7 +99,10 @@ public partial class RestorePreviewViewModel
                             new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
                                 { Extension = extension })
                         : [new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
-                            { Session = category.Id == "sessions" ? row.Profile.SessionTarget : null }]);
+                            {
+                                Session = category.Id == "sessions" ? row.Profile.SessionTarget : null,
+                                TabManagerPlus = category.Id == "tabmanagerplus" ? row.Profile.TabManagerPlusTarget : null
+                            }]);
             }).ToArray();
 
             var targetsBySource = targets.ToLookup(target => target.SourceProfileId);
@@ -105,6 +115,7 @@ public partial class RestorePreviewViewModel
                         "bookmarks" => $"Replace Bookmarks at {target.DestinationPath}",
                         "settings" => $"Apply stored Settings to {target.DestinationPath}",
                         "sessions" => $"Replace the persisted Session file at {target.DestinationPath}",
+                        "tabmanagerplus" => $"Replace Tab Manager Plus saved windows in {target.DestinationPath}",
                         _ => $"Replace Local store for extension {target.Extension!.Id} (version {target.Extension.Version}) at {target.DestinationPath}"
                     };
                 });
@@ -118,6 +129,8 @@ public partial class RestorePreviewViewModel
                 description += "\n\nExtension selection replaces only the listed existing Local stores with the archived snapshots.";
             if (targets.Any(target => target.Session is not null))
                 description += "\n\nSessions replaces the listed last-persisted window and tab snapshot. Brave's startup settings control whether those windows reopen.";
+            if (targets.Any(target => target.TabManagerPlus is not null))
+                description += "\n\nTab Manager Plus replaces the entire saved-window collection and keeps other Local settings. An empty backup collection clears the saved windows.";
             Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath,
                 Array.AsReadOnly(targets), description);
         }
