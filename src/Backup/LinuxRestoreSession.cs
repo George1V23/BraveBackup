@@ -2,14 +2,27 @@ using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
 
-/// <summary>One explicitly mapped file mutation and its destination profile.</summary>
+/// <summary>One explicitly mapped restore target in an existing profile.</summary>
 internal sealed record LinuxRestoreDestination(
-    RestoreMutation Mutation, BraveAppInfo Installation, BraveProfileInfo Profile, string FileName);
+    RestoreMutation Mutation, BraveAppInfo Installation, BraveProfileInfo Profile, string FileName)
+{
+    /// <summary>Resolves the supplied extension ID under the profile's existing Local Extension Settings directory.</summary>
+    internal bool IsLocalExtensionDirectory { get; init; }
+}
+
+/// <summary>Bound target adapter for an atomic file or whole-directory mutation.</summary>
+internal interface ILinuxRestoreTarget : IDisposable
+{
+    long ImageBytes { get; }
+    RestoreFileImage ReadCurrent(CancellationToken token);
+    void Publish(RestoreFileImage image, Action verifyContext);
+}
 
 /// <summary>Owns the coordinator, frozen target checkpoints and encrypted artifacts for a Linux restore.</summary>
 /// <remarks>Internal integration only. The caller must validate the source archive and authorize the frozen plan.</remarks>
 internal sealed class LinuxRestoreSession : IDisposable
 {
+    private const string LocalExtensionSettings = "Local Extension Settings";
     private readonly Store _store;
     internal RestoreTransaction Transaction { get; }
     internal RestoreArtifactScope Artifacts { get; }
@@ -56,9 +69,11 @@ internal sealed class LinuxRestoreSession : IDisposable
         {
             var name = target.FileName;
             if (string.IsNullOrEmpty(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0']) >= 0)
-                throw new ArgumentException("A single restore target filename is required.");
-            if (!paths.Add(Path.Combine(target.Profile.ProfileDirectory, name)) || !ids.Add(target.Mutation.Id))
-                throw new InvalidDataException("Restore file mappings must be unique.");
+                throw new ArgumentException("A single restore target name is required.");
+            if (target.IsLocalExtensionDirectory && (target.Mutation.Category != "extensions" || !BraveExtensionBackup.ValidId(name)))
+                throw new InvalidDataException("An extension directory restore requires the mapped extension identity.");
+            if (!paths.Add(Path.Combine(TargetParent(target), name)) || !ids.Add(target.Mutation.Id))
+                throw new InvalidDataException("Restore target mappings must be unique.");
         }
 
         var source = Path.GetFullPath(sourceArchive);
@@ -75,10 +90,11 @@ internal sealed class LinuxRestoreSession : IDisposable
             foreach (var target in frozen)
             {
                 token.ThrowIfCancellationRequested();
-                var checkpoint = new LinuxRestoreExpectedState(target.Profile.ProfileDirectory, target.FileName, token);
+                ILinuxRestoreTarget checkpoint = target.IsLocalExtensionDirectory
+                    ? new LinuxRestoreDirectoryCheckpoint(TargetParent(target), target.FileName, target.Mutation.Replacement, token)
+                    : new LinuxRestoreExpectedState(TargetParent(target), target.FileName, token);
                 store.Targets.Add(target.Mutation.Id, checkpoint);
-                using var original = checkpoint.CopyOriginal();
-                retained += original.Content.Bytes.Length + original.Metadata.Bytes.Length;
+                retained += checkpoint.ImageBytes;
                 if (retained > RestoreSafetyFormat.MaximumBytes)
                     throw new InvalidDataException("Restore originals exceed the supported retention limit.");
             }
@@ -93,6 +109,10 @@ internal sealed class LinuxRestoreSession : IDisposable
         }
     }
 
+    private static string TargetParent(LinuxRestoreDestination target) => target.IsLocalExtensionDirectory
+        ? Path.Combine(target.Profile.ProfileDirectory, LocalExtensionSettings)
+        : target.Profile.ProfileDirectory;
+
     /// <summary>Requires the transaction to use the same source bytes as its category planner.</summary>
     internal void VerifySource(BraveRestoreContext expected) => _store.VerifySource(expected);
 
@@ -105,7 +125,7 @@ internal sealed class LinuxRestoreSession : IDisposable
 
     private sealed class Store(BraveRestoreContext context, RestoreArtifactLease artifacts) : IRestoreTransactionStore, IDisposable
     {
-        public Dictionary<Guid, LinuxRestoreExpectedState> Targets { get; } = [];
+        public Dictionary<Guid, ILinuxRestoreTarget> Targets { get; } = [];
 
         internal void VerifySource(BraveRestoreContext expected) => context.VerifySameSource(expected);
 

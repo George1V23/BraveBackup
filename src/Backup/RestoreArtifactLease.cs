@@ -23,7 +23,15 @@ public sealed class RestoreArtifactLease : IDisposable
     }
     /// <summary>Publishes original safety state once while retaining ownership across subsequent pauses.</summary>
     public void SaveSafety(ReadOnlyMemory<byte> encrypted)
-    { lock (_gate) { Verify(); CheckFraming(encrypted); _directory.PublishChild(Path.GetFileName(_scope.SafetyPath), encrypted, false); } }
+    {
+        lock (_gate)
+        {
+            Verify();
+            CheckFraming(encrypted);
+            _directory.PublishChild(Path.GetFileName(_scope.SafetyPath), encrypted, false);
+            _directory.Flush();
+        }
+    }
     /// <summary>Publishes a journal revision under the same operation-lifetime lock.</summary>
     public void SaveJournal(ReadOnlyMemory<byte> encrypted)
     {
@@ -42,6 +50,7 @@ public sealed class RestoreArtifactLease : IDisposable
             }
             _directory.PublishChild(Path.GetFileName(_scope.JournalPath), encrypted, _journalHash is not null);
             _journalHash = Convert.ToHexStringLower(SHA256.HashData(encrypted.Span));
+            _directory.Flush();
         }
     }
     /// <summary>Reads the owned safety artifact for coordinator authentication.</summary>

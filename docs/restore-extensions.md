@@ -62,8 +62,8 @@ proof that an extension can use it.
   app's read-only comparison. It covers one extension, one local database, and one
   Brave build.
 
-An automatic storage restore needs a guarded whole-directory replacement and
-rollback from the verified encrypted safety snapshot. Publishing database files one
-at a time through the file restore engine could leave a partial store at a pause or
-failure boundary. Storage replacement, Sync handling, and extension installation
-remain pending.
+The internal Linux session now supports [atomic exchange and encrypted rollback of an existing Local store](restore-directory-exchange.md).
+The next checkpoint is binding a verified archive's Local store and the matching
+registered extension to the exact directory in final review. The Extensions
+selection remains read-only until that integration is complete. Sync handling
+and extension installation are pending.

@@ -216,6 +216,107 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
             first.Inode == second.Inode && first.DeviceMajor == second.DeviceMajor && first.DeviceMinor == second.DeviceMinor;
     }
 
+    /// <summary>Enumerates names beneath the retained directory. Callers must recheck identity and changes after reading.</summary>
+    internal IEnumerable<string> EnumerateChildNames()
+    {
+        Verify();
+        return Directory.EnumerateFileSystemEntries(_path).Select(path => Path.GetFileName(path)!);
+    }
+
+    /// <summary>Opens a single directory child without following a link.</summary>
+    internal RecoveryDirectoryIdentity OpenDirectoryChild(string name)
+    {
+        Verify();
+        CheckName(name);
+        var descriptor = OpenAt(_handle, name, 0x10000 | 0x20000 | 0x80000, 0);
+        if (descriptor < 0) throw new IOException("Cannot open recovery directory child.");
+        var handle = new SafeFileHandle((IntPtr)descriptor, true);
+        try
+        {
+            var child = new RecoveryDirectoryIdentity(Path.Combine(_path, name), handle);
+            VerifyDirectoryChild(name, child);
+            return child;
+        }
+        catch { handle.Dispose(); throw; }
+    }
+
+    /// <summary>Creates a new mode-0700 child relative to this retained directory.</summary>
+    internal RecoveryDirectoryIdentity CreatePrivateDirectory(string name)
+    {
+        Verify();
+        CheckName(name);
+        if (MkdirAt(_handle, name, 0x1c0) != 0)
+            throw new IOException("Cannot create private recovery staging directory.");
+        return OpenDirectoryChild(name);
+    }
+
+    /// <summary>Checks the directory entry against a retained handle, even after that handle's original path moved.</summary>
+    internal void VerifyDirectoryChild(string name, RecoveryDirectoryIdentity child)
+    {
+        Verify();
+        CheckName(name);
+        if (Statx(_handle, name, 0x100, 0x101, out var status) != 0 ||
+            (status.Mask & 0x101) != 0x101 || (status.Mode & 0xf000) != 0x4000 ||
+            (status.DeviceMajor, status.DeviceMinor, status.Inode) != child._identity)
+            throw new IOException("Recovery directory child changed identity.");
+    }
+
+    /// <summary>Compares identities of two retained handles without reopening either stored pathname.</summary>
+    internal bool MatchesRetainedIdentity(RecoveryDirectoryIdentity other)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(other._disposed, other);
+        return _identity == other._identity;
+    }
+
+    /// <summary>Exchanges two observed directory entries atomically while the target parent remains locked.</summary>
+    internal void ExchangeDirectoryChild(string name, RecoveryDirectoryIdentity expected,
+        RecoveryDirectoryIdentity stagingParent, string stagingName, RecoveryDirectoryIdentity staged)
+    {
+        RequireExclusive();
+        VerifyDirectoryChild(name, expected);
+        stagingParent.VerifyDirectoryChild(stagingName, staged);
+        const uint exchange = 2;
+        if (RenameAt(_handle, name, stagingParent._handle, stagingName, exchange) != 0)
+            throw new IOException("The filesystem could not atomically exchange the recovery directory.");
+    }
+
+    /// <summary>Removes an observed directory if it is still the same empty child.</summary>
+    internal void RemoveEmptyDirectory(string name, RecoveryDirectoryIdentity directory)
+    {
+        VerifyDirectoryChild(name, directory);
+        const int removeDirectory = 0x200;
+        if (UnlinkAt(_handle, name, removeDirectory) != 0)
+            throw new IOException("Could not remove the private recovery staging directory.");
+    }
+
+    /// <summary>Captures the supported metadata for the retained directory itself.</summary>
+    internal byte[] CaptureMetadata()
+    {
+        Verify();
+        return LinuxRecoveryMetadata.CaptureDirectory(_handle);
+    }
+
+    /// <summary>Applies and verifies metadata on an unpublished staging directory.</summary>
+    internal void ApplyMetadata(ReadOnlySpan<byte> metadata)
+    {
+        Verify();
+        LinuxRecoveryMetadata.ApplyDirectory(_handle, metadata);
+    }
+
+    /// <summary>Flushes directory entries after publication or removal.</summary>
+    internal void Flush()
+    {
+        Verify();
+        if (Fsync(_handle) != 0) throw new IOException("Could not flush the recovery directory.");
+    }
+
+    [DllImport("libc", EntryPoint = "mkdirat", SetLastError = true)]
+    private static extern int MkdirAt(SafeFileHandle directory, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, uint mode);
+
+    [DllImport("libc", EntryPoint = "fsync", SetLastError = true)]
+    private static extern int Fsync(SafeFileHandle directory);
+
     private static void CheckName(string name)
     {
         if (string.IsNullOrEmpty(name) || name is "." or ".." || name.IndexOfAny(['/', '\\', '\0']) >= 0)

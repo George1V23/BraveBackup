@@ -1,7 +1,7 @@
 namespace BraveBackup.Core;
 
 /// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Retains the expected state through guarded publication.</summary>
-public sealed class LinuxRestoreExpectedState : IDisposable
+public sealed class LinuxRestoreExpectedState : ILinuxRestoreTarget
 {
     private readonly string _directory;
     private readonly string _name;
@@ -14,6 +14,8 @@ public sealed class LinuxRestoreExpectedState : IDisposable
         _current = LinuxRestoreTargetLease.Capture(_directory, name, token);
         try { _original = _current.CopyOriginal(); } catch { _current.Dispose(); throw; }
     }
+    long ILinuxRestoreTarget.ImageBytes => _original.Content.Bytes.Length + _original.Metadata.Bytes.Length;
+
     /// <summary>Returns the original recovery baseline; accepting applied state never replaces it.</summary>
     public RestoreFileImage CopyOriginal() { ObjectDisposedException.ThrowIf(_disposed, this); return _original.Clone(); }
     /// <summary>Verifies the currently expected physical target identity and contents.</summary>

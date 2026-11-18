@@ -2,14 +2,17 @@
 
 This is an application-owned recovery contract, separate from `.bravebackup` versions 1–8.
 It does not change those versions or define a Brave/Chromium format. The
-[Linux Bookmarks workflow](restore-bookmarks-execution.md) now uses this contract.
-The implementation checkpoints below record earlier engine and native adapter testing.
+[Linux Bookmarks workflow](restore-bookmarks-execution.md) uses this contract.
+The Linux session also supports [an opaque directory image](restore-directory-exchange.md)
+for an existing extension Local store. The implementation checkpoints below record
+earlier engine and native adapter testing.
 
 Both artifacts require the existing authenticated BBKENC1 envelope with a nonempty safety
 password supplied independently from the source archive password. No plaintext artifact
 is written by the engine. Each encoded plaintext buffer is owned and cleared after use.
 The storage adapter must privately create, flush, atomically publish and read back each
-artifact. The Linux restore adapter uses a retained recovery directory lease.
+artifact. The Linux restore adapter uses a retained recovery directory lease and flushes
+the directory after publishing each safety snapshot or journal revision.
 
 ## Snapshot plaintext
 
@@ -48,15 +51,14 @@ not overwritten. Persist recovery results, including partial failures, without s
 
 The engine owns frozen mutation bytes, originals and metadata, and clears them on disposal.
 The storage adapter owns path identity/access checks, source fingerprints, stopped-browser
-checks, per-file atomic publication and metadata fidelity. These must be rechecked on
+checks, atomic publication per target and metadata fidelity. These must be rechecked on
 prepare, every write, resume and rollback. Pause is requested between atomic operations;
 no cancellation token interrupts a destination publication once it has begun.
 
-There is no cross-file atomicity, power-loss/directory-fsync guarantee or automatic crash
-resume/recovery in this checkpoint. The journal records intent/results for diagnosis and
-future recovery integration; it is not a complete persisted executable plan. Destination
-mapping and restore payloads remain in memory. Do not enable real-profile writes until
-production adapters, recovery/lifetime handling and category writers are tested.
+Multi-target restoration progresses one atomic target at a time. Directory flushing
+supports persistence of Linux artifact publication. Power-loss recovery and automatic
+restart recovery remain outside the current workflow. The journal records intent and
+results for diagnosis. Destination mappings and replacement payloads remain in memory.
 
 ## Implementation checkpoint
 

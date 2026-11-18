@@ -9,8 +9,9 @@ tested on synthetic profiles, and a [write-free review](restore-bookmarks-review
 Phase 4 connects [Linux Bookmarks restore execution](restore-bookmarks-execution.md) to the app.
 Phase 5 now supports [Linux Settings restore](restore-settings.md), including mixed
 Bookmarks and Settings selections. The [Extensions checkpoint](restore-extensions.md)
-adds read-only destination registration and package comparison. Extensions storage
-replacement and installation are pending.
+adds read-only destination registration and package comparison. The Linux recovery
+adapter supports [whole-directory exchange and rollback](restore-directory-exchange.md).
+Extensions archive-to-restore integration and installation are pending.
 Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
