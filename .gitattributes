@@ -1,0 +1,3 @@
+# Password CSV fixtures include intentional record and embedded field line endings.
+tests/Core.Tests/Fixtures/Passwords/Passwords.synthetic.linux.csv -text whitespace=cr-at-eol
+tests/Core.Tests/Fixtures/Passwords/Passwords.synthetic.windows.csv -text whitespace=cr-at-eol
