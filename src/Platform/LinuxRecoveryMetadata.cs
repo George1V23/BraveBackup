@@ -30,6 +30,17 @@ public static class LinuxRecoveryMetadata
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(24), identity.Group);
         return bytes;
     }
+    /// <summary>Builds private file metadata using the verified destination directory's ownership and timestamp.</summary>
+    internal static byte[] CreatePrivateFileMetadata(ReadOnlySpan<byte> directoryMetadata)
+    {
+        if (directoryMetadata.Length != MetadataSize || !directoryMetadata.StartsWith("BBKDM001"u8))
+            throw new InvalidDataException("Invalid restore directory metadata.");
+        var bytes = directoryMetadata.ToArray();
+        "BBKLM002"u8.CopyTo(bytes);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 0x180);
+        return bytes;
+    }
+
     /// <summary>Applies validated metadata to an authorized staging handle, then verifies exact readback. Does not publish a file.</summary>
     public static void Apply(SafeFileHandle handle, ReadOnlySpan<byte> bytes) => ApplyCore(handle, bytes, directory: false);
 

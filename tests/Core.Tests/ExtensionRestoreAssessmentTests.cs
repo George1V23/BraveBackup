@@ -129,6 +129,197 @@ public sealed class ExtensionRestoreAssessmentTests : IDisposable
         Assert.False(Assert.Single(row.Categories).IsSupported);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReviewedStoresRestoreOrRollBackAsWholeDirectories(bool rollBack)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = await SetUpWritableArchive();
+        using var shell = await OpenRestore(setup.Archive, setup.Target);
+        var view = shell.RestorePreview;
+        await ReviewStores(view);
+        var review = Assert.IsType<RestoreReview>(view.Review);
+        Assert.Equal(new[] { setup.First, setup.Second }, review.Targets.Select(target => target.DestinationPath));
+        Assert.Contains(setup.Second, review.DestinationSummary);
+        Assert.DoesNotContain(Local(setup.Target.Profile.ProfileDirectory, 'c'), review.DestinationSummary);
+        Assert.Empty(Directory.GetFiles(setup.Recovery));
+
+        var reachedBoundary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var intercepted = 0;
+        view.Planning.ObserveBrowserState = _ =>
+        {
+            if (File.Exists(Path.Combine(setup.First, "CURRENT")) && Interlocked.Exchange(ref intercepted, 1) == 0)
+            {
+                reachedBoundary.TrySetResult();
+                if (!release.Wait(TimeSpan.FromSeconds(25))) return ProcessPresence.Unknown;
+            }
+
+            return ProcessPresence.Stopped;
+        };
+
+        var restore = view.ConfirmRestoreCommand.ExecuteAsync(null);
+        try
+        {
+            await reachedBoundary.Task.WaitAsync(TimeSpan.FromSeconds(25));
+            view.CancelRestoreCommand.Execute(null);
+        }
+        finally
+        {
+            release.Set();
+            await restore.WaitAsync(TimeSpan.FromSeconds(25));
+        }
+
+        Assert.True(view.IsRestorePaused);
+        Assert.Equal(50, view.RestoreProgress);
+        Assert.Equal("second", File.ReadAllText(Path.Combine(setup.Second, "old.marker")));
+        CheckRestoredStore(setup.First);
+        if (rollBack)
+        {
+            File.Delete(Path.Combine(setup.Target.Profile.ProfileDirectory, "Secure Preferences"));
+            view.DeclineRollbackCommand.Execute(null);
+            await view.ResumeRestoreCommand.ExecuteAsync(null);
+            Assert.True(view.IsRestorePaused);
+            Assert.True(view.IsRollbackPromptVisible);
+            Assert.Equal("restore-extension-registration", view.RestoreErrorCode);
+            File.Delete(setup.Archive);
+            await view.ConfirmRollbackCommand.ExecuteAsync(null);
+            Assert.Equal("Rollback complete.", view.RestoreStatus);
+            Assert.Equal("first", File.ReadAllText(Path.Combine(setup.First, "old.marker")));
+            Assert.False(File.Exists(Path.Combine(setup.First, "CURRENT")));
+            Assert.Equal("second", File.ReadAllText(Path.Combine(setup.Second, "old.marker")));
+        }
+        else
+        {
+            view.DeclineRollbackCommand.Execute(null);
+            await view.ResumeRestoreCommand.ExecuteAsync(null);
+            Assert.Equal("Extension local storage restored.", view.RestoreStatus);
+            CheckRestoredStore(setup.Second);
+        }
+
+        Assert.True(File.Exists(review.SafetyPath));
+        Assert.True(File.Exists(review.JournalPath));
+        Assert.Equal("leave this", File.ReadAllText(Path.Combine(Local(setup.Target.Profile.ProfileDirectory, 'c'), "old.marker")));
+        Assert.Equal("target-sync", File.ReadAllText(Path.Combine(setup.Target.Profile.ProfileDirectory,
+            "Sync Extension Settings", Id('a'), "sync.marker")));
+    }
+
+    [Theory]
+    [InlineData("package", "restore-extension-registration")]
+    [InlineData("directory", "restore-extension-target")]
+    public async Task ChangingReviewedEvidenceStopsBeforePublishingRecoveryArtifacts(string changed, string code)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = await SetUpWritableArchive();
+        using var shell = await OpenRestore(setup.Archive, setup.Target);
+        var view = shell.RestorePreview;
+        await ReviewStores(view);
+        if (changed == "package")
+            WritePackage(setup.Target.Profile.ProfileDirectory, 'a', "10.0", script: "// Y");
+        else
+            File.WriteAllText(Path.Combine(setup.First, "old.marker"), "aside");
+
+        await view.ConfirmRestoreCommand.ExecuteAsync(null);
+
+        Assert.Equal(code, view.RestoreErrorCode);
+        Assert.Contains("Recheck", view.RestoreStatus);
+        Assert.Empty(Directory.GetFiles(setup.Recovery));
+        Assert.Equal(changed == "directory" ? "aside" : "first", File.ReadAllText(Path.Combine(setup.First, "old.marker")));
+        Assert.Equal("second", File.ReadAllText(Path.Combine(setup.Second, "old.marker")));
+    }
+
+    [Fact]
+    public async Task PackageChangeAfterStagingBlocksTheWriteAndPreservesTheStore()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = await SetUpWritableArchive();
+        using var shell = await OpenRestore(setup.Archive, setup.Target);
+        var view = shell.RestorePreview;
+        await ReviewStores(view);
+        var edited = false;
+        view.Planning.ObserveBrowserState = _ =>
+        {
+            if (!edited && Directory.EnumerateDirectories(Path.GetDirectoryName(setup.First)!, ".restore-directory-*").Any())
+            {
+                WritePackage(setup.Target.Profile.ProfileDirectory, 'a', "10.0", script: "// Z");
+                edited = true;
+            }
+
+            return ProcessPresence.Stopped;
+        };
+
+        await view.ConfirmRestoreCommand.ExecuteAsync(null);
+
+        Assert.True(edited);
+        Assert.Equal("restore-extension-registration", view.RestoreErrorCode);
+        Assert.True(File.Exists(view.PublishedSafetyPath));
+        Assert.Equal("first", File.ReadAllText(Path.Combine(setup.First, "old.marker")));
+        Assert.Equal("second", File.ReadAllText(Path.Combine(setup.Second, "old.marker")));
+        Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(setup.First)!, ".restore-directory-*"));
+    }
+
+    private sealed record WritableSetup(string Archive, (BraveAppInfo App, BraveProfileInfo Profile) Target,
+        string First, string Second, string Recovery);
+
+    private async Task<WritableSetup> SetUpWritableArchive()
+    {
+        var source = CreateProfile("source");
+        var target = CreateProfile("target");
+        foreach (var id in "abc")
+        {
+            WritePackage(source.Profile.ProfileDirectory, id, "10.0");
+            WritePackage(target.Profile.ProfileDirectory, id, "10.0");
+            var local = Directory.CreateDirectory(Local(source.Profile.ProfileDirectory, id)).FullName;
+            foreach (var file in Directory.GetFiles(LevelDbFixture)) File.Copy(file, Path.Combine(local, Path.GetFileName(file)));
+        }
+        File.WriteAllText(Path.Combine(Local(source.Profile.ProfileDirectory, 'c'), "CURRENT"), "corrupt");
+        var profile = target.Profile.ProfileDirectory;
+        WriteRegistrations(profile, "Secure Preferences", new()
+        {
+            [Id('a')] = Registration('a', "10.0"), [Id('b')] = Registration('b', "10.0"), [Id('c')] = Registration('c', "10.0")
+        });
+        var first = Directory.CreateDirectory(Local(profile, 'a')).FullName;
+        var second = Directory.CreateDirectory(Local(profile, 'b')).FullName;
+        var third = Directory.CreateDirectory(Local(profile, 'c')).FullName;
+        File.WriteAllText(Path.Combine(first, "old.marker"), "first");
+        File.WriteAllText(Path.Combine(second, "old.marker"), "second");
+        File.WriteAllText(Path.Combine(third, "old.marker"), "leave this");
+        var sync = Directory.CreateDirectory(Path.Combine(profile, "Sync Extension Settings", Id('a'))).FullName;
+        File.WriteAllText(Path.Combine(sync, "sync.marker"), "target-sync");
+        return new(await CreateArchive(source), target, first, second, Directory.CreateDirectory(Path.Combine(_root, "recovery")).FullName);
+    }
+
+    private async Task ReviewStores(RestorePreviewViewModel view)
+    {
+        var row = Assert.Single(Assert.Single(view.Planning.Groups).Profiles);
+        await MapAndRecheck(view.Planning, row);
+        Assert.Contains("Local stores eligible for restore: 2", row.ExtensionCheckResult);
+        Assert.Contains("Archived Local store could not be validated", row.ExtensionCheckResult);
+        var choice = Assert.Single(row.Categories);
+        Assert.True(choice.IsSupported);
+        Assert.False(choice.IsSelected);
+        choice.IsSelected = true;
+        view.Safety.Folder = Path.Combine(_root, "recovery");
+        view.Safety.Password = "synthetic-safety-key";
+        view.Safety.Confirmation = view.Safety.Password;
+        Assert.True(view.ReviewRestoreCommand.CanExecute(null));
+        view.ReviewRestoreCommand.Execute(null);
+        Assert.True(view.ConfirmRestoreCommand.CanExecute(null));
+    }
+
+    private static void CheckRestoredStore(string directory)
+    {
+        Assert.Equal(Directory.GetFiles(LevelDbFixture).Select(Path.GetFileName).Order(),
+            Directory.GetFiles(directory).Select(Path.GetFileName).Order());
+        foreach (var file in Directory.GetFiles(LevelDbFixture))
+            Assert.Equal(File.ReadAllBytes(file), File.ReadAllBytes(Path.Combine(directory, Path.GetFileName(file))));
+    }
+
+    private static string LevelDbFixture => Path.Combine(AppContext.BaseDirectory, "Fixtures", "TabManagerPlus", "storage", "table-and-wal");
+
+    private static string Local(string path, char id) => Path.Combine(path, "Local Extension Settings", Id(id));
+
     private (BraveAppInfo App, BraveProfileInfo Profile) CreateProfile(string folder)
     {
         var root = Path.Combine(_root, folder);

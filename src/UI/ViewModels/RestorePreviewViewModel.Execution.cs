@@ -105,7 +105,7 @@ public partial class RestorePreviewViewModel
                 opened = BraveProfileRestorePlan.Open(review.ArchivePath, review.ArchiveId, sourcePassword,
                     Path.GetDirectoryName(review.SafetyPath)!, password,
                     review.Targets.Select(mapping => new BraveRestoreMapping(mapping.SourceProfileId,
-                        mapping.Installation, mapping.Profile, mapping.Category)).ToArray(),
+                        mapping.Installation, mapping.Profile, mapping.Category) { Extension = mapping.Extension }).ToArray(),
                     roots, review.OperationId, review.SourceSha256, observe, pause.Token);
                 opened.Transaction.Progress = progress.Report;
                 opened.Transaction.Prepare(pause.Token);
@@ -195,7 +195,11 @@ public partial class RestorePreviewViewModel
             {
                 session.Transaction.Progress = progress.Report;
                 if (rollback) session.Transaction.Rollback(true);
-                else session.Transaction.Run(pause.Token);
+                else
+                {
+                    session.VerifyApplyRegistrations(CancellationToken.None);
+                    session.Transaction.Run(pause.Token);
+                }
             });
             ReadOutcome();
         }
@@ -204,7 +208,9 @@ public partial class RestorePreviewViewModel
             ReadOutcome();
             RestoreStatus = rollback
                 ? "Rollback stopped. Check that Brave is closed and the targets and safety backup are available."
-                : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
+                : error is BackupOperationException { Code: "restore-extension-registration" }
+                    ? "The reviewed extension registration changed. Restore the previous package registration or roll back."
+                    : "Restore could not resume. Check the original archive, the destinations, and Brave's status.";
             RestoreErrorCode = RestoreFailureCode(error);
         }
         finally
@@ -229,7 +235,7 @@ public partial class RestorePreviewViewModel
             PublishedSafetyPath = review.SafetyPath;
             HasProgressTotal = progress.TotalFiles != 0;
             RestoreProgress = progress.TotalFiles == 0 ? 0 : 100.0 * progress.CompletedFiles / progress.TotalFiles;
-            RestoreCounts = $"{progress.CompletedFiles} of {progress.TotalFiles} target files checked and complete for this stage";
+            RestoreCounts = $"{progress.CompletedFiles} of {progress.TotalFiles} targets checked and complete for this stage";
             if (progress.State == RestoreTransactionState.Running && _pauseSignal?.IsCancellationRequested == false)
                 RestoreStatus = "Restoring selected data…";
             if (progress.CategoryCompleted && review.Targets.FirstOrDefault(row => row.SourceProfileId == progress.ProfileId && row.Category == progress.Category) is { } row)
@@ -263,7 +269,7 @@ public partial class RestorePreviewViewModel
         if (_executionReview is not { } review || transaction is null) return;
         var applied = transaction.EntryStates.Count(entry => entry == RestoreEntryState.Applied);
         var recovered = transaction.EntryStates.Count(entry => entry == RestoreEntryState.Recovered);
-        RestoreCounts = $"{transaction.EntryStates.Count} target files · {applied} restored · {recovered} recovered";
+        RestoreCounts = $"{transaction.EntryStates.Count} targets · {applied} restored · {recovered} recovered";
         if (transaction.HasPublishedSafety) PublishedSafetyPath = review.SafetyPath;
         if (state == RestoreTransactionState.Paused)
         {
@@ -276,7 +282,7 @@ public partial class RestorePreviewViewModel
             HasProgressTotal = true;
         }
         RestoreReport = string.Join("\n", review.Targets.Zip(transaction.EntryStates, (row, entry) =>
-            $"{TargetLabel(row)} / {row.CategoryName} — {DescribeEntry(entry, state)}"));
+            $"{TargetLabel(row)} / {row.CategoryName}{(row.Extension is { } extension ? $" ({extension.Id})" : string.Empty)} — {DescribeEntry(entry, state)}"));
     }
 
     private static string TargetLabel(RestoreReviewedTarget target) =>
@@ -309,6 +315,10 @@ public partial class RestorePreviewViewModel
             "A destination Preferences path has an incompatible structure. Choose another profile or clear Settings.",
         BackupOperationException { Code: "restore-settings-size" } =>
             "The updated Preferences file exceeds the size limit. Choose another profile or clear Settings.",
+        BackupOperationException { Code: "restore-extension-registration" or "restore-extension-target" } =>
+            "The registered extension or its Local store changed after Recheck. Recheck the destination and review again.",
+        BackupOperationException { Code: "restore-extension-storage" } =>
+            "An archived Local store could not be validated for restore. Clear Extensions and review again.",
         System.Security.Cryptography.CryptographicException => "Could not authenticate the source archive or safety backup.",
         _ => "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status."
     };
@@ -319,6 +329,8 @@ public partial class RestorePreviewViewModel
         UnauthorizedAccessException => "RESTORE_ACCESS_DENIED",
         BackupOperationException { Code: "restore-settings-empty" or "restore-settings-protected"
             or "restore-settings-missing" or "restore-settings-parent" or "restore-settings-value" or "restore-settings-size" } settings => settings.Code,
+        BackupOperationException { Code: "restore-extension-registration" or "restore-extension-target"
+            or "restore-extension-storage" } extension => extension.Code,
         InvalidDataException or System.Text.Json.JsonException or ArgumentException or NotSupportedException => "RESTORE_DATA_REJECTED",
         IOException => "RESTORE_CONTEXT_OR_IO_FAILED",
         _ => "RESTORE_OPERATION_FAILED"

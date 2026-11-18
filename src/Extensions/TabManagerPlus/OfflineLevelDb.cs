@@ -26,13 +26,21 @@ public static class OfflineLevelDb
         return new Reader(files, Encoding.UTF8.GetBytes(key), cancellationToken).Read();
     }
 
+    /// <summary>Checks the supported manifest, live tables and WAL without retrieving any values.</summary>
+    public static void ValidateSnapshot(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        new Reader(files, null, cancellationToken).Read();
+    }
+
     private static InvalidDataException Invalid() =>
         new("Unsupported, corrupt or over-limit extension storage snapshot.");
 
     private sealed class Reader
     {
         private readonly IReadOnlyDictionary<string, ReadOnlyMemory<byte>> _files;
-        private readonly byte[] _wanted;
+        private readonly byte[]? _wanted;
         private readonly CancellationToken _cancellation;
         private readonly Dictionary<ulong, TableInfo> _tables = new();
         private long _work;
@@ -44,7 +52,7 @@ public static class OfflineLevelDb
         private ulong? _winningSequence;
         private byte[]? _value;
 
-        public Reader(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files, byte[] wanted,
+        public Reader(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files, byte[]? wanted,
             CancellationToken cancellation)
         {
             _files = files;
@@ -277,7 +285,7 @@ public static class OfflineLevelDb
 
         private void Consider(ReadOnlySpan<byte> key, ulong sequence, byte kind, ReadOnlySpan<byte> value)
         {
-            if (!key.SequenceEqual(_wanted)) return;
+            if (_wanted is null || !key.SequenceEqual(_wanted)) return;
             if (_winningSequence == sequence)
             {
                 if ((kind == 0) != (_value is null) || (kind == 1 && !value.SequenceEqual(_value))) throw Invalid();

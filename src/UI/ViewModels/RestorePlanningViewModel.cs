@@ -57,7 +57,7 @@ public partial class RestoreCategoryChoice : ViewModelBase
             _ => category.Id + " (v" + category.Version + ")"
         };
         if (Id == "extensions")
-            SupportReason = "Use Recheck to compare archived packages with the destination. Extension restore is unavailable.";
+            SupportReason = "Use Recheck to find existing Local stores for matching registered extensions.";
         _changed = changed;
     }
 
@@ -93,10 +93,16 @@ public partial class RestoreProfileChoice : ViewModelBase
     [ObservableProperty] private string _checkResult = "Not checked. Choose a destination and use Recheck.";
     [ObservableProperty] private string _extensionCheckResult = string.Empty;
 
+    internal IReadOnlyList<ExtensionLocalRestoreSelection> ExtensionTargets { get; private set; } = [];
+
     public RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets, Action changed)
+        : this(source, targets, changed, changed) { }
+
+    internal RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets,
+        Action changed, Action categoriesChanged)
     {
         SourceId = source.Id; Name = source.DisplayName + " (" + source.DirectoryName + ")";
-        Categories = source.Categories.Select(category => new RestoreCategoryChoice(category, changed)).ToArray();
+        Categories = source.Categories.Select(category => new RestoreCategoryChoice(category, categoriesChanged)).ToArray();
         TargetInstallations = targets; _changed = changed;
     }
     internal void SetSourceCompatibility(ArchiveInstallation installation)
@@ -116,6 +122,18 @@ public partial class RestoreProfileChoice : ViewModelBase
         Categories.SingleOrDefault(category => category.Id == "settings")?.SetCompatibility(supported, supported
             ? "Applies the stored bookmark bar, Home and startup choices to the destination Preferences."
             : incompatible);
+        OnPropertyChanged(nameof(HasSupportedCategories));
+    }
+
+    /// <summary>Applies evidence for the current mapping and clears any selection when rechecking or remapping.</summary>
+    internal void ApplyExtensionCheck(string description, IReadOnlyList<ExtensionLocalRestoreSelection> targets)
+    {
+        ExtensionCheckResult = description;
+        ExtensionTargets = targets;
+        var category = Categories.SingleOrDefault(choice => choice.Id == "extensions");
+        category?.SetCompatibility(targets.Count != 0, targets.Count != 0
+            ? $"Restore the {targets.Count} compatible Local store(s) shown in Recheck. Review lists each directory."
+            : "Use Recheck to find existing Local stores for matching registered extensions.");
         OnPropertyChanged(nameof(HasSupportedCategories));
     }
 
@@ -224,7 +242,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         {
             var profiles = installation.Profiles.Select(profile =>
             {
-                var choice = new RestoreProfileChoice(profile, _targets, Changed);
+                var choice = new RestoreProfileChoice(profile, _targets, Changed, Notify);
                 if (sourceHash is not null) choice.SetSourceCompatibility(installation);
                 return choice;
             }).ToArray();
@@ -238,7 +256,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         foreach (var profile in Profiles)
         {
             profile.CheckResult = "Not checked. Use Recheck after changing the plan.";
-            profile.ExtensionCheckResult = string.Empty;
+            profile.ApplyExtensionCheck(string.Empty, []);
         }
         Notify();
     }
@@ -267,42 +285,42 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             (Row: profile, App: profile.SelectedInstallation, Profile: profile.SelectedProfile,
                 Extensions: _extensions.GetValueOrDefault(profile.SourceId), Compatible: profile.IsCompatibleDestination)).ToArray();
         IsChecking = true;
-        foreach (var request in requests) request.Row.ExtensionCheckResult = string.Empty;
+        foreach (var request in requests) request.Row.ApplyExtensionCheck(string.Empty, []);
         try
         {
             var results = await Task.Run(() => requests.Select(request =>
             {
                 var token = cancellation.Token;
                 token.ThrowIfCancellationRequested();
-                if (request.App is null || request.Profile is null) return ("No destination selected.", string.Empty);
+                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty);
                 if (!targets.Any(target => ReferenceEquals(target, request.App)) ||
                     !request.App.Profiles.Any(profile => ReferenceEquals(profile, request.Profile)))
-                    return ("Invalid destination mapping.", string.Empty);
+                    return ("Invalid destination mapping.", ExtensionCheck.Empty);
                 try
                 {
                     var path = BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, token);
                     ProcessPresence Observe() => observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], token);
                     var presence = Observe();
                     if (presence == ProcessPresence.Running)
-                        return ("Running. Close Brave manually before restoration.", string.Empty);
+                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty);
                     if (presence != ProcessPresence.Stopped)
-                        return ("Unable to verify. Restoration must stay blocked.", string.Empty);
+                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty);
 
                     var extensionResult = CompareExtensions(path, request.Extensions, request.Compatible, token);
                     if (request.Extensions is not null && request.Compatible && Observe() != ProcessPresence.Stopped)
-                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", string.Empty);
+                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty);
                     return ("Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
                         extensionResult);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", string.Empty); }
+                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty); }
             }).ToArray(), cancellation.Token);
             if (_disposed || revision != _revision) return;
             for (var index = 0; index < requests.Length; index++)
             {
                 var (result, extensions) = results[index];
                 requests[index].Row.CheckResult = result;
-                requests[index].Row.ExtensionCheckResult = extensions;
+                requests[index].Row.ApplyExtensionCheck(extensions.Description, extensions.Targets);
             }
             Notify();
         }
@@ -313,28 +331,50 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             if (!_disposed && revision == _revision) IsChecking = false;
         }
     }
-    private static string CompareExtensions(string profilePath, ArchivedExtensionInventory? archived, bool compatible,
+    private sealed record ExtensionCheck(string Description, IReadOnlyList<ExtensionLocalRestoreSelection> Targets)
+    {
+        internal static ExtensionCheck Empty { get; } = new(string.Empty, []);
+    }
+
+    private static ExtensionCheck CompareExtensions(string profilePath, ArchivedExtensionInventory? archived, bool compatible,
         CancellationToken token)
     {
-        if (archived is null) return string.Empty;
-        if (archived.Count == 0) return "The archive contains no extension identities for this profile.";
-        if (!compatible) return "Extension comparison requires a Linux destination with the same recorded Brave product and version.";
-        if (archived.Entries is null) return "This archive exceeds the limit for extension comparison details.";
+        if (archived is null) return ExtensionCheck.Empty;
+        if (archived.Count == 0) return new("The archive contains no extension identities for this profile.", []);
+        if (!compatible) return new("Extension comparison requires a Linux destination with the same recorded Brave product and version.", []);
+        if (archived.Entries is null) return new("This archive exceeds the limit for extension comparison details.", []);
         try
         {
             var checks = BraveExtensionRestoreAssessment.Check(profilePath, archived.Entries, token);
+            var eligible = new Dictionary<string, ExtensionLocalRestoreSelection>(StringComparer.Ordinal);
+            long remainingBytes = RestoreSafetyFormat.MaximumBytes;
+            foreach (var check in checks)
+                if (BraveExtensionLocalRestore.Review(check, profilePath, ref remainingBytes, token) is { } target)
+                    eligible.Add(target.Id, target);
             const int displayLimit = 50;
             var matches = checks.Count(check => check.Match == ExtensionRegistrationMatch.PackageMatches);
             var lines = checks.Take(displayLimit).Select(check =>
-                $"{check.Archive.Id}  ·  {DescribeRegistration(check)}  ·  Local {check.Archive.LocalStorage}, Sync {check.Archive.SyncStorage}");
-            var summary = $"Archived extensions with matching registered packages: {matches} of {checks.Length}. Local and Sync show archive contents.";
+                $"{check.Archive.Id}  ·  {DescribeRegistration(check)}  ·  Local {check.Archive.LocalStorage}, Sync {check.Archive.SyncStorage}" +
+                DescribeLocal(check, eligible.ContainsKey(check.Archive.Id)));
+            var summary = $"Archived extensions with matching registered packages: {matches} of {checks.Length}. Local and Sync show archive contents. " +
+                          $"Local stores eligible for restore: {eligible.Count}.";
             if (checks.Length > displayLimit) summary += $" Showing the first {displayLimit} identities.";
-            return summary + "\n" + string.Join("\n", lines);
+            return new(summary + "\n" + string.Join("\n", lines), eligible.Values.ToArray());
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
         {
-            return "Unable to read the destination's extension registration.";
+            return new("Unable to read the destination's extension registration.", []);
         }
+    }
+
+    private static string DescribeLocal(ExtensionRegistrationCheck check, bool eligible)
+    {
+        if (eligible) return "  ·  Local restore available";
+        if (check.Archive.LocalStorage != "present" || check.Match != ExtensionRegistrationMatch.PackageMatches) return string.Empty;
+        if (check.Archive.Packages.Length != 1) return "  ·  Archive contains multiple package versions";
+        return check.Archive.LocalValidated
+            ? "  ·  Destination Local store is missing, unsafe, or exceeds the limit"
+            : "  ·  Archived Local store could not be validated";
     }
 
     private static string DescribeRegistration(ExtensionRegistrationCheck check) => check.Match switch

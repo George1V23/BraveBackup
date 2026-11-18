@@ -1,10 +1,9 @@
 # Linux extension storage directory recovery
 
-The Linux restore session can now treat an existing `Local Extension Settings/<id>`
-directory as one transaction target. The adapter is internal. The Restore tab still
-uses **Recheck** for extension compatibility. The archive planner must establish
-package compatibility, choose and validate the archived Local store, and present the
-exact directory in final review before enabling the writer.
+The Linux restore session treats an existing `Local Extension Settings/<id>`
+directory as one transaction target. The [Extensions workflow](restore-extensions.md)
+uses the adapter after verifying the archive and matching the registered package.
+The final review lists each authorized target directory.
 
 ## Publication and rollback
 
@@ -47,8 +46,12 @@ UID/GID in the same layout as file metadata.
 Images are limited to 32 MiB including framing, 4,096 files and 255 UTF-8 bytes
 per name. An existing empty directory is supported. Linked or nested entries,
 other ownership, unsupported modes and extended metadata block the operation.
-The adapter requires an existing directory and matching effective UID/GID.
-Installation, Sync storage and creating a missing Local store remain pending.
+The adapter requires an existing directory and matching effective UID/GID. For
+archive-based replacements, directory metadata comes from the reviewed destination.
+Restored files use private mode `0600` and inherit the destination directory's
+ownership and timestamp because the archive contains bytes without OS metadata.
+The rollback image retains each original file's supported metadata. Installation,
+Sync storage and creating a missing Local store remain pending.
 
 ## Verification
 

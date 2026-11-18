@@ -10,13 +10,17 @@ namespace BraveBackup.Core;
 internal sealed record ArchivedExtensionPackage(string Version, string Fingerprint);
 
 /// <summary>Archived identity and raw storage presence, with no executable or database bytes retained.</summary>
-internal sealed record ArchivedExtension(string Id, ArchivedExtensionPackage[] Packages, string LocalStorage, string SyncStorage);
+internal sealed record ArchivedExtension(string Id, ArchivedExtensionPackage[] Packages, string LocalStorage, string SyncStorage)
+{
+    internal bool LocalValidated { get; init; }
+}
 
 /// <summary>Compact archive inventory used by the Restore tab. Entries can be omitted when the inspection budget is exceeded.</summary>
 internal sealed record ArchivedExtensionInventory(int Count, ArchivedExtension[]? Entries)
 {
     /// <summary>Summarizes a validated inventory without retaining arbitrary manifest strings or raw payloads.</summary>
-    internal static ArchivedExtensionInventory Describe(ExtensionSnapshotInventory inventory, ref int remaining, CancellationToken token)
+    internal static ArchivedExtensionInventory Describe(ExtensionSnapshotInventory inventory, ref int remaining,
+        CancellationToken token, Func<ExtensionSnapshotItem, bool>? validateLocal = null)
     {
         var count = inventory.Extensions.Length;
         var entries = count + inventory.Extensions.Sum(extension => extension.Versions.Length);
@@ -38,7 +42,10 @@ internal sealed record ArchivedExtensionInventory(int Count, ArchivedExtension[]
                     .Select(file => (file.RelativePath[prefix..], file.Sha256)), token);
                 packages.Add(new(version.Version, fingerprint));
             }
-            extensions.Add(new(extension.Id, packages.ToArray(), extension.LocalStorage, extension.SyncStorage));
+            extensions.Add(new(extension.Id, packages.ToArray(), extension.LocalStorage, extension.SyncStorage)
+            {
+                LocalValidated = validateLocal?.Invoke(extension) == true
+            });
         }
 
         return new(count, extensions.ToArray());
@@ -58,7 +65,11 @@ internal enum ExtensionRegistrationMatch
 }
 
 /// <summary>Result of a read-only comparison for one archived identity.</summary>
-internal sealed record ExtensionRegistrationCheck(ArchivedExtension Archive, ExtensionRegistrationMatch Match, string? RegisteredVersion = null);
+internal sealed record ExtensionRegistrationCheck(ArchivedExtension Archive, ExtensionRegistrationMatch Match, string? RegisteredVersion = null)
+{
+    internal string? RegistrationPath { get; init; }
+    internal string? PackageFingerprint { get; init; }
+}
 
 /// <summary>Compares the destination's registered internal extension version and package contents to an inspected archive.</summary>
 internal static class BraveExtensionRestoreAssessment
@@ -137,8 +148,10 @@ internal static class BraveExtensionRestoreAssessment
             var files = new List<(string RelativePath, string Hash)>();
             Walk(root, string.Empty, files, ref bytesLeft, ref pathsLeft, 0, token);
             var fingerprint = Fingerprint(files, token);
-            return new(extension, candidates.Any(package => package.Fingerprint == fingerprint)
-                ? ExtensionRegistrationMatch.PackageMatches : ExtensionRegistrationMatch.PackageDiffers, registeredVersion);
+            return candidates.Any(package => package.Fingerprint == fingerprint)
+                ? new(extension, ExtensionRegistrationMatch.PackageMatches, registeredVersion)
+                    { RegistrationPath = relative, PackageFingerprint = fingerprint }
+                : new(extension, ExtensionRegistrationMatch.PackageDiffers, registeredVersion);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
         {

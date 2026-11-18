@@ -9,8 +9,8 @@ namespace BraveBackup.Core;
 /// <summary>A bounded, app-owned flat directory image stored inside the existing encrypted safety snapshot.</summary>
 internal static class LinuxFlatDirectoryImage
 {
-    private const int MaximumBytes = 32 * 1024 * 1024;
-    private const int MaximumFiles = 4096;
+    internal const int MaximumBytes = 32 * 1024 * 1024;
+    internal const int MaximumFiles = 4096;
     private const int MaximumNameBytes = 255;
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static ReadOnlySpan<byte> Magic => "BBKLD001"u8;
@@ -75,6 +75,51 @@ internal static class LinuxFlatDirectoryImage
             CryptographicOperations.ZeroMemory(output.GetBuffer().AsSpan(0, (int)output.Length));
             ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
+    }
+
+    /// <summary>Builds a directory image with private files using the captured destination metadata.</summary>
+    internal static RestoreFileImage Encode(IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files,
+        ReadOnlyMemory<byte> directoryMetadata)
+    {
+        if (files.Count > MaximumFiles) throw new InvalidDataException("Too many restore directory files.");
+        var fileMetadata = LinuxRecoveryMetadata.CreatePrivateFileMetadata(directoryMetadata.Span);
+        var entries = files.OrderBy(file => file.Key, StringComparer.Ordinal).ToArray();
+        long length = 12;
+        foreach (var (name, content) in entries)
+        {
+            var byteCount = Utf8.GetByteCount(name);
+            ValidateName(name, byteCount, null);
+            length += 8L + byteCount + fileMetadata.Length + content.Length;
+            if (length > MaximumBytes) throw new InvalidDataException("Restore directory image exceeds the supported size.");
+        }
+        var bytes = new byte[(int)length];
+        try
+        {
+            using var buffer = new MemoryStream(bytes, writable: true);
+            using var writer = new BinaryWriter(buffer);
+            writer.Write(Magic);
+            writer.Write(entries.Length);
+            foreach (var (name, content) in entries)
+            {
+                var encoded = Utf8.GetBytes(name);
+                writer.Write(encoded.Length);
+                writer.Write(content.Length);
+                writer.Write(encoded);
+                writer.Write(fileMetadata);
+                writer.Write(content.Span);
+            }
+            return new RestoreFileImage(true, bytes, directoryMetadata.Span);
+        }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
+    /// <summary>Binds the reviewed directory metadata and complete canonical file image.</summary>
+    internal static string Digest(RestoreFileImage image)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(image.Metadata.Bytes.Span);
+        hash.AppendData(image.Content.Bytes.Span);
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 
     /// <summary>Validates the framing and returns entries borrowing the image's owned buffers.</summary>

@@ -8,6 +8,8 @@ internal sealed record LinuxRestoreDestination(
 {
     /// <summary>Resolves the supplied extension ID under the profile's existing Local Extension Settings directory.</summary>
     internal bool IsLocalExtensionDirectory { get; init; }
+    internal string? RequiredOriginalDigest { get; init; }
+    internal Action<CancellationToken>? VerifyApplyContext { get; init; }
 }
 
 /// <summary>Bound target adapter for an atomic file or whole-directory mutation.</summary>
@@ -22,7 +24,6 @@ internal interface ILinuxRestoreTarget : IDisposable
 /// <remarks>Internal integration only. The caller must validate the source archive and authorize the frozen plan.</remarks>
 internal sealed class LinuxRestoreSession : IDisposable
 {
-    private const string LocalExtensionSettings = "Local Extension Settings";
     private readonly Store _store;
     internal RestoreTransaction Transaction { get; }
     internal RestoreArtifactScope Artifacts { get; }
@@ -91,9 +92,11 @@ internal sealed class LinuxRestoreSession : IDisposable
             {
                 token.ThrowIfCancellationRequested();
                 ILinuxRestoreTarget checkpoint = target.IsLocalExtensionDirectory
-                    ? new LinuxRestoreDirectoryCheckpoint(TargetParent(target), target.FileName, target.Mutation.Replacement, token)
+                    ? new LinuxRestoreDirectoryCheckpoint(TargetParent(target), target.FileName, target.Mutation.Replacement, token, target.RequiredOriginalDigest)
                     : new LinuxRestoreExpectedState(TargetParent(target), target.FileName, token);
                 store.Targets.Add(target.Mutation.Id, checkpoint);
+                if (target.VerifyApplyContext is { } verifyApply)
+                    store.ApplyGuards.Add(target.Mutation.Id, verifyApply);
                 retained += checkpoint.ImageBytes;
                 if (retained > RestoreSafetyFormat.MaximumBytes)
                     throw new InvalidDataException("Restore originals exceed the supported retention limit.");
@@ -110,11 +113,20 @@ internal sealed class LinuxRestoreSession : IDisposable
     }
 
     private static string TargetParent(LinuxRestoreDestination target) => target.IsLocalExtensionDirectory
-        ? Path.Combine(target.Profile.ProfileDirectory, LocalExtensionSettings)
+        ? Path.Combine(target.Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName)
         : target.Profile.ProfileDirectory;
 
     /// <summary>Requires the transaction to use the same source bytes as its category planner.</summary>
     internal void VerifySource(BraveRestoreContext expected) => _store.VerifySource(expected);
+
+    /// <summary>Revalidates frozen extension registrations before resuming a paused forward transaction.</summary>
+    internal void VerifyApplyRegistrations(CancellationToken token)
+    {
+        if (_store.ApplyGuards.Count == 0) return;
+        _store.VerifyBrowserStopped(token);
+        foreach (var check in _store.ApplyGuards.Values) check(token);
+        _store.VerifyBrowserStopped(token);
+    }
 
     /// <summary>Releases the coordinator and retained handles while preserving encrypted recovery files.</summary>
     public void Dispose()
@@ -126,6 +138,7 @@ internal sealed class LinuxRestoreSession : IDisposable
     private sealed class Store(BraveRestoreContext context, RestoreArtifactLease artifacts) : IRestoreTransactionStore, IDisposable
     {
         public Dictionary<Guid, ILinuxRestoreTarget> Targets { get; } = [];
+        internal Dictionary<Guid, Action<CancellationToken>> ApplyGuards { get; } = [];
 
         internal void VerifySource(BraveRestoreContext expected) => context.VerifySameSource(expected);
 
@@ -141,10 +154,24 @@ internal sealed class LinuxRestoreSession : IDisposable
             context.VerifyRecovery(token);
         }
 
+        internal void VerifyBrowserStopped(CancellationToken token) => context.VerifyBrowserStopped(token);
+
         public RestoreFileImage ReadTarget(Guid mutationId, CancellationToken token) => Targets[mutationId].ReadCurrent(token);
 
-        public void WriteTargetAtomic(Guid mutationId, RestoreFileImage image) =>
-            Targets[mutationId].Publish(image, () => VerifyContext(CancellationToken.None));
+        public void WriteTargetAtomic(Guid mutationId, RestoreFileImage image)
+        {
+            var verify = ApplyGuards.GetValueOrDefault(mutationId);
+            verify?.Invoke(CancellationToken.None);
+            Targets[mutationId].Publish(image, () =>
+            {
+                VerifyContext(CancellationToken.None);
+                if (verify is not null)
+                {
+                    verify(CancellationToken.None);
+                    context.VerifyBrowserStopped(CancellationToken.None);
+                }
+            });
+        }
 
         public void WriteRecoveryTargetAtomic(Guid mutationId, RestoreFileImage image) =>
             Targets[mutationId].Publish(image, () => VerifyRecoveryContext(CancellationToken.None));

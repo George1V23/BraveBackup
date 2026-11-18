@@ -12,7 +12,8 @@ internal sealed class LinuxRestoreDirectoryCheckpoint : ILinuxRestoreTarget
     private RecoveryDirectoryIdentity _identity;
     private RestoreFileImage _expected;
 
-    internal LinuxRestoreDirectoryCheckpoint(string parentPath, string name, RestoreFileImage replacement, CancellationToken token)
+    internal LinuxRestoreDirectoryCheckpoint(string parentPath, string name, RestoreFileImage replacement, CancellationToken token,
+        string? requiredOriginalDigest = null)
     {
         LinuxFlatDirectoryImage.Decode(replacement);
         _parentPath = Path.GetFullPath(parentPath);
@@ -21,7 +22,15 @@ internal sealed class LinuxRestoreDirectoryCheckpoint : ILinuxRestoreTarget
         try
         {
             _identity = _parent.OpenDirectoryChild(name);
-            try { _expected = LinuxFlatDirectoryImage.Capture(_identity, token); }
+            try
+            {
+                _expected = LinuxFlatDirectoryImage.Capture(_identity, token);
+                if (requiredOriginalDigest is not null && LinuxFlatDirectoryImage.Digest(_expected) != requiredOriginalDigest)
+                {
+                    _expected.Dispose();
+                    throw new BackupOperationException("restore-extension-target", "The destination Local store changed after Recheck.");
+                }
+            }
             catch { _identity.Dispose(); throw; }
         }
         catch { _parent.Dispose(); throw; }

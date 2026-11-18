@@ -13,7 +13,19 @@ namespace UI.ViewModels;
 public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile, string Category)
 {
     /// <summary>Gets the displayed name of the reviewed category.</summary>
-    public string CategoryName => Category == "bookmarks" ? "Bookmarks" : "Settings";
+    public string CategoryName => Category switch
+    {
+        "bookmarks" => "Bookmarks",
+        "settings" => "Settings",
+        _ => "Extension local storage"
+    };
+
+    internal ExtensionLocalRestoreSelection? Extension { get; init; }
+
+    /// <summary>Gets the exact file or directory that the confirmed restore can replace.</summary>
+    public string DestinationPath => Extension is { } extension
+        ? Path.Combine(Profile.ProfileDirectory, BraveExtensionLocalRestore.ParentName, extension.Id)
+        : Path.Combine(Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(Category));
 }
 
 /// <summary>A write-free review of the exact archive, destinations and encrypted artifact paths.</summary>
@@ -63,23 +75,32 @@ public partial class RestorePreviewViewModel
             var artifacts = new RestoreArtifactScope(operationId, Safety.FullFolder, source.Path, Planning.KnownBrowserRoots);
             var profiles = Planning.Groups.SelectMany(group => group.Profiles.Where(profile => profile.IsSelected)
                 .Select(profile => (group.Name, Profile: profile))).ToArray();
-            var targets = profiles.SelectMany(row => row.Profile.Categories
-                .Where(category => category.IsSelected && category.IsSupported)
-                .Select(category => new RestoreReviewedTarget(row.Profile.SourceId,
-                    row.Profile.SelectedInstallation!.Info with
-                    {
-                        UserDataDirectory = Path.GetFullPath(row.Profile.SelectedInstallation.Info.UserDataDirectory)
-                    },
-                    row.Profile.SelectedProfile!.Info with { ProfileDirectory = row.Profile.DestinationPath },
-                    category.Id))).ToArray();
+            var targets = profiles.SelectMany(row =>
+            {
+                var installation = row.Profile.SelectedInstallation!.Info with
+                {
+                    UserDataDirectory = Path.GetFullPath(row.Profile.SelectedInstallation.Info.UserDataDirectory)
+                };
+                var profile = row.Profile.SelectedProfile!.Info with { ProfileDirectory = row.Profile.DestinationPath };
+                return row.Profile.Categories.Where(category => category.IsSelected && category.IsSupported)
+                    .SelectMany(category => category.Id == "extensions"
+                        ? row.Profile.ExtensionTargets.Select(extension =>
+                            new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
+                                { Extension = extension })
+                        : [new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)]);
+            }).ToArray();
 
             var targetsBySource = targets.ToLookup(target => target.SourceProfileId);
             var summary = profiles.Select(row =>
             {
                 var files = targetsBySource[row.Profile.SourceId].Select(target =>
                 {
-                    var path = Path.Combine(target.Profile.ProfileDirectory, BraveProfileRestorePlan.TargetFileName(target.Category));
-                    return target.Category == "bookmarks" ? $"Replace Bookmarks at {path}" : $"Apply stored Settings to {path}";
+                    return target.Category switch
+                    {
+                        "bookmarks" => $"Replace Bookmarks at {target.DestinationPath}",
+                        "settings" => $"Apply stored Settings to {target.DestinationPath}",
+                        _ => $"Replace Local store for extension {target.Extension!.Id} (version {target.Extension.Version}) at {target.DestinationPath}"
+                    };
                 });
                 return $"{row.Name} / {row.Profile.Name} → {row.Profile.SelectedInstallation!.Name} / {row.Profile.SelectedProfile!.Name}\n" +
                        string.Join("\n", files);
@@ -87,6 +108,8 @@ public partial class RestorePreviewViewModel
             var description = string.Join("\n\n", summary);
             if (targets.Any(target => target.Category == "settings"))
                 description += "\n\nSettings applies the choices stored in the archive. A choice absent from the archive keeps its destination value.";
+            if (targets.Any(target => target.Extension is not null))
+                description += "\n\nExtension selection replaces only the listed existing Local stores with the archived snapshots.";
             Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath,
                 Array.AsReadOnly(targets), description);
         }

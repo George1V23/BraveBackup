@@ -33,10 +33,13 @@ public static class BraveArchiveInspection
         source.Position = 0;
         var extensionInventories = new Dictionary<Guid, ArchivedExtensionInventory>();
         var remainingExtensionEntries = ArchiveLimits.MaxEntries;
-        var manifest = BraveSettingsBackup.ValidateArchive(source, password, token, (profileId, inventory) =>
+        long remainingLocalBytes = RestoreSafetyFormat.MaximumBytes;
+        var manifest = BraveSettingsBackup.ValidateArchive(source, password, token, (profileId, inventory, zip) =>
         {
             extensionInventories.Add(profileId,
-                ArchivedExtensionInventory.Describe(inventory, ref remainingExtensionEntries, token));
+                ArchivedExtensionInventory.Describe(inventory, ref remainingExtensionEntries, token,
+                    extension => HostEnvironment.IsLinux &&
+                        BraveExtensionLocalRestore.CanReadArchivedStore(zip, extension, ref remainingLocalBytes, token)));
         });
         if (Hash(source, token) != before)
             throw new IOException("The source archive changed during inspection.");

@@ -63,6 +63,14 @@ public sealed class BraveRestoreContext
         token.ThrowIfCancellationRequested();
         if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
     }
+    /// <summary>Checks Brave again after a target-specific validation step.</summary>
+    internal void VerifyBrowserStopped(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (Observe(token) != ProcessPresence.Stopped)
+            throw new IOException("Restore browser state changed or cannot be verified.");
+    }
+
     /// <summary>Uses the current verification token for native process observation.</summary>
     private ProcessPresence Observe(CancellationToken token) =>
         _observe?.Invoke() ?? ProcessPresenceProbe.Observe(["brave"], token);

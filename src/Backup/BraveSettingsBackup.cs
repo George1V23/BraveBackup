@@ -98,7 +98,7 @@ public static class BraveSettingsBackup
 
     /// <summary>Validates the archive and supplies each verified Extensions inventory to an optional reader.</summary>
     internal static ArchiveManifest ValidateArchive(Stream source, string? password, CancellationToken token,
-        Action<Guid, ExtensionSnapshotInventory>? readExtensions)
+        Action<Guid, ExtensionSnapshotInventory, ZipArchive>? readExtensions)
     {
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
@@ -130,7 +130,7 @@ public static class BraveSettingsBackup
             if (category.Id == "extensions")
             {
                 var inventory = BraveExtensionBackup.ReadValidatedInventory(zip, category, token);
-                readExtensions?.Invoke(profileId, inventory);
+                readExtensions?.Invoke(profileId, inventory, zip);
                 continue;
             }
 

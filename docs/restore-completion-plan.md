@@ -8,10 +8,11 @@ The internal Linux session now supports a [bookmarks restore backend](restore-bo
 tested on synthetic profiles, and a [write-free review](restore-bookmarks-review.md) shows the exact proposed paths.
 Phase 4 connects [Linux Bookmarks restore execution](restore-bookmarks-execution.md) to the app.
 Phase 5 now supports [Linux Settings restore](restore-settings.md), including mixed
-Bookmarks and Settings selections. The [Extensions checkpoint](restore-extensions.md)
-adds read-only destination registration and package comparison. The Linux recovery
-adapter supports [whole-directory exchange and rollback](restore-directory-exchange.md).
-Extensions archive-to-restore integration and installation are pending.
+Bookmarks and Settings selections. [Extensions restore on Linux](restore-extensions.md)
+supports existing Local stores for matching registered packages through
+[whole-directory exchange and rollback](restore-directory-exchange.md). Extension
+installation and Sync storage restoration are pending. Sessions is the next category
+checkpoint.
 Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before

@@ -6,7 +6,10 @@ using BraveBackup.Platform;
 namespace BraveBackup.Core;
 
 /// <summary>Maps an explicitly selected category to an existing destination profile.</summary>
-internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile, string Category);
+internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile, string Category)
+{
+    internal ExtensionLocalRestoreSelection? Extension { get; init; }
+}
 
 /// <summary>Builds a Linux restore session from supported categories in a reviewed archive.</summary>
 internal static class BraveProfileRestorePlan
@@ -26,7 +29,7 @@ internal static class BraveProfileRestorePlan
         _ => throw new InvalidDataException("The selected category does not support restore.")
     };
 
-    /// <summary>Checks the platform and recorded product/version required by both supported writers.</summary>
+    /// <summary>Checks the platform and recorded product/version required by the supported writers.</summary>
     internal static bool IsCompatible(ArchiveInstallation source, BraveAppInfo target) =>
         HostEnvironment.IsLinux && Version.TryParse(source.BrowserVersion, out _) &&
         source.BrowserVersion == target.Version && source.Product == target.Product.ToString();
@@ -53,8 +56,11 @@ internal static class BraveProfileRestorePlan
         if (profiles.Any(group => group.Any(mapping =>
                 mapping.Installation != group.First().Installation || mapping.Profile != group.First().Profile)) ||
             targets.Select(target => target.Profile.ProfileDirectory).Distinct(StringComparer.Ordinal).Count() != targets.Length ||
-            selected.Select(mapping => (mapping.SourceProfileId, mapping.Category)).Distinct().Count() != selected.Length)
-            throw new InvalidDataException("Each source profile must have one distinct destination and unique categories.");
+            selected.Any(mapping => (mapping.Category == "extensions") != (mapping.Extension is not null) ||
+                (mapping.Extension is { } extension && !BraveExtensionBackup.ValidId(extension.Id))) ||
+            selected.Select(mapping => (mapping.SourceProfileId, mapping.Category, mapping.Extension?.Id))
+                .Distinct().Count() != selected.Length)
+            throw new InvalidDataException("Each source profile must have one distinct destination and unique targets.");
 
         var path = Path.GetFullPath(archivePath);
         if (!string.Equals(Path.GetExtension(path), ".bravebackup", StringComparison.OrdinalIgnoreCase))
@@ -80,6 +86,7 @@ internal static class BraveProfileRestorePlan
                 using var zip = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
                 var sources = manifest.Installations.SelectMany(installation =>
                     installation.Profiles.Select(profile => (installation, profile))).ToDictionary(pair => pair.profile.Id);
+                var extensionSources = new Dictionary<Guid, Dictionary<string, (ExtensionSnapshotItem Item, ArchivedExtension Package)>>();
                 long retained = 0;
                 long retainedOriginals = 0;
                 foreach (var mapping in selected)
@@ -89,6 +96,32 @@ internal static class BraveProfileRestorePlan
                         throw new InvalidDataException("A selected profile is missing from the archive.");
                     if (!IsCompatible(archived.installation, mapping.Installation))
                         throw new InvalidDataException("Restore requires matching Brave products and recorded browser versions.");
+
+                    if (mapping.Extension is { } extension)
+                    {
+                        if (!extensionSources.TryGetValue(mapping.SourceProfileId, out var extensionItems))
+                        {
+                            var category = archived.profile.Categories.SingleOrDefault(category => category.Id == "extensions")
+                                ?? throw new InvalidDataException("The selected archive profile lacks Extensions.");
+                            var inventory = BraveExtensionBackup.ReadValidatedInventory(zip, category, token);
+                            var budget = ArchiveLimits.MaxEntries;
+                            var packages = ArchivedExtensionInventory.Describe(inventory, ref budget, token).Entries
+                                ?? throw new InvalidDataException("The archived extension inventory exceeds the comparison limit.");
+                            extensionItems = inventory.Extensions.Zip(packages).ToDictionary(pair => pair.First.Id,
+                                pair => (pair.First, pair.Second), StringComparer.Ordinal);
+                            extensionSources.Add(mapping.SourceProfileId, extensionItems);
+                        }
+
+                        if (!extensionItems.TryGetValue(extension.Id, out var entry))
+                            throw new InvalidDataException("The reviewed extension is missing from the archive.");
+                        var target = BraveExtensionLocalRestore.Build(zip, entry.Item, entry.Package, mapping,
+                            archived.installation.Id, RestoreSafetyFormat.MaximumBytes - retained, token);
+                        destinations.Add(target);
+                        retained += target.Mutation.Replacement.Content.Bytes.Length + target.Mutation.Replacement.Metadata.Bytes.Length;
+                        if (retained > RestoreSafetyFormat.MaximumBytes)
+                            throw new InvalidDataException("Replacements exceed the restore retention limit.");
+                        continue;
+                    }
 
                     var fileName = TargetFileName(mapping.Category);
                     var bookmarks = mapping.Category == "bookmarks";

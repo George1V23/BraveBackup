@@ -24,6 +24,12 @@ operation occurs. The returned array is an owned copy.
 - Cancellation throws `OperationCanceledException` at bounded parsing checkpoints;
   invalid API arguments use standard argument exceptions.
 
+The [Local extension restore](restore-extensions.md) uses
+`OfflineLevelDb.ValidateSnapshot(files, cancellationToken)` to run these structural
+checks without looking up or returning a value. It validates the active manifest,
+live tables and eligible WAL records. Its checked structures and limits are the same
+as for `ReadValue`.
+
 ## Decoding and safety boundaries
 
 The private reader validates CURRENT and replays its manifest to identify live tables,

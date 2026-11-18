@@ -259,7 +259,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                         "Settings restore applies the archived choice and preserves its unrelated neighbor");
                 foreach (var file in before.Where(file => file.Key != profile.BookmarksPath && file.Key != preferencesPath))
                     Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Mixed restore preserves unrelated profile files");
-                // Compare a registered package through the Restore view without touching the profile.
+                // Restore an archived Local store through the existing Restore controls.
                 const string extensionId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
                 var packagePath = Directory.CreateDirectory(Path.Combine(profileDirectory, "Extensions", extensionId, "1.0_0")).FullName;
                 File.WriteAllText(Path.Combine(packagePath, "manifest.json"),
@@ -275,12 +275,18 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     }
                 });
                 File.WriteAllText(preferencesPath, registeredPreferences);
+                var extensionStore = Directory.CreateDirectory(Path.Combine(profileDirectory, "Local Extension Settings", extensionId)).FullName;
+                var storedFiles = Directory.GetFiles(Path.Combine(fixtures, "TabManagerPlus", "storage", "table-and-wal"));
+                foreach (var file in storedFiles) File.Copy(file, Path.Combine(extensionStore, Path.GetFileName(file)));
                 const string extensionPassword = "Synthetic-extensions-key";
                 var extensionArchive = Path.Combine(root, "output", "extensions.bravebackup");
                 await BraveArchiveBackup.CreateAsync([new(app, [profile])], ["extensions"], extensionArchive,
                     extensionPassword, "balanced", [app.UserDataDirectory], "synthetic", _ => Task.FromResult(false),
                     progress: null, cancellationToken: default,
                     extensionOptions: new ExtensionBackupOptions { ObserveBrowserState = () => ProcessPresence.Stopped });
+                foreach (var file in Directory.GetFiles(extensionStore)) File.Delete(file);
+                var oldMarker = Path.Combine(extensionStore, "old.marker");
+                File.WriteAllText(oldMarker, "synthetic destination state");
                 restore.SourcePath = extensionArchive;
                 await WaitUntil(() => restore.NeedsUnlock && !restore.IsBusy, "Extensions archive inspection");
                 restore.Password = extensionPassword;
@@ -297,8 +303,31 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 Check(restoreView.GetVisualDescendants().OfType<SelectableTextBlock>().Any(text =>
                     text.IsVisible && text.Text?.Contains("Registered version 1.0 matches the archived package") == true),
                     "Restore displays registered extension compatibility");
-                Check(!restore.ConfirmRestoreCommand.CanExecute(null) && File.ReadAllText(preferencesPath) == registeredPreferences,
-                    "Extension assessment leaves registration unchanged and restoration unavailable");
+                Check(!restore.ConfirmRestoreCommand.CanExecute(null) && File.Exists(oldMarker),
+                    "Extension Recheck does not authorize the restore or modify the store");
+                var extensionCategory = restoreView.GetVisualDescendants().OfType<CheckBox>()
+                    .Single(box => Equals(box.Content, "Extensions"));
+                Check(extensionCategory.IsEffectivelyEnabled && extensionCategory.IsChecked != true,
+                    "Compatible Extensions restore starts unselected");
+                extensionCategory.IsChecked = true;
+                restore.Safety.Folder = Path.Combine(root, "output");
+                restore.Safety.Password = "Synthetic-safety-password";
+                restore.Safety.Confirmation = restore.Safety.Password;
+                await Task.Delay(100);
+                Click(window, "Review restore");
+                await WaitUntil(() => restore.Review is not null, "Extension restore review");
+                var extensionReview = restore.Review!;
+                Check(extensionReview.DestinationSummary.Contains(extensionStore) && File.Exists(oldMarker)
+                    && !File.Exists(extensionReview.SafetyPath), "Extension review shows the exact directory and leaves it unchanged");
+                await Task.Delay(100);
+                Click(window, "Confirm restore");
+                await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Confirmed Local store restore");
+                Check(restore.RestoreStatus == "Extension local storage restored." && !File.Exists(oldMarker)
+                    && storedFiles.All(file => File.ReadAllBytes(file).AsSpan()
+                        .SequenceEqual(File.ReadAllBytes(Path.Combine(extensionStore, Path.GetFileName(file))))),
+                    "Confirm restore installs the exact archived Local store contents");
+                Check(File.ReadAllText(preferencesPath) == registeredPreferences && File.Exists(extensionReview.SafetyPath),
+                    "Extension restore preserves registration and retains an encrypted safety artifact");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
