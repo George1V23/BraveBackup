@@ -181,6 +181,30 @@ public sealed class RestoreTransactionTests : IDisposable
         Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
     }
 
+    [Fact]
+    public void ChangedSourceBlocksResumeButStillAllowsExplicitRollback()
+    {
+        using var transaction = Create();
+        transaction.Prepare();
+        transaction.Progress = progress =>
+        {
+            if (progress.State == RestoreTransactionState.Running) transaction.RequestPause();
+        };
+        transaction.Run();
+        Assert.Equal(RestoreTransactionState.Paused, transaction.State);
+        Assert.Equal(1, _store.Writes);
+
+        _store.SourceUnavailable = true;
+        Assert.Throws<IOException>(() => transaction.Run());
+        Assert.Equal(RestoreTransactionState.Paused, transaction.State);
+        Assert.Equal(1, _store.Writes);
+
+        transaction.Rollback(true);
+        Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+        Assert.Equal("original", File.ReadAllText(_store.Paths.Values.First()));
+        Assert.False(File.Exists(_store.Paths.Values.Last()));
+    }
+
     public void Dispose() { foreach (var image in _images) image.Dispose(); _store.Dispose(); }
 
     // Synthetic file-only adapter: deliberately has no production destination/path or metadata guarantees.
@@ -193,7 +217,17 @@ public sealed class RestoreTransactionTests : IDisposable
         public Action? OnJournal; public bool DropWrite; public bool ThrowBeforeWrite;
         public int Writes; public bool Unsafe; public bool ThrowAfterWrite; public bool FailJournal; public string? Corrupt;
         public Store() => Directory.CreateDirectory(Root);
-        public void VerifyContext(CancellationToken token) { token.ThrowIfCancellationRequested(); if (Unsafe) throw new IOException("Synthetic unsafe context."); }
+        public bool SourceUnavailable;
+        public void VerifyContext(CancellationToken token)
+        {
+            VerifyRecoveryContext(token);
+            if (SourceUnavailable) throw new IOException("Synthetic source unavailable.");
+        }
+        public void VerifyRecoveryContext(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (Unsafe) throw new IOException("Synthetic unsafe context.");
+        }
         public RestoreFileImage ReadTarget(Guid id, CancellationToken token)
         { token.ThrowIfCancellationRequested(); return File.Exists(Paths[id]) ? new(true, File.ReadAllBytes(Paths[id])) : new(false, []); }
         public void WriteTargetAtomic(Guid id, RestoreFileImage image)

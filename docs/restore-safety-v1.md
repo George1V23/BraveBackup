@@ -553,3 +553,16 @@ This extra read narrows the interval in which the target can change. The store s
 needs to enforce target identity and conflict checks at its own publication boundary.
 Native browser observation now uses the current context verification's cancellation
 token, including during resumption, instead of retaining the token from capture.
+
+## Rollback when the source archive is unavailable
+
+The original source is required for prepare, apply and resume. Rollback uses the verified
+encrypted safety snapshot and rechecks target paths and browser state through a separate
+recovery context. The coordinator uses this check before rollback begins, before inspecting
+each affected file and after recording recovery intent. A store keeps its existing full
+context check by default. An adapter can opt into source-independent rollback by calling
+`BraveRestoreContext.VerifyRecovery` while retaining its target identity and artifact checks.
+
+Tests exercise resume blocked by an unavailable source, explicit rollback of changes made
+before the pause, and recovery checks with the source deleted, the browser running or
+unverifiable, and the target directory missing. Production restore remains disabled.

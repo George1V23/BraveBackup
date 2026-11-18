@@ -14,6 +14,8 @@ public sealed record RestoreTransactionProgress(RestoreTransactionState State, G
 public interface IRestoreTransactionStore
 {
     void VerifyContext(CancellationToken token);
+    /// <summary>Verifies rollback prerequisites. Stores may omit source-archive checks while retaining target and browser safety checks.</summary>
+    void VerifyRecoveryContext(CancellationToken token) => VerifyContext(token);
     RestoreFileImage ReadTarget(Guid mutationId, CancellationToken token);
     void WriteTargetAtomic(Guid mutationId, RestoreFileImage image);
     void SaveSafety(ReadOnlyMemory<byte> encryptedBytes);
@@ -209,7 +211,7 @@ public sealed class RestoreTransaction : IDisposable
             if (_disposed || _snapshot is null || State is not (RestoreTransactionState.Paused or RestoreTransactionState.Failed or RestoreTransactionState.Completed or RestoreTransactionState.RecoveryIncomplete))
                 throw new InvalidOperationException("Rollback cannot run in this state.");
             State = RestoreTransactionState.RollingBack;
-            try { VerifySafety(); _store.VerifyContext(CancellationToken.None); Journal(); }
+            try { VerifySafety(); _store.VerifyRecoveryContext(CancellationToken.None); Journal(); }
             catch { State = RestoreTransactionState.RecoveryIncomplete; TryJournal(); throw; }
             var failed = false;
             for (var index = _mutations.Length - 1; index >= 0; index--)
@@ -218,14 +220,14 @@ public sealed class RestoreTransaction : IDisposable
                 var mutation = _mutations[index]; var original = _snapshot.Entries[index].Original;
                 try
                 {
-                    _store.VerifyContext(CancellationToken.None);
+                    _store.VerifyRecoveryContext(CancellationToken.None);
                     using var current = _store.ReadTarget(mutation.Id, CancellationToken.None);
                     if (!Same(current, original))
                     {
                         if (!Same(current, mutation.Replacement)) throw new IOException("Rollback target conflict.");
                         // Recovery intent is already represented by the persisted touched entry and RollingBack state.
                         Journal();
-                        _store.VerifyContext(CancellationToken.None);
+                        _store.VerifyRecoveryContext(CancellationToken.None);
                         using (var afterJournal = _store.ReadTarget(mutation.Id, CancellationToken.None))
                             if (!Same(afterJournal, current))
                                 throw new IOException("Rollback target changed while recording recovery intent.");

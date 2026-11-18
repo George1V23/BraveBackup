@@ -27,7 +27,12 @@ public sealed class BraveRestoreContext
         context.Verify(token); return context;
     }
     /// <summary>Rejects observed source changes, duplicate/unsafe target paths and running or unknown browser state.</summary>
-    public void Verify(CancellationToken token = default)
+    public void Verify(CancellationToken token = default) => VerifyCore(checkSource: true, token);
+
+    /// <summary>Rechecks target paths and stopped-browser state for rollback using the operation's verified safety data.</summary>
+    public void VerifyRecovery(CancellationToken token = default) => VerifyCore(checkSource: false, token);
+
+    private void VerifyCore(bool checkSource, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Close Brave; restore browser state is running or cannot be verified.");
@@ -54,7 +59,7 @@ public sealed class BraveRestoreContext
             foreach (var identity in directories) identity.Verify();
         }
         finally { foreach (var identity in directories) identity.Dispose(); }
-        if (Fingerprint(_source, token) != _fingerprint) throw new IOException("The restore source archive changed.");
+        if (checkSource && Fingerprint(_source, token) != _fingerprint) throw new IOException("The restore source archive changed.");
         token.ThrowIfCancellationRequested();
         if (Observe(token) != ProcessPresence.Stopped) throw new IOException("Restore browser state changed or cannot be verified.");
     }
