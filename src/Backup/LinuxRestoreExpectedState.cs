@@ -1,6 +1,6 @@
 namespace BraveBackup.Core;
 
-/// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Does not publish target changes.</summary>
+/// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Retains the expected state through guarded publication.</summary>
 public sealed class LinuxRestoreExpectedState : IDisposable
 {
     private readonly string _directory;
@@ -19,6 +19,23 @@ public sealed class LinuxRestoreExpectedState : IDisposable
     /// <summary>Verifies the currently expected physical target identity and contents.</summary>
     public void VerifyCurrent(CancellationToken token = default)
     { ObjectDisposedException.ThrowIf(_disposed, this); _current.VerifyOriginal(token); }
+    /// <summary>Reads the verified expected image for the coordinator. The caller owns the returned copy.</summary>
+    public RestoreFileImage ReadCurrent(CancellationToken token = default)
+    {
+        VerifyCurrent(token);
+        return _current.CopyOriginal();
+    }
+
+    /// <summary>Publishes and adopts an explicitly authorized target image under the Linux directory guard.</summary>
+    /// <remarks>The coordinator must have verified the safety artifact and persisted write intent first.</remarks>
+    public void Publish(RestoreFileImage image, Action verifyContext)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(image);
+        ArgumentNullException.ThrowIfNull(verifyContext);
+        _current.Publish(image, verifyContext, () => AcceptPublished(image));
+    }
+
     /// <summary>After an explicit caller-controlled write, validates the exact expected image before retaining its new identity.</summary>
     /// <remarks>This observation is not write authorization or proof of who made the change; it must not be used to adopt arbitrary external edits.</remarks>
     public void AcceptPublished(RestoreFileImage expected, CancellationToken token = default)
@@ -27,6 +44,8 @@ public sealed class LinuxRestoreExpectedState : IDisposable
         var candidate = LinuxRestoreTargetLease.Capture(_directory, _name, token);
         try
         {
+            if (!_current.SharesDirectoryWith(candidate))
+                throw new IOException("Published target directory changed.");
             using var actual = candidate.CopyOriginal();
             if (actual.Exists != expected.Exists || !actual.Content.Bytes.Span.SequenceEqual(expected.Content.Bytes.Span) ||
                 !actual.Metadata.Bytes.Span.SequenceEqual(expected.Metadata.Bytes.Span))

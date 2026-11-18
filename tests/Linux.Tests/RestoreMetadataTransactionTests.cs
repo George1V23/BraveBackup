@@ -25,7 +25,9 @@ public sealed class RestoreMetadataTransactionTests
             var first = Guid.NewGuid(); var second = Guid.NewGuid(); var profile = Guid.NewGuid(); var installation = Guid.NewGuid();
             var absent = Path.Combine(root, "originally-absent");
             using var replacement = new RestoreFileImage(true, "synthetic-new"u8, originalMetadata);
-            var store = new Store(lease, new() { [first] = target, [second] = absent });
+            using var existingState = new LinuxRestoreExpectedState(root, Path.GetFileName(target));
+            using var missingState = new LinuxRestoreExpectedState(root, Path.GetFileName(absent));
+            var store = new Store(lease, new() { [first] = existingState, [second] = missingState });
             using var transaction = new RestoreTransaction([
                 new(first, installation, profile, "bookmarks", replacement),
                 new(second, installation, profile, "bookmarks", replacement)], store, "synthetic-password");
@@ -41,34 +43,14 @@ public sealed class RestoreMetadataTransactionTests
         finally { Directory.Delete(root, true); }
     }
 
-    // Test-only adapter: path races, directory metadata and production permission policy are intentionally not implemented.
-    private sealed class Store(RestoreArtifactLease artifacts, Dictionary<Guid, string> paths) : IRestoreTransactionStore
+    // Fixture-only mapping. Application wiring still needs to authorize profile destinations and check Brave state.
+    private sealed class Store(RestoreArtifactLease artifacts, Dictionary<Guid, LinuxRestoreExpectedState> targets)
+        : IRestoreTransactionStore
     {
         public void VerifyContext(CancellationToken token) { token.ThrowIfCancellationRequested(); artifacts.Verify(); }
-        public RestoreFileImage ReadTarget(Guid id, CancellationToken token)
-        {
-            token.ThrowIfCancellationRequested();
-            if (!File.Exists(paths[id])) return new(false, []);
-            using var file = File.OpenRead(paths[id]);
-            var metadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle);
-            using var bytes = new MemoryStream(); file.CopyTo(bytes);
-            return new(true, bytes.ToArray(), metadata);
-        }
-        public void WriteTargetAtomic(Guid id, RestoreFileImage image)
-        {
-            if (!image.Exists) { File.Delete(paths[id]); return; }
-            var temp = paths[id] + ".tmp";
-            try
-            {
-                using (var file = BackupFileOperations.CreatePrivateFile(temp))
-                {
-                    file.Write(image.Content.Bytes.Span); file.Flush(true);
-                    LinuxRecoveryMetadata.Apply(file.SafeFileHandle, image.Metadata.Bytes.Span); file.Flush(true);
-                }
-                File.Move(temp, paths[id], true);
-            }
-            finally { if (File.Exists(temp)) File.Delete(temp); }
-        }
+        public RestoreFileImage ReadTarget(Guid id, CancellationToken token) => targets[id].ReadCurrent(token);
+        public void WriteTargetAtomic(Guid id, RestoreFileImage image) =>
+            targets[id].Publish(image, () => VerifyContext(CancellationToken.None));
         public void SaveSafety(ReadOnlyMemory<byte> bytes) => artifacts.SaveSafety(bytes);
         public byte[] ReadSafety() => artifacts.ReadSafety();
         public void SaveJournal(ReadOnlyMemory<byte> bytes) => artifacts.SaveJournal(bytes);

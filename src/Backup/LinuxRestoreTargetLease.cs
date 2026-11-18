@@ -2,7 +2,7 @@ using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
 
-/// <summary>Retains original Linux file/directory identity across a recovery operation. No target publication is implemented.</summary>
+/// <summary>Retains original Linux file/directory identity across a recovery operation. Mutation uses an exclusive directory lock and revalidates the retained state.</summary>
 public sealed class LinuxRestoreTargetLease : IDisposable
 {
     private readonly RecoveryDirectoryIdentity _directory;
@@ -46,6 +46,40 @@ public sealed class LinuxRestoreTargetLease : IDisposable
         if (_file is not null) _directory.VerifyChildIdentity(_name, _file.SafeFileHandle);
         _directory.Verify();
     }
+    /// <summary>Publishes a new state under the directory lock with a final caller-owned context check.</summary>
+    internal void Publish(RestoreFileImage image, Action verifyContext, Action adoptPublication)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        using var writer = RecoveryDirectoryIdentity.Open(_directoryPath);
+        writer.AcquireExclusive();
+        if (!writer.RefersToSameDirectory(_directory)) throw new IOException("Restore target directory changed.");
+
+        void VerifyBeforeWrite()
+        {
+            verifyContext();
+            VerifyOriginal();
+        }
+
+        VerifyBeforeWrite();
+        if (_file is null)
+        {
+            if (image.Exists)
+                writer.PublishNewRecoveryFile(_name, image.Content.Bytes, image.Metadata.Bytes, VerifyBeforeWrite);
+        }
+        else if (image.Exists)
+        {
+            writer.ReplaceRecoveryFile(_name, _file.SafeFileHandle, image.Content.Bytes, image.Metadata.Bytes, VerifyBeforeWrite);
+        }
+        else
+        {
+            writer.DeleteRecoveryFile(_name, _file.SafeFileHandle, VerifyBeforeWrite);
+        }
+        adoptPublication();
+    }
+
+    /// <summary>Ensures both checkpoints belong to the same retained destination directory.</summary>
+    internal bool SharesDirectoryWith(LinuxRestoreTargetLease other) => _directory.RefersToSameDirectory(other._directory);
+
     /// <summary>Releases native handles and original buffers without modifying targets or safety artifacts.</summary>
     public void Dispose()
     {

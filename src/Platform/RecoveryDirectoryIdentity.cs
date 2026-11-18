@@ -116,9 +116,54 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
     }
     /// <summary>Publishes a new recovery file with verified metadata; never replaces an existing child.</summary>
     /// <remarks>Callers must authorize the target and enforce closed-browser state. Existing-target recovery is not implemented here.</remarks>
-    public void PublishNewRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata)
+    public void PublishNewRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata) =>
+        PublishRecoveryFile(name, content, metadata, expectedTarget: null, verifyTarget: null);
+
+    /// <summary>Publishes a new child without clobbering an existing entry and verifies context after staging.</summary>
+    public void PublishNewRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata, Action verifyTarget)
+    {
+        ArgumentNullException.ThrowIfNull(verifyTarget);
+        RequireExclusive();
+        PublishRecoveryFile(name, content, metadata, expectedTarget: null, verifyTarget);
+    }
+
+    /// <summary>Stages a replacement, then checks the retained target and caller's precondition before renaming.</summary>
+    /// <remarks>Requires the directory lock. Callers must prevent concurrent writers that ignore the advisory lock.</remarks>
+    public void ReplaceRecoveryFile(string name, SafeFileHandle expectedTarget, ReadOnlyMemory<byte> content,
+        ReadOnlyMemory<byte> metadata, Action verifyTarget)
+    {
+        ArgumentNullException.ThrowIfNull(expectedTarget);
+        ArgumentNullException.ThrowIfNull(verifyTarget);
+        RequireExclusive();
+        PublishRecoveryFile(name, content, metadata, expectedTarget, verifyTarget);
+    }
+
+    /// <summary>Removes the expected single-link file after rechecking the caller's precondition and retained identity.</summary>
+    /// <remarks>Requires the directory lock. A writer that ignores the lock can still race the final unlink.</remarks>
+    public void DeleteRecoveryFile(string name, SafeFileHandle expectedTarget, Action verifyTarget)
+    {
+        ArgumentNullException.ThrowIfNull(expectedTarget);
+        ArgumentNullException.ThrowIfNull(verifyTarget);
+        RequireExclusive();
+        VerifyChildIdentity(name, expectedTarget);
+        verifyTarget();
+        VerifyChildIdentity(name, expectedTarget);
+        if (UnlinkAt(_handle, name, 0) != 0) throw new IOException("Cannot remove the restore target.");
+        Verify();
+    }
+
+    private void RequireExclusive()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_exclusive) throw new InvalidOperationException("Recovery replacement or deletion requires exclusive directory ownership.");
+    }
+
+    private void PublishRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata,
+        SafeFileHandle? expectedTarget, Action? verifyTarget)
     {
         Verify(); CheckName(name);
+        if (content.Length > 64 * 1024 * 1024) throw new IOException("Recovery file exceeds the supported size.");
+        if (expectedTarget is not null) VerifyChildIdentity(name, expectedTarget);
         var staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
         var descriptor = OpenAt(_handle, staging, 2 | 0x40 | 0x80 | 0x20000 | 0x80000, 0x180);
         if (descriptor < 0) throw new IOException("Cannot create private recovery staging.");
@@ -142,9 +187,13 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
                 }
             }
             finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
+            verifyTarget?.Invoke();
             Verify();
             if (!MatchesChild(staging, output.SafeFileHandle)) throw new IOException("Recovery staging identity changed.");
-            if (RenameAt(_handle, staging, _handle, name, 1) != 0) throw new IOException("Recovery destination already exists or cannot be published.");
+            if (expectedTarget is not null && !MatchesChild(name, expectedTarget))
+                throw new IOException("Recovery target identity changed before publication.");
+            if (RenameAt(_handle, staging, _handle, name, expectedTarget is null ? 1u : 0u) != 0)
+                throw new IOException("Recovery destination cannot be published.");
             if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
             Verify();
         }

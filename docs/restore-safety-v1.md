@@ -566,3 +566,24 @@ context check by default. An adapter can opt into source-independent rollback by
 Tests exercise resume blocked by an unavailable source, explicit rollback of changes made
 before the pause, and recovery checks with the source deleted, the browser running or
 unverifiable, and the target directory missing. Production restore remains disabled.
+
+## Guarded Linux target publication
+
+The Linux target checkpoint now exposes a guarded write path. It locks the retained
+destination directory for publication and readback. Before the final filesystem
+operation it rechecks the caller's restore context and the expected content, metadata,
+and file identity. Replacements are staged and verified before rename. Creation uses
+a no-clobber rename. A rollback to original absence unlinks only after checking the
+retained single-link file. Successful publication takes a new expected checkpoint and
+keeps the original safety image.
+
+The synthetic transaction test now exercises this path with the real encrypted artifact
+lease. It verifies replacement, creation, rollback of original contents and metadata, and
+deletion of a file created by the restore. Two tests inject external edits during the final
+context check and verify that replacement and deletion both preserve the conflicting file.
+
+Directory locking serializes cooperating callers. There is still a check-to-write window
+for a same-user process that ignores the lock. Recovery must report failures that occur
+after publication as unresolved when the new target cannot be verified. The test harness
+supplies the mapping and context callback. Application-level authorization, lifecycle and
+Windows target publication still need integration before this path is used on profiles.

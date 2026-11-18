@@ -25,4 +25,34 @@ public sealed class LinuxRestoreExpectedStateTests
         }
         finally { Directory.Delete(root, true); }
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MutationPreservesExternalEditMadeByFinalContextCheck(bool delete)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var root = Path.Combine(Path.GetTempPath(), "RecoveryPublication_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "target");
+            File.WriteAllText(path, "original");
+            using var state = new LinuxRestoreExpectedState(root, "target");
+            using var baseline = state.CopyOriginal();
+            using var next = delete ? new RestoreFileImage(false, []) :
+                new RestoreFileImage(true, "replacement"u8, baseline.Metadata.Bytes.Span);
+            var checks = 0;
+            Assert.Throws<IOException>(() => state.Publish(next, () =>
+            {
+                if (++checks == 2) File.WriteAllText(path, "external");
+            }));
+
+            Assert.Equal(2, checks);
+            Assert.Equal("external", File.ReadAllText(path));
+            Assert.Single(Directory.GetFiles(root));
+            using var original = state.CopyOriginal();
+            Assert.Equal(baseline.Content.Bytes.ToArray(), original.Content.Bytes.ToArray());
+        }
+        finally { Directory.Delete(root, true); }
+    }
 }
