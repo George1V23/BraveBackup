@@ -1,0 +1,2 @@
+# Test vectors compare exact bytes (including CRLF); never normalize line endings.
+tests/Core.Tests/Fixtures/Passwords/Passwords.synthetic.*.csv -text
