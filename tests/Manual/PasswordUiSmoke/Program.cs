@@ -190,7 +190,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "safety password mismatch is visible");
                 restore.Safety.Confirmation = restore.Safety.Password;
                 await Task.Delay(100);
-                Check(restore.Safety.Validation.Contains("not enabled"), "safety settings do not enable restoration");
+                Check(restore.Safety.IsValid, "valid safety settings alone do not start a restore");
                 restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(200);
                 using (var safetyBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 {
@@ -219,6 +219,51 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 Click(dialog, "Preserve raw files"); await raw;
                 Check(shell.BackupSucceeded, "real raw-preservation approval creates encrypted archive");
                 using (var input = File.OpenRead(shell.Options.BackupPath)) Check(BackupArchive.Validate(input, "Synthetic-archive-key-4827").FormatVersion == 7, "raw archive validates as v7");
+                // Bookmarks-only restore through the real Restore page: review, confirm, checklist, rollback.
+                var sampleBytes = File.ReadAllBytes(Path.Combine(profileDirectory, "Bookmarks"));
+                shell.SelectedTabIndex = ShellViewModel.BackupTabIndex; shell.Installations[0].Profiles[0].IsSelected = true;
+                foreach (var category in shell.Options.Categories) category.IsSelected = category.Id == "bookmarks";
+                shell.Options.EncryptBackup = false; shell.Options.BackupPath = Path.Combine(root, "output", "bookmarks.bravebackup");
+                await shell.CreateBackupAsync(); Check(shell.BackupSucceeded, "bookmarks-only archive created for the restore smoke");
+                File.WriteAllText(Path.Combine(profileDirectory, "Bookmarks"), "{\"roots\":{},\"version\":1,\"edited\":true}");
+                var editedBytes = File.ReadAllBytes(Path.Combine(profileDirectory, "Bookmarks"));
+                shell.SelectedTabIndex = ShellViewModel.RestoreTabIndex;
+                var execution = restore.Execution;
+                execution.CreateSession = (archive, pw, items, folder, safety, token) => BraveBookmarksRestoreSession.Create(archive, pw, items, folder, safety, () => ProcessPresence.Stopped, token);
+                restore.SourcePath = shell.Options.BackupPath;
+                for (var wait = 0; wait < 200 && !restore.Planning.HasSource; wait++) await Task.Delay(50);
+                Check(restore.Planning.HasSource, "bookmarks archive validated on the Restore page");
+                var row = restore.Planning.Groups.Single().Profiles.Single();
+                Check(row.Categories.Single().IsSupported && !row.Categories.Single().IsSelected, "bookmarks category is enabled but starts unselected");
+                var reviewButton = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Review restore"));
+                Check(!reviewButton.IsEffectivelyEnabled, "Review restore starts disabled");
+                row.IsSelected = true; row.SelectedInstallation = row.TargetInstallations[0]; row.SelectedProfile = row.TargetProfiles[0]; row.SelectAllSupportedCommand.Execute(null);
+                restore.Planning.ObserveBrowserState = _ => ProcessPresence.Stopped; await restore.Planning.RecheckAsync();
+                restore.Safety.Folder = Path.Combine(root, "output"); restore.Safety.Password = "Synthetic-safety-password"; restore.Safety.Confirmation = restore.Safety.Password;
+                await Task.Delay(150); Check(reviewButton.IsEffectivelyEnabled, "Review restore enables once every prerequisite is met");
+                Click(window, "Review restore");
+                for (var wait = 0; wait < 400 && execution.Phase != RestorePhase.Reviewing; wait++) await Task.Delay(50);
+                Check(execution.Phase == RestorePhase.Reviewing && File.ReadAllBytes(Path.Combine(profileDirectory, "Bookmarks")).AsSpan().SequenceEqual(editedBytes), "Review shows the plan and writes nothing");
+                Check(window.GetVisualDescendants().OfType<SelectableTextBlock>().Any(t => t.Text?.Contains("REPLACES") == true), "review text is displayed");
+                restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(250);
+                using (var reviewBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
+                { reviewBitmap.Render(window); reviewBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-execution-review.png"), PngBitmapEncoderOptions.Default); }
+                Click(window, "Confirm restore");
+                for (var wait = 0; wait < 600 && execution.Phase != RestorePhase.Completed; wait++) await Task.Delay(50);
+                Check(execution.Phase == RestorePhase.Completed, "confirmed restore completes");
+                Check(File.ReadAllBytes(Path.Combine(profileDirectory, "Bookmarks")).AsSpan().SequenceEqual(sampleBytes), "restore writes the exact backed-up bookmarks");
+                await Task.Delay(200);
+                Check(window.GetVisualDescendants().OfType<CheckBox>().Any(c => c.IsChecked == true && c.Content?.ToString()?.Contains("Bookmarks") == true), "checklist shows the restored component as checked");
+                Check(window.GetVisualDescendants().OfType<ProgressBar>().Any(b => b.IsVisible && b.Value == 100), "progress bar reaches 100 percent");
+                restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(250);
+                using (var doneBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
+                { doneBitmap.Render(window); doneBitmap.Save(Path.Combine(repo, "docs", "screenshots", "restore-execution-completed.png"), PngBitmapEncoderOptions.Default); }
+                Click(window, "Roll back this restore…"); await Task.Delay(100); Click(window, "Roll back");
+                for (var wait = 0; wait < 600 && execution.Phase != RestorePhase.RolledBack; wait++) await Task.Delay(50);
+                Check(execution.Phase == RestorePhase.RolledBack && File.ReadAllBytes(Path.Combine(profileDirectory, "Bookmarks")).AsSpan().SequenceEqual(editedBytes), "rollback restores the exact pre-restore bookmarks");
+                Check(Directory.GetFiles(Path.Combine(root, "output"), "*.safety.encrypted").Length == 1, "encrypted safety backup is retained");
+                Click(window, "Done"); await Task.Delay(100);
+                Check(execution.Phase == RestorePhase.Idle && restore.Safety.Password.Length == 0, "Done clears the operation and safety secrets");
                 Console.WriteLine("SCREENSHOT " + screenshot);
                 desktop.Shutdown();
             }

@@ -54,8 +54,11 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <views:RestorePlanningView DataContext="{Binding Planning}" />
-            <views:RestoreSafetyOptionsView DataContext="{Binding Safety}" />
+            <StackPanel Spacing="12" IsEnabled="{Binding Execution.IsIdle}">
+                <views:RestorePlanningView DataContext="{Binding Planning}" />
+                <views:RestoreSafetyOptionsView DataContext="{Binding Safety}" />
+            </StackPanel>
+            <views:RestoreExecutionView DataContext="{Binding Execution}" />
         </StackPanel>
     </ScrollViewer>
 </UserControl>

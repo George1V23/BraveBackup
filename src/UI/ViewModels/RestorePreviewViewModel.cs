@@ -24,10 +24,13 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _inspection;
     private long _generation;
     private bool _disposed;
+    private string? _unlockedPassword;
     /// <summary>Native local-open picker supplied by the window; choosing does not write files.</summary>
     public Func<Task<string?>>? PickSource { get; set; }
     /// <summary>Independent read-only source/target plan; no execution capability is exposed.</summary>
     public RestorePlanningViewModel Planning { get; } = new();
+    /// <summary>Review, progress, pause/rollback/resume and report for the supported restore categories.</summary>
+    public RestoreExecutionViewModel Execution { get; }
     /// <summary>Independent safety password, never reused from archive unlock.</summary>
     public RestoreSafetyOptionsViewModel Safety { get; } = new();
     public ObservableCollection<RestoreInstallationPreview> Installations { get; } = [];
@@ -40,14 +43,17 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
 
     /// <summary>Creates an inspection-only model; an injected reader allows deterministic cancellation/race tests.</summary>
     public RestorePreviewViewModel(Func<string, string?, CancellationToken, BraveArchiveInspectionResult>? inspect = null)
-        => _inspect = inspect ?? BraveArchiveInspection.Read;
+    {
+        _inspect = inspect ?? BraveArchiveInspection.Read;
+        Execution = new(Planning, Safety, () => _unlockedPassword, () => _unlockedPassword = null);
+    }
 
     /// <summary>Resolved display path; invalid input is left visible for correction without file access.</summary>
     public string FullSourcePath
     {
         get { try { return string.IsNullOrWhiteSpace(SourcePath) ? string.Empty : Path.GetFullPath(SourcePath); } catch { return SourcePath; } }
     }
-    partial void OnSourcePathChanged(string value) { OnPropertyChanged(nameof(FullSourcePath)); Password = string.Empty; _ = InspectAsync(false); }
+    partial void OnSourcePathChanged(string value) { if (Execution.IsOperationOpen) return; OnPropertyChanged(nameof(FullSourcePath)); Password = string.Empty; _ = InspectAsync(false); }
     partial void OnPasswordChanged(string value) => UnlockCommand.NotifyCanExecuteChanged();
     partial void OnNeedsUnlockChanged(bool value) => UnlockCommand.NotifyCanExecuteChanged();
     partial void OnIsBusyChanged(bool value) => UnlockCommand.NotifyCanExecuteChanged();
@@ -85,6 +91,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         var generation = ++_generation;
         var source = SourcePath;
         var secret = unlock ? Password : null;
+        if (Execution.IsOperationOpen) return;
+        _unlockedPassword = null;
         Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false;
         if (string.IsNullOrWhiteSpace(source)) { IsBusy = false; Status = "Choose a backup to inspect. No browser files will be changed."; return; }
         using var cancellation = new CancellationTokenSource();
@@ -100,6 +108,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories.Select(Category).ToArray())).ToArray()));
+            _unlockedPassword = secret;
             Planning.Load(manifest, result.SourcePath);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
             NeedsUnlock = false;
@@ -132,10 +141,12 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     /// <summary>Cancels pending inspection and clears preview/password state when leaving Restore.</summary>
     public void Leave()
     {
+        // An open operation (running, paused or showing results) owns this page's state until it is dismissed.
+        if (Execution.IsOperationOpen) return;
         ++_generation; _inspection?.Cancel(); _inspection = null;
-        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false; IsBusy = false;
+        Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); _unlockedPassword = null; NeedsUnlock = false; IsBusy = false;
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; Execution.Dispose(); Leave(); _disposed = true; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
 }

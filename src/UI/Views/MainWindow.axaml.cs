@@ -30,11 +30,21 @@ public partial class MainWindow : Window
         };
         ((ShellViewModel)DataContext).RestorePreview.PickSource = PickRestoreSourceAsync;
         ((ShellViewModel)DataContext).RestorePreview.Safety.PickFolder = PickRestoreSafetyFolderAsync;
+        ((ShellViewModel)DataContext).RestorePreview.Execution.PickReportFile = PickRestoreReportAsync;
+        Closing += (_, e) => { if (!((ShellViewModel)DataContext!).RestorePreview.Execution.TryClose()) e.Cancel = true; };
         var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
         csv.PickDestination = PickPasswordCsvPathAsync;
         csv.ConfirmPlaintextSave = ConfirmPasswordCsvSaveAsync;
         Opened += OnOpened;
         Closed += OnClosed;
+    }
+
+    /// <summary>Chooses a new restore-report file; the picker never overwrites silently and the view model refuses existing files.</summary>
+    private async Task<string?> PickRestoreReportAsync()
+    {
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        { Title = "Save restore report", SuggestedFileName = "restore-report.txt", DefaultExtension = "txt" });
+        return file?.TryGetLocalPath();
     }
 
     /// <summary>Selects a safety-backup folder without creating any artifact.</summary>

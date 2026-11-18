@@ -1,6 +1,6 @@
-# DRAFT: Restore execution controls (for your review)
+# Restore execution controls (decisions applied, implemented)
 
-Status: **proposal, nothing implemented.** Items 1–9 and 15 of the [accepted controls](restore-ui-review.md) already
+Status: **implemented on the `restore-transaction-integration` branch; see [Implemented](#implemented) below.** The text that follows is the original proposal. Items 1–9 and 15 of the [accepted controls](restore-ui-review.md) already
 exist (file/unlock/preview, source and category selection, destination mapping, safety folder and
 passwords). This draft covers the remaining accepted behavior, items 10–14, and what changes in the existing
 controls once the bookmarks writer ([restore-bookmarks.md](restore-bookmarks.md)) exists. It adds **no
@@ -146,3 +146,36 @@ Passwords (safety and source) are cleared on Completed, RolledBack, Failed, and 
 3. View-model tests with synthetic archives (confirm, cancel at each stage, pause/resume, rollback, failure, password
    clearing) and a native Avalonia smoke run with screenshots, as done for the safety settings.
 4. Documentation updates and a full regression run.
+
+## Implemented
+
+Your decisions: the six recommendations were accepted, except decision 5 (progress), which you changed to a
+**checklist of finished components above an approximate progress bar**. Implemented as:
+
+- `RestoreExecutionViewModel` and `RestoreExecutionView` with the Review → Confirm → progress → pause/rollback/resume
+  → report flow and the state machine above. Review creates the session and writes nothing; only **Confirm restore**
+  starts the engine. Planning and safety cards are disabled while an operation is open.
+- Checklist: one checkbox per installation › profile › Bookmarks, ticked when that file is restored (or recovered
+  while rolling back). Bar: indeterminate while the safety backup is prepared, then completed files plus half a
+  file for the one in flight; it stays visible at its final value after a result.
+- Decision 1: **Roll back this restore…** appears on a completed or failed result while the page is open and uses the
+  same prompt as after a pause. The session (and its in-memory safety password) is kept until **Done**, rollback
+  finishing, or the app closing, so completed restores can still be undone. Rolled-back sessions are released at once.
+- Decision 3: closing the window is blocked while preparing, running, pausing or rolling back (a notice explains why);
+  it is allowed while paused. Navigating to another tab keeps an open operation's state instead of resetting it.
+- Decision 4: bookmarks stay disabled on non-Linux hosts with the reason shown.
+- Decision 2: wording is "created if the profile has none" in review; the technical detail stays in docs.
+- Decision 6: not implemented separately. The existing Recheck still reports one line per mapped destination profile,
+  and review requires every one to be Closed. A per-installation status line is left for later.
+- **Archive password retention (needs your attention):** an encrypted source archive must be reopened to read the
+  snapshot, so its unlock password is now kept in memory (never displayed, saved or logged) from unlock until the
+  operation is dismissed, the file or page is changed (when idle), or the app closes. Previously it was cleared right
+  after unlock.
+
+Tests: 9 view-model tests drive the real engine on synthetic archives (plain and encrypted): prerequisites, review writes
+nothing, cancel review, confirm, checklist/progress, rollback after completion, pause with `Not now`, resume, paused
+rollback, resume refused while Brave runs, running browser at confirmation, review failure, report/folder actions, close
+blocking. The native Linux smoke runner passes the full flow on a real Avalonia window with screenshots:
+[review](screenshots/restore-execution-review.png), [completed](screenshots/restore-execution-completed.png).
+Full run: 1005 Core, 48 Brave, 52 Linux (4 skipped), 14 Windows-labelled (7 skipped). Not tested natively: pausing in the
+native window (covered in view-model tests), the real file pickers and **Open safety-backup folder** (`xdg-open`).

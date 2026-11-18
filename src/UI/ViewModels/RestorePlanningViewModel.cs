@@ -24,15 +24,35 @@ public sealed record RestoreTargetInstallation(BraveAppInfo Info, RestoreTargetP
 {
     public string Name => $"Brave {Info.Product} {Info.Channel} — {Info.Version}";
 }
-/// <summary>Archived category selection; no destination writers are enabled in the planning phase.</summary>
+/// <summary>Archived category selection. Only categories with a tested restore writer can be selected; today that is Linux bookmarks.</summary>
 public partial class RestoreCategoryChoice : ViewModelBase
 {
+    private readonly Action? _changed;
+    private bool _selected;
     public string Id { get; }
     public string Name { get; }
-    public bool IsSupported => false;
-    public string SupportReason => "Restore writer and compatibility checks are not enabled yet. Included data can be inspected only.";
-    public bool IsSelected { get => false; set { } }
-    public RestoreCategoryChoice(ArchiveCategory category) { Id = category.Id; Name = category.Id + " (v" + category.Version + ")"; }
+    public bool IsSupported { get; }
+    public string SupportReason { get; }
+    /// <summary>Selecting an unsupported category is ignored; selection never touches browser files.</summary>
+    public bool IsSelected
+    {
+        get => _selected;
+        set { value &= IsSupported; if (_selected == value) return; _selected = value; OnPropertyChanged(); _changed?.Invoke(); }
+    }
+    public RestoreCategoryChoice(ArchiveCategory category, Action? changed = null)
+    {
+        Id = category.Id; Name = category.Id + " (v" + category.Version + ")"; _changed = changed;
+        (IsSupported, SupportReason) = Evaluate(category);
+    }
+    private static (bool, string) Evaluate(ArchiveCategory category)
+    {
+        if (category.Id != "bookmarks") return (false, "Restore writer and compatibility checks are not enabled yet. Included data can be inspected only.");
+        if (!HostEnvironment.IsLinux) return (false, "Bookmarks restore is not validated on this platform yet.");
+        var file = category.Files.SingleOrDefault(f => f.Role == "native-source");
+        if (category.Version != 1 || file is null) return (false, "This backup has no restorable native bookmarks snapshot.");
+        if (file.Length > BraveBookmarksRestore.MaximumBytes) return (false, "The bookmarks snapshot exceeds the 64 MiB restore limit.");
+        return (true, "Replaces this profile's Bookmarks file with the backed-up one. Other data is unchanged.");
+    }
 }
 /// <summary>One archived source profile with independent selection and explicit destination mapping.</summary>
 public partial class RestoreProfileChoice : ViewModelBase
@@ -56,7 +76,7 @@ public partial class RestoreProfileChoice : ViewModelBase
     public RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets, Action changed)
     {
         SourceId = source.Id; Name = source.DisplayName + " (" + source.DirectoryName + ")";
-        Categories = source.Categories.Select(category => new RestoreCategoryChoice(category)).ToArray();
+        Categories = source.Categories.Select(category => new RestoreCategoryChoice(category, changed)).ToArray();
         TargetInstallations = targets; _changed = changed;
     }
     partial void OnIsSelectedChanged(bool value) => _changed();
@@ -68,11 +88,13 @@ public partial class RestoreProfileChoice : ViewModelBase
     {
         OnPropertyChanged(nameof(DestinationPath)); _changed();
     }
-    /// <summary>Leaves unsupported categories unselected; future writers must establish their capability before enabling them.</summary>
-    [RelayCommand] private void SelectAllSupported() { }
-    /// <summary>Clears category choices; all are already unselected while restore writers are disabled.</summary>
-    [RelayCommand] private void ClearCategories() { }
+    /// <summary>Selects every category that has a tested restore writer; unsupported categories stay unselected.</summary>
+    [RelayCommand] private void SelectAllSupported() { foreach (var category in Categories) category.IsSelected = category.IsSupported; }
+    /// <summary>Clears this profile's category choices.</summary>
+    [RelayCommand] private void ClearCategories() { foreach (var category in Categories) category.IsSelected = false; }
 }
+/// <summary>Frozen restore selection: archive profile identity, display labels and the exact destination metadata.</summary>
+public sealed record RestorePlannedItem(Guid SourceId, string SourceName, string InstallationName, string ProfileName, BraveAppInfo Installation, BraveProfileInfo Profile);
 /// <summary>Groups source profiles by archived installation, preserving archive-local identity.</summary>
 public sealed record RestoreSourceGroup(string Name, RestoreProfileChoice[] Profiles);
 
@@ -88,6 +110,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     public ObservableCollection<RestoreSourceGroup> Groups { get; } = [];
     public Func<BraveAppInfo, ProcessPresence>? ObserveBrowserState { get; set; }
     public bool HasSource => _manifest is not null;
+    /// <summary>Full path of the validated source archive, or empty when none is loaded.</summary>
+    public string SourcePath => _sourcePath;
     public string PlanSummary => string.Join("\n", Profiles.Where(p => p.IsSelected).Select(p =>
         p.Name + " → " + p.DestinationPath + "\n" + p.CheckResult));
     public string Availability
@@ -106,9 +130,23 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
                     return "Two source profiles cannot use the same destination. Choose different profiles.";
             }
             catch { return "A destination path is invalid."; }
-            return "Planning only. Category writers and the safety/rollback engine are not enabled; restoration is unavailable.";
+            if (!selected.Any(p => p.HasSupportedCategories))
+                return "Planning only. Category writers and the safety/rollback engine are not enabled; restoration is unavailable.";
+            if (selected.Any(p => !p.Categories.Any(c => c.IsSelected)))
+                return "Select at least one supported data category for every selected profile. Unsupported categories cannot be restored yet.";
+            if (IsChecking || selected.Any(p => !p.CheckResult.StartsWith("Closed", StringComparison.Ordinal)))
+                return "Use Recheck: every destination must be Closed before restoration can be reviewed.";
+            return ReadyText;
         }
     }
+    public const string ReadyText = "Ready. Choose the safety backup folder and password, then Review restore.";
+    /// <summary>True when selection, mapping, categories and the latest browser check allow a restore review.</summary>
+    public bool IsReadyForReview => Availability == ReadyText;
+    /// <summary>Freezes selected, supported, mapped bookmark restores for review; later UI changes do not alter the result.</summary>
+    public IReadOnlyList<RestorePlannedItem> FreezeSelection() => !IsReadyForReview ? [] :
+        Groups.SelectMany(group => group.Profiles.Where(p => p.IsSelected && p.Categories.Any(c => c.Id == "bookmarks" && c.IsSelected))
+            .Select(p => new RestorePlannedItem(p.SourceId, p.Name, p.SelectedInstallation!.Name, p.SelectedProfile!.Name,
+                p.SelectedInstallation.Info, p.SelectedProfile.Info))).ToArray();
     private IEnumerable<RestoreProfileChoice> Profiles => Groups.SelectMany(g => g.Profiles);
     private static StringComparer PathComparer => HostEnvironment.IsWindows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     [ObservableProperty] private bool _isChecking;
@@ -136,7 +174,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     }
     private void Notify()
     {
-        OnPropertyChanged(nameof(HasSource)); OnPropertyChanged(nameof(Availability)); OnPropertyChanged(nameof(PlanSummary));
+        OnPropertyChanged(nameof(HasSource)); OnPropertyChanged(nameof(Availability)); OnPropertyChanged(nameof(IsReadyForReview)); OnPropertyChanged(nameof(PlanSummary));
         RecheckCommand.NotifyCanExecuteChanged();
     }
     partial void OnIsCheckingChanged(bool value) => RecheckCommand.NotifyCanExecuteChanged();

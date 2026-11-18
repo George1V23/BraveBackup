@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:UI.ViewModels" x:Class="UI.Views.RestoreExecutionView" x:DataType="vm:RestoreExecutionViewModel">
+    <StackPanel Spacing="12">
+        <!-- Review restore: enabled only when selection, mapping, categories, browser check and safety settings are all valid. -->
+        <Border Classes="card" IsVisible="{Binding IsIdle}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Restore" Classes="section" />
+                <TextBlock Text="Review shows exactly what will be replaced. Nothing is written until you confirm." TextWrapping="Wrap" Classes="muted" />
+                <Button Content="Review restore" Command="{Binding ReviewCommand}" HorizontalAlignment="Left" />
+                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding HasMessage}" />
+            </StackPanel>
+        </Border>
+        <Border Classes="card" IsVisible="{Binding IsReviewing}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Confirm restore" Classes="section" />
+                <SelectableTextBlock Text="{Binding ReviewText}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Cancel" Command="{Binding CancelReviewCommand}" />
+                    <Button Content="Confirm restore" Command="{Binding ConfirmCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+        <!-- Progress, pause, rollback and result share one card: checklist above an approximate progress bar. -->
+        <Border Classes="card" IsVisible="{Binding IsOperationOpen}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="{Binding Title}" Classes="section" />
+                <ItemsControl ItemsSource="{Binding Checklist}" IsVisible="{Binding ShowChecklist}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RestoreChecklistItem">
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsDone}" IsHitTestVisible="False" Focusable="False" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding ShowProgress}" />
+                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding CloseNotice}" TextWrapping="Wrap" IsVisible="{Binding HasCloseNotice}" />
+                <Button Content="Cancel restore" Command="{Binding CancelRestoreCommand}" HorizontalAlignment="Left" IsVisible="{Binding CanRequestPause}" />
+                <StackPanel Spacing="8" IsVisible="{Binding RollbackPromptVisible}">
+                    <TextBlock Text="Roll back the changes made by this restore, using the verified safety backup?" TextWrapping="Wrap" FontWeight="SemiBold" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Roll back" Command="{Binding RollBackCommand}" />
+                        <Button Content="Not now" Command="{Binding NotNowCommand}" />
+                    </StackPanel>
+                </StackPanel>
+                <Button Content="Resume restoration" Command="{Binding ResumeCommand}" HorizontalAlignment="Left" IsVisible="{Binding IsPaused}" />
+                <Button Content="Roll back this restore…" Command="{Binding OfferRollbackCommand}" HorizontalAlignment="Left" IsVisible="{Binding CanOfferRollback}" />
+                <StackPanel Spacing="8" IsVisible="{Binding IsFinished}">
+                    <SelectableTextBlock Text="{Binding Report}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Open safety-backup folder" Command="{Binding OpenSafetyFolderCommand}" />
+                        <Button Content="Save detailed report…" Command="{Binding SaveReportCommand}" />
+                        <Button Content="Done" Command="{Binding DoneCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -12,7 +12,7 @@ public sealed class RestoreSafetyOptionsTests
             using var options = new RestoreSafetyOptionsViewModel(); options.Folder = root;
             Assert.Contains("separate", options.Validation); options.Password = "synthetic";
             Assert.Contains("do not match", options.Validation); options.Confirmation = options.Password;
-            Assert.Contains("not enabled", options.Validation); Assert.Empty(Directory.GetFiles(root));
+            Assert.True(options.IsValid); Assert.Equal(RestoreSafetyOptionsViewModel.ValidText, options.Validation); Assert.Empty(Directory.GetFiles(root));
             options.ClearSecrets(); Assert.Empty(options.Password); Assert.Empty(options.Confirmation); Assert.Equal(root, options.Folder);
             using var preview = new RestorePreviewViewModel(); preview.Safety.Password = "synthetic"; preview.Safety.Confirmation = "synthetic";
             preview.Leave(); Assert.Empty(preview.Safety.Password); Assert.Empty(preview.Safety.Confirmation);

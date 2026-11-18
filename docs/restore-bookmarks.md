@@ -2,7 +2,7 @@
 
 `BraveBookmarksRestoreSession` restores the **Bookmarks** category of selected archive profiles into
 explicitly mapped destination profiles through the Phase 3 safety engine. No user interface calls it
-yet, so restore remains unavailable to users.
+from the Restore page on Linux; see [execution controls](restore-execution-controls-draft.md).
 
 ## Research note: what is written
 
@@ -43,6 +43,5 @@ password/unknown profile rejection, and unsupported snapshot rejection. Full run
 
 ## Remaining for Phase 4
 
-UI connection (final review/confirmation, progress, pause/rollback/resume prompts, completion report,
-Open safety-backup folder) needs your control review first. Real-Brave verification of a restored profile and
-Windows native validation are still outstanding.
+Your review of the implemented controls, real-Brave verification of a restored profile and Windows native
+validation are still outstanding.

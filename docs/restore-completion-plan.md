@@ -3,7 +3,7 @@
 Status: sequence approved by the user. Phase 1 is implemented for review; see
 [read-only inspection and validation](restore-phase1-preview.md). Phase 2 is now implemented
 for review: [source selection, mapping and preflight](restore-phase2-planning.md).
-Phase 4 is implemented at library level: [bookmarks restore](restore-bookmarks.md). Phase 3 is in progress: [safety/journal contracts and synthetic transaction tests](restore-safety-v1.md).
+Phase 4 is implemented with its UI: [bookmarks restore](restore-bookmarks.md) and [execution controls](restore-execution-controls-draft.md), pending your review. Phase 3 is in progress: [safety/journal contracts and synthetic transaction tests](restore-safety-v1.md).
 Production storage/recovery integration and later phases remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
