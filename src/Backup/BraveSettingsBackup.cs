@@ -65,15 +65,7 @@ public static class BraveSettingsBackup
     /// <summary>Extracts stored values only; absence is recorded without guessing defaults or effective policy.</summary>
     public static byte[] Extract(ReadOnlyMemory<byte> snapshot, CancellationToken token = default)
     {
-        token.ThrowIfCancellationRequested();
-        if (snapshot.Length > ArchiveLimits.MaxPreferencesBytes)
-            throw new BackupOperationException("settings-source-size",
-                "Preferences exceeds the 32 MiB settings capture limit.");
-        if (snapshot.Span.StartsWith(new byte[] { 0xEF, 0xBB, 0xBF })) snapshot = snapshot[3..];
-        using var document = JsonDocument.Parse(snapshot);
-        if (document.RootElement.ValueKind != JsonValueKind.Object)
-            throw new BackupOperationException("settings-source-invalid", "Preferences must contain a JSON object.");
-        RejectDuplicates(document.RootElement, token);
+        using var document = ParsePreferences(snapshot, token);
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         var absent = new List<string>();
         foreach (var rule in Rules)
@@ -144,7 +136,7 @@ public static class BraveSettingsBackup
             {
                 using var input = zip.GetEntry(descriptor.Path)!.Open();
                 input.ReadExactly(bytes);
-                ValidatePayload(bytes);
+                ParsePayload(bytes, token);
             }
             finally
             {
@@ -156,12 +148,17 @@ public static class BraveSettingsBackup
     }
 
     /// <summary>Validates the exact approved key union/types and returns the number of stored settings values.</summary>
-    public static int ValidatePayload(ReadOnlyMemory<byte> payload)
+    public static int ValidatePayload(ReadOnlyMemory<byte> payload) =>
+        ParsePayload(payload, CancellationToken.None).Values.Count;
+
+    /// <summary>Reads the validated portable Settings values for backup verification or confirmed restore.</summary>
+    internal static PortableSettings ParsePayload(ReadOnlyMemory<byte> payload, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         if (payload.Length > ArchiveLimits.MaxSettingsBytes)
             throw new InvalidDataException("Settings payload exceeds 1 MiB.");
         using var document = JsonDocument.Parse(payload);
-        RejectDuplicates(document.RootElement, CancellationToken.None);
+        RejectDuplicates(document.RootElement, token);
         var settings = PortableSettings.Parse(document.RootElement);
         var all = settings.Values.Keys.Concat(settings.AbsentKeys).ToHashSet(StringComparer.Ordinal);
         if (!all.SetEquals(Rules.Select(rule => rule.Path)))
@@ -169,10 +166,33 @@ public static class BraveSettingsBackup
         foreach (var rule in Rules)
             if (settings.Values.TryGetValue(rule.Path, out var value))
                 CheckValue(rule.Kind, value);
-        return settings.Values.Count;
+        return settings;
     }
 
-    private static JsonElement? Find(JsonElement root, string path)
+    /// <summary>Reads a bounded native preferences dictionary and rejects ambiguous key names.</summary>
+    internal static JsonDocument ParsePreferences(ReadOnlyMemory<byte> snapshot, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (snapshot.Length > ArchiveLimits.MaxPreferencesBytes)
+            throw new BackupOperationException("settings-source-size", "Preferences exceeds the 32 MiB settings limit.");
+        if (snapshot.Span.StartsWith("\uFEFF"u8)) snapshot = snapshot[3..];
+        var document = JsonDocument.Parse(snapshot);
+        try
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new BackupOperationException("settings-source-invalid", "Preferences must contain a JSON object.");
+            RejectDuplicates(document.RootElement, token);
+            return document;
+        }
+        catch
+        {
+            document.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Looks up a dotted path as exact-case nested dictionary keys.</summary>
+    internal static JsonElement? Find(JsonElement root, string path)
     {
         var current = root;
         foreach (var part in path.Split('.'))
@@ -189,7 +209,14 @@ public static class BraveSettingsBackup
 
     private static void CheckValue(JsonValueKind kind, JsonElement value)
     {
-        var valid = kind switch
+        if (!IsValidValue(kind, value))
+            throw new BackupOperationException("settings-value-invalid",
+                "A supported setting has an invalid type or exceeds its value limit.");
+    }
+
+    /// <summary>Checks whether a value fits the approved primitive kind and size limits.</summary>
+    internal static bool IsValidValue(JsonValueKind kind, JsonElement value) =>
+        kind switch
         {
             JsonValueKind.True => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
             JsonValueKind.Number => value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out _),
@@ -199,10 +226,6 @@ public static class BraveSettingsBackup
                                        item.ValueKind == JsonValueKind.String && item.GetString()!.Length <= 32768),
             _ => false
         };
-        if (!valid)
-            throw new BackupOperationException("settings-value-invalid",
-                "A supported setting has an invalid type or exceeds its value limit.");
-    }
 
     private static void RejectDuplicates(JsonElement value, CancellationToken token)
     {

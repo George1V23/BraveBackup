@@ -49,7 +49,12 @@ public partial class RestoreCategoryChoice : ViewModelBase
     internal RestoreCategoryChoice(ArchiveCategory category, Action changed)
     {
         Id = category.Id;
-        Name = category.Id == "bookmarks" ? "Bookmarks" : category.Id + " (v" + category.Version + ")";
+        Name = category.Id switch
+        {
+            "bookmarks" => "Bookmarks",
+            "settings" => "Settings",
+            _ => category.Id + " (v" + category.Version + ")"
+        };
         _changed = changed;
     }
 
@@ -94,16 +99,16 @@ public partial class RestoreProfileChoice : ViewModelBase
 
     private void UpdateCategories()
     {
-        var bookmarks = Categories.SingleOrDefault(category => category.Id == "bookmarks");
-        if (bookmarks is null || _sourceInstallation is null) return;
+        if (_sourceInstallation is null) return;
         var target = SelectedInstallation?.Info;
-        var supported = HostEnvironment.IsLinux && target is not null &&
-            Version.TryParse(_sourceInstallation.BrowserVersion, out _) &&
-            _sourceInstallation.BrowserVersion == target.Version &&
-            _sourceInstallation.Product == target.Product.ToString();
-        bookmarks.SetCompatibility(supported, supported
+        var supported = target is not null && BraveProfileRestorePlan.IsCompatible(_sourceInstallation, target);
+        const string incompatible = "Choose a Linux destination with the same Brave product and version as the archive.";
+        Categories.SingleOrDefault(category => category.Id == "bookmarks")?.SetCompatibility(supported, supported
             ? "Replaces the destination Bookmarks file. The restore engine checks the native snapshot before writing."
-            : "Choose a Linux destination with the same Brave product and version as the archive.");
+            : incompatible);
+        Categories.SingleOrDefault(category => category.Id == "settings")?.SetCompatibility(supported, supported
+            ? "Applies the stored bookmark bar, Home and startup choices to the destination Preferences."
+            : incompatible);
         OnPropertyChanged(nameof(HasSupportedCategories));
     }
 
@@ -158,8 +163,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         p.Name + " → " + p.DestinationPath + "\n" + p.CheckResult));
     public string Availability => MappingError ?? (_sourceHash is null
         ? "Planning only. Restoration is unavailable for this source."
-        : !HostEnvironment.IsLinux ? "Bookmarks restore review currently supports Linux."
-        : ReadyForReview ? "Review the selected bookmarks and destinations." : "Choose Bookmarks for every selected source profile.");
+        : !HostEnvironment.IsLinux ? "Restore review currently supports Linux."
+        : ReadyForReview ? "Review the selected categories and destinations." : "Choose a supported category for every selected source profile.");
 
     private string? MappingError
     {

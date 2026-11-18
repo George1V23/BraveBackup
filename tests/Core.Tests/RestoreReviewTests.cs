@@ -49,7 +49,7 @@ public sealed class RestoreReviewTests : IDisposable
         view.ReviewRestoreCommand.Execute(null);
         var review = Assert.IsType<RestoreReview>(view.Review);
         Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(archive))), review.SourceSha256);
-        Assert.Equal(bookmarks, Assert.Single(review.Bookmarks).Profile.BookmarksPath);
+        Assert.Equal(bookmarks, Assert.Single(review.Targets).Profile.BookmarksPath);
         Assert.Contains(archive, view.ReviewSummary);
         Assert.Contains(bookmarks, view.ReviewSummary);
         Assert.Contains(review.SafetyPath, view.ReviewSummary);

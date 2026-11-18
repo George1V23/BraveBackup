@@ -34,5 +34,5 @@ The automated tests use synthetic profiles to cover confirmation, archive replac
 after review, pausing across two profiles, explicit resume, and rollback with the source
 archive removed. The Avalonia desktop smoke test clicks the review and confirmation
 buttons and checks exact restored bytes, recovery artifact creation and preservation of
-unrelated profile data. Windows execution and restoration of other categories remain
-pending.
+unrelated profile data. [Settings restore](restore-settings.md) can also run in the same
+operation on Linux. Windows execution and the remaining restore categories are pending.

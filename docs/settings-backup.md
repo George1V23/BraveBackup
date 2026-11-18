@@ -3,10 +3,11 @@
 Settings-only and Bookmarks+Settings writes still use v2. Adding Extensions now uses
 [manifest v3](extensions-backup.md), while preserving the v2 behavior below.
 
+To apply stored Settings choices from an archive, use [Settings restore on Linux](restore-settings.md).
+
 The user kept all three proposed Settings groups. The Backup tab now supports Settings
 alone or with Bookmarks. It retains the existing single Settings checkbox and describes
-its limited contents. It does not implement the separate Settings navigation page or
-any restore, import or live-edit operation.
+its limited contents. The separate Settings navigation page and standalone import remain outside this backup workflow.
 
 ## Included data
 
@@ -148,6 +149,5 @@ that both Bookmarks and Preferences sources were unchanged. It emitted no bindin
 [Review screenshot](screenshots/settings-completion.png) uses synthetic data.
 
 Native Windows execution and independent cryptographic review remain release checks.
-Restoring these saved preferences still requires a reviewed, version-aware restore
-workflow; no cross-version portability is promised. The next user checkpoint is review
-of this Settings increment before Extensions or another category starts.
+The [Settings restore workflow](restore-settings.md) uses these same portable values
+for matching Linux destinations.

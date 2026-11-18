@@ -7,6 +7,8 @@ Phase 3 is in progress: [safety/journal contracts and synthetic transaction test
 The internal Linux session now supports a [bookmarks restore backend](restore-bookmarks-backend.md)
 tested on synthetic profiles, and a [write-free review](restore-bookmarks-review.md) shows the exact proposed paths.
 Phase 4 connects [Linux Bookmarks restore execution](restore-bookmarks-execution.md) to the app.
+Phase 5 now supports [Linux Settings restore](restore-settings.md), including mixed
+Bookmarks and Settings selections. Extensions is the next category checkpoint.
 Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
@@ -20,8 +22,8 @@ starting the next phase. Existing backup/export functionality must remain operat
   profiles and category representations. These are reusable read-side components.
 - Platform code supplies process observation, private-file creation and folder opening.
   Discovery supplies existing destination installation/profile metadata.
-- The Restore tab supports inspection, source/target planning and confirmed Linux Bookmarks
-  restoration using a verified encrypted safety snapshot and an encrypted journal.
+- The Restore tab supports inspection, source/target planning and confirmed Linux
+  Bookmarks and Settings restoration using a verified encrypted safety snapshot and journal.
   A retained session supports pause, resume and rollback within the app.
 - Backup support does not establish restore compatibility. Portable password payloads,
   raw password files and CSV are different representations; extension/session captures

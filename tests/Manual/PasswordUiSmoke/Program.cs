@@ -29,6 +29,8 @@ var screenshotDirectory = Environment.GetEnvironmentVariable("BRAVEBACKUP_SMOKE_
 Directory.CreateDirectory(screenshotDirectory);
 var fixtures = Path.Combine(repo, "tests", "Core.Tests", "Fixtures");
 File.Copy(Path.Combine(fixtures, "Bookmarks.sample.json"), Path.Combine(profileDirectory, "Bookmarks"));
+var preferencesPath = Path.Combine(profileDirectory, "Preferences");
+File.Copy(Path.Combine(fixtures, "Preferences.settings.json"), preferencesPath);
 var database = Path.Combine(profileDirectory, "Login Data");
 File.Copy(Path.Combine(fixtures, "Passwords", "LoginData.v43.linux.sqlite"), database);
 using (var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = database, Pooling = false }.ToString()))
@@ -206,40 +208,57 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "leaving Restore clears independent safety secrets");
                 Check(restore.Password.Length == 0 && restore.Installations.Count == 0, "leaving Restore clears password and preview");
                 foreach (var file in before) Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Restore inspection leaves source profile bytes unchanged");
-                // Confirm native bookmarks restoration using real Avalonia controls and a synthetic archive.
-                var bookmarksArchive = Path.Combine(root, "output", "bookmarks.bravebackup");
-                await BraveArchiveBackup.CreateAsync([new(app, [profile])], ["bookmarks"], bookmarksArchive,
+                // Confirm a mixed restore using the actual Restore controls and synthetic profiles.
+                var restoreArchive = Path.Combine(root, "output", "bookmarks-settings.bravebackup");
+                await BraveArchiveBackup.CreateAsync([new(app, [profile])], ["bookmarks", "settings"], restoreArchive,
                     null, "balanced", [app.UserDataDirectory], "synthetic", _ => Task.FromResult(false));
                 File.AppendAllText(profile.BookmarksPath, " ");
                 var changedBookmarks = File.ReadAllBytes(profile.BookmarksPath);
+                const string changedPreferences = """{"homepage":"https://before.example.test","brave":{"synthetic_neighbor":12}}""";
+                File.WriteAllText(preferencesPath, changedPreferences);
                 shell.SelectedTabIndex = ShellViewModel.RestoreTabIndex;
-                restore.SourcePath = bookmarksArchive;
-                await WaitUntil(() => !restore.IsBusy && restore.Installations.Count == 1, "Bookmarks archive inspection");
-                var bookmarks = planning.Groups.Single().Profiles.Single();
-                bookmarks.IsSelected = true;
-                bookmarks.SelectedInstallation = bookmarks.TargetInstallations.Single();
-                bookmarks.SelectedProfile = bookmarks.TargetProfiles.Single();
-                bookmarks.Categories.Single(category => category.Id == "bookmarks").IsSelected = true;
+                restore.SourcePath = restoreArchive;
+                await WaitUntil(() => !restore.IsBusy && restore.Installations.Count == 1, "Mixed archive inspection");
+                var archivedProfile = planning.Groups.Single().Profiles.Single();
+                archivedProfile.IsSelected = true;
+                archivedProfile.SelectedInstallation = archivedProfile.TargetInstallations.Single();
+                archivedProfile.SelectedProfile = archivedProfile.TargetProfiles.Single();
                 await planning.RecheckAsync();
+                await Task.Delay(100);
+                foreach (var name in new[] { "Bookmarks", "Settings" })
+                {
+                    var categoryBox = restoreView.GetVisualDescendants().OfType<CheckBox>()
+                        .Single(box => Equals(box.Content, name));
+                    Check(categoryBox.IsEffectivelyEnabled && categoryBox.IsChecked != true, $"{name} restore is available and starts unselected");
+                    categoryBox.IsChecked = true;
+                }
+
                 restore.Safety.Folder = Path.Combine(root, "output");
                 restore.Safety.Password = "Synthetic-safety-password";
                 restore.Safety.Confirmation = restore.Safety.Password;
                 await Task.Delay(100);
                 Click(window, "Review restore");
-                await WaitUntil(() => restore.Review is not null, "Bookmarks restore review");
+                await WaitUntil(() => restore.Review is not null, "Mixed restore review");
                 var reviewed = restore.Review!;
+                Check(reviewed.DestinationSummary.Contains(preferencesPath) && reviewed.DestinationSummary.Contains(profile.BookmarksPath),
+                    "Mixed review lists both exact destination files");
                 Check(changedBookmarks.AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath))
-                    && !File.Exists(reviewed.SafetyPath), "review through Avalonia leaves bookmarks and safety folder untouched");
+                    && File.ReadAllText(preferencesPath) == changedPreferences && !File.Exists(reviewed.SafetyPath),
+                    "review through Avalonia preserves destination files and recovery folder");
                 await Task.Delay(100);
                 Click(window, "Confirm restore");
-                await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Confirmed bookmarks restore");
-                Check(restore.RestoreStatus == "Bookmarks restored." && restore.RestoreReport.Contains("Bookmarks — Restored"),
-                    "Restore displays the completed category after confirmation");
+                await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Confirmed mixed restore");
+                Check(restore.RestoreStatus == "Bookmarks and Settings restored." && restore.RestoreReport.Contains("Bookmarks — Restored")
+                    && restore.RestoreReport.Contains("Settings — Restored"), "Restore reports both completed categories");
                 Check(File.Exists(reviewed.SafetyPath) && File.Exists(reviewed.JournalPath)
                     && before[profile.BookmarksPath].AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath)),
                     "Confirm restore saves recovery artifacts and writes the archived bookmarks bytes");
-                foreach (var file in before.Where(file => file.Key != profile.BookmarksPath))
-                    Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Bookmarks restore preserves unrelated profile data");
+                using (var applied = JsonDocument.Parse(File.ReadAllBytes(preferencesPath)))
+                    Check(applied.RootElement.GetProperty("homepage").GetString() == "https://home.example.test/"
+                        && applied.RootElement.GetProperty("brave").GetProperty("synthetic_neighbor").GetInt32() == 12,
+                        "Settings restore applies the archived choice and preserves its unrelated neighbor");
+                foreach (var file in before.Where(file => file.Key != profile.BookmarksPath && file.Key != preferencesPath))
+                    Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Mixed restore preserves unrelated profile files");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;

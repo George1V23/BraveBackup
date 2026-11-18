@@ -83,8 +83,8 @@ public sealed class BraveBookmarksRestorePlanTests : IDisposable
         File.WriteAllBytes(profile.BookmarksPath, _snapshot);
         var recovery = Directory.CreateDirectory(Path.Combine(_root, "recovery")).FullName;
         var operation = Guid.NewGuid();
-        BookmarkRestoreMapping[] mappings = [new(manifest.Installations.Single().Profiles.Single().Id, app, profile)];
-        LinuxRestoreSession OpenReviewed(string digest) => BraveBookmarksRestorePlan.Open(archive,
+        BraveRestoreMapping[] mappings = [new(manifest.Installations.Single().Profiles.Single().Id, app, profile, "bookmarks")];
+        LinuxRestoreSession OpenReviewed(string digest) => BraveProfileRestorePlan.Open(archive,
             manifest.ArchiveId, null, recovery, SafetyPassword, mappings, [], operation, digest, () => ProcessPresence.Stopped);
 
         Assert.Throws<IOException>(() => OpenReviewed(new string('0', 64)));
@@ -97,8 +97,8 @@ public sealed class BraveBookmarksRestorePlanTests : IDisposable
 
     private LinuxRestoreSession Open(string archive, ArchiveManifest manifest, string? password, BraveAppInfo app,
         BraveProfileInfo profile, string recovery, ProcessPresence presence = ProcessPresence.Stopped) =>
-        BraveBookmarksRestorePlan.Open(archive, manifest.ArchiveId, password, recovery, SafetyPassword,
-            [new(manifest.Installations.Single().Profiles.Single().Id, app, profile)], [], () => presence);
+        BraveProfileRestorePlan.Open(archive, manifest.ArchiveId, password, recovery, SafetyPassword,
+            [new(manifest.Installations.Single().Profiles.Single().Id, app, profile, "bookmarks")], [], () => presence);
 
     private async Task<(string Path, ArchiveManifest Manifest)> CreateArchiveAsync(byte[] bytes, string? password = null)
     {

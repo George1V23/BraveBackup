@@ -5,41 +5,61 @@ using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
 
-/// <summary>Explicit mapping from an archived profile to a detected destination profile.</summary>
-internal sealed record BookmarkRestoreMapping(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile);
+/// <summary>Maps an explicitly selected category to an existing destination profile.</summary>
+internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo Installation, BraveProfileInfo Profile, string Category);
 
-/// <summary>Builds a Linux restore session from validated native Bookmarks snapshots in a reviewed archive.</summary>
-internal static class BraveBookmarksRestorePlan
+/// <summary>Builds a Linux restore session from supported categories in a reviewed archive.</summary>
+internal static class BraveProfileRestorePlan
 {
-    /// <summary>Validates archive identity and prepares a write-free session for a caller-authorized bookmarks restore.</summary>
+    /// <summary>Validates archive identity and prepares a write-free session for a caller-authorized restore.</summary>
     internal static LinuxRestoreSession Open(string archivePath, Guid reviewedArchiveId, string? archivePassword,
-        string recoveryDirectory, string safetyPassword, IReadOnlyList<BookmarkRestoreMapping> mappings,
+        string recoveryDirectory, string safetyPassword, IReadOnlyList<BraveRestoreMapping> mappings,
         IEnumerable<string> protectedDirectories, Func<ProcessPresence>? observe = null, CancellationToken token = default) =>
         Open(archivePath, reviewedArchiveId, archivePassword, recoveryDirectory, safetyPassword, mappings,
             protectedDirectories, Guid.NewGuid(), null, observe, token);
 
+    /// <summary>Gets the exact file written by each supported category.</summary>
+    internal static string TargetFileName(string category) => category switch
+    {
+        "bookmarks" => "Bookmarks",
+        "settings" => BraveSettingsRestore.FileName,
+        _ => throw new InvalidDataException("The selected category does not support restore.")
+    };
+
+    /// <summary>Checks the platform and recorded product/version required by both supported writers.</summary>
+    internal static bool IsCompatible(ArchiveInstallation source, BraveAppInfo target) =>
+        HostEnvironment.IsLinux && Version.TryParse(source.BrowserVersion, out _) &&
+        source.BrowserVersion == target.Version && source.Product == target.Product.ToString();
+
     /// <summary>Opens a plan bound to the digest and operation ID retained by final review.</summary>
     internal static LinuxRestoreSession Open(string archivePath, Guid reviewedArchiveId, string? archivePassword,
-        string recoveryDirectory, string safetyPassword, IReadOnlyList<BookmarkRestoreMapping> mappings,
+        string recoveryDirectory, string safetyPassword, IReadOnlyList<BraveRestoreMapping> mappings,
         IEnumerable<string> protectedDirectories, Guid operationId, string? reviewedDigest,
         Func<ProcessPresence>? observe = null, CancellationToken token = default)
     {
-        if (!HostEnvironment.IsLinux) throw new PlatformNotSupportedException("Bookmarks restore requires Linux.");
+        if (!HostEnvironment.IsLinux) throw new PlatformNotSupportedException("Profile restore requires Linux.");
         if (reviewedArchiveId == Guid.Empty || mappings.Count is < 1 or > 10_000)
             throw new InvalidDataException("A reviewed archive and explicit profile mappings are required.");
         var selected = mappings.Select(mapping => mapping with
         {
             Installation = mapping.Installation with { UserDataDirectory = Path.GetFullPath(mapping.Installation.UserDataDirectory) },
-            Profile = mapping.Profile with { ProfileDirectory = Path.GetFullPath(mapping.Profile.ProfileDirectory) }
+            Profile = mapping.Profile with
+            {
+                ProfileDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(mapping.Profile.ProfileDirectory))
+            }
         }).ToArray();
-        if (selected.Select(mapping => mapping.SourceProfileId).Distinct().Count() != selected.Length)
-            throw new InvalidDataException("Each source profile must have exactly one destination.");
+        var profiles = selected.GroupBy(mapping => mapping.SourceProfileId).ToArray();
+        var targets = profiles.Select(group => (group.First().Installation, group.First().Profile)).ToArray();
+        if (profiles.Any(group => group.Any(mapping =>
+                mapping.Installation != group.First().Installation || mapping.Profile != group.First().Profile)) ||
+            targets.Select(target => target.Profile.ProfileDirectory).Distinct(StringComparer.Ordinal).Count() != targets.Length ||
+            selected.Select(mapping => (mapping.SourceProfileId, mapping.Category)).Distinct().Count() != selected.Length)
+            throw new InvalidDataException("Each source profile must have one distinct destination and unique categories.");
 
         var path = Path.GetFullPath(archivePath);
         if (!string.Equals(Path.GetExtension(path), ".bravebackup", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Choose a .bravebackup archive.");
-        var sourceContext = BraveRestoreContext.Capture(path, selected.Select(mapping =>
-            (mapping.Installation, mapping.Profile)).ToArray(), observe, token);
+        var sourceContext = BraveRestoreContext.Capture(path, targets, observe, token);
         if (reviewedDigest is not null) sourceContext.VerifyReviewedDigest(reviewedDigest);
         var destinations = new List<LinuxRestoreDestination>();
         var baselines = new List<LinuxRestoreTargetLease>();
@@ -67,32 +87,34 @@ internal static class BraveBookmarksRestorePlan
                     token.ThrowIfCancellationRequested();
                     if (!sources.TryGetValue(mapping.SourceProfileId, out var archived))
                         throw new InvalidDataException("A selected profile is missing from the archive.");
-                    if (!Version.TryParse(archived.installation.BrowserVersion, out _) ||
-                        archived.installation.BrowserVersion != mapping.Installation.Version ||
-                        archived.installation.Product != mapping.Installation.Product.ToString())
-                        throw new InvalidDataException("Bookmarks restore requires matching Brave products and recorded browser versions.");
-                    var descriptor = archived.profile.Categories.SingleOrDefault(category => category.Id == "bookmarks")
-                        ?.Files.Single(file => file.Role == "native-source")
-                        ?? throw new InvalidDataException("The selected profile does not contain Bookmarks.");
-                    retained += descriptor.Length;
-                    if (retained > RestoreSafetyFormat.MaximumBytes)
-                        throw new InvalidDataException("Selected bookmark snapshots exceed the restore retention limit.");
+                    if (!IsCompatible(archived.installation, mapping.Installation))
+                        throw new InvalidDataException("Restore requires matching Brave products and recorded browser versions.");
 
-                    var bytes = ReadSnapshot(zip, descriptor, token);
+                    var fileName = TargetFileName(mapping.Category);
+                    var bookmarks = mapping.Category == "bookmarks";
+                    var role = bookmarks ? "native-source" : "portable-settings";
+                    var descriptor = archived.profile.Categories.SingleOrDefault(category => category.Id == mapping.Category)
+                        ?.Files.Single(file => file.Role == role)
+                        ?? throw new InvalidDataException("The selected archive profile lacks the requested category.");
+                    if (retained + descriptor.Length > RestoreSafetyFormat.MaximumBytes)
+                        throw new InvalidDataException("Selected snapshots exceed the restore retention limit.");
+
+                    var bytes = ReadSnapshot(zip, descriptor,
+                        bookmarks ? LinuxRestoreFileCapture.MaximumBytes : ArchiveLimits.MaxSettingsBytes, token);
                     try
                     {
-                        ValidateNativeSnapshot(bytes, token);
-                        var baseline = LinuxRestoreTargetLease.Capture(mapping.Profile.ProfileDirectory, "Bookmarks", token);
+                        var baseline = LinuxRestoreTargetLease.Capture(mapping.Profile.ProfileDirectory, fileName, token);
                         baselines.Add(baseline);
                         using var original = baseline.CopyOriginal();
                         retainedOriginals += original.Content.Bytes.Length + original.Metadata.Bytes.Length;
                         if (retainedOriginals > RestoreSafetyFormat.MaximumBytes)
-                            throw new InvalidDataException("Bookmark originals exceed the restore retention limit.");
-                        if (original.Exists) ValidateNativeSnapshot(original.Content.Bytes, token);
-                        var metadata = original.Exists ? original.Metadata.Bytes.ToArray() : CaptureTemplateMetadata(mapping.Profile.ProfileDirectory);
-                        var image = new RestoreFileImage(true, bytes, metadata);
+                            throw new InvalidDataException("Original files exceed the restore retention limit.");
+                        var image = BuildReplacement(mapping, original, bytes, token);
                         destinations.Add(new(new RestoreMutation(Guid.NewGuid(), archived.installation.Id,
-                            archived.profile.Id, "bookmarks", image), mapping.Installation, mapping.Profile, "Bookmarks"));
+                            archived.profile.Id, mapping.Category, image), mapping.Installation, mapping.Profile, fileName));
+                        retained += image.Content.Bytes.Length + image.Metadata.Bytes.Length;
+                        if (retained > RestoreSafetyFormat.MaximumBytes)
+                            throw new InvalidDataException("Replacements exceed the restore retention limit.");
                     }
                     finally { CryptographicOperations.ZeroMemory(bytes); }
                 }
@@ -117,11 +139,33 @@ internal static class BraveBookmarksRestorePlan
         }
     }
 
-    private static byte[] ReadSnapshot(ZipArchive zip, ArchiveFile descriptor, CancellationToken token)
+    private static RestoreFileImage BuildReplacement(BraveRestoreMapping mapping, RestoreFileImage original,
+        byte[] payload, CancellationToken token)
+    {
+        if (mapping.Category == "bookmarks")
+        {
+            ValidateNativeSnapshot(payload, token);
+            if (original.Exists) ValidateNativeSnapshot(original.Content.Bytes, token);
+            var metadata = original.Exists ? original.Metadata.Bytes.ToArray() : CaptureTemplateMetadata(mapping.Profile.ProfileDirectory);
+            return new RestoreFileImage(true, payload, metadata);
+        }
+
+        if (!original.Exists)
+            throw new BackupOperationException("restore-settings-missing",
+                "The selected destination does not contain an existing Preferences file.");
+
+        using var secure = LinuxRestoreFileCapture.Read(mapping.Profile.ProfileDirectory, BraveSettingsRestore.SecureFileName, token);
+        ReadOnlyMemory<byte>? protectedPrefs = secure.Exists ? secure.Content.Bytes : (ReadOnlyMemory<byte>?)null;
+        var settings = BraveSettingsRestore.Apply(original.Content.Bytes, protectedPrefs, payload, token);
+        try { return new RestoreFileImage(true, settings, original.Metadata.Bytes.Span); }
+        finally { CryptographicOperations.ZeroMemory(settings); }
+    }
+
+    private static byte[] ReadSnapshot(ZipArchive zip, ArchiveFile descriptor, int maximumBytes, CancellationToken token)
     {
         var entry = zip.GetEntry(descriptor.Path);
-        if (entry is null || entry.Length != descriptor.Length || descriptor.Length is < 1 or > LinuxRestoreFileCapture.MaximumBytes)
-            throw new InvalidDataException("Native bookmarks snapshot has an unsupported size.");
+        if (entry is null || entry.Length != descriptor.Length || descriptor.Length < 1 || descriptor.Length > maximumBytes)
+            throw new InvalidDataException("Restore snapshot has an unsupported size.");
         var bytes = new byte[(int)descriptor.Length];
         try
         {
@@ -130,11 +174,11 @@ internal static class BraveBookmarksRestorePlan
             {
                 token.ThrowIfCancellationRequested();
                 var count = input.Read(bytes, offset, Math.Min(65536, bytes.Length - offset));
-                if (count == 0) throw new InvalidDataException("Native bookmarks snapshot is truncated.");
+                if (count == 0) throw new InvalidDataException("Restore snapshot is truncated.");
                 offset += count;
             }
             if (input.ReadByte() != -1 || Convert.ToHexStringLower(SHA256.HashData(bytes)) != descriptor.Sha256)
-                throw new InvalidDataException("Native bookmarks snapshot does not match its archive descriptor.");
+                throw new InvalidDataException("Restore snapshot does not match its archive descriptor.");
             return bytes;
         }
         catch { CryptographicOperations.ZeroMemory(bytes); throw; }

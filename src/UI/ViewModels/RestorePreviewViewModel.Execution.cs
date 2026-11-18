@@ -98,14 +98,14 @@ public partial class RestorePreviewViewModel
             {
                 Func<ProcessPresence>? observe = observer is null ? null : () =>
                 {
-                    var states = review.Bookmarks.Select(mapping => observer(mapping.Installation)).ToArray();
+                    var states = review.Targets.Select(mapping => mapping.Installation).Distinct().Select(observer).ToArray();
                     if (states.Contains(ProcessPresence.Running)) return ProcessPresence.Running;
                     return states.All(state => state == ProcessPresence.Stopped) ? ProcessPresence.Stopped : ProcessPresence.Unknown;
                 };
-                opened = BraveBookmarksRestorePlan.Open(review.ArchivePath, review.ArchiveId, sourcePassword,
+                opened = BraveProfileRestorePlan.Open(review.ArchivePath, review.ArchiveId, sourcePassword,
                     Path.GetDirectoryName(review.SafetyPath)!, password,
-                    review.Bookmarks.Select(mapping => new BookmarkRestoreMapping(mapping.SourceProfileId,
-                        mapping.Installation, mapping.Profile)).ToArray(),
+                    review.Targets.Select(mapping => new BraveRestoreMapping(mapping.SourceProfileId,
+                        mapping.Installation, mapping.Profile, mapping.Category)).ToArray(),
                     roots, review.OperationId, review.SourceSha256, observe, pause.Token);
                 opened.Transaction.Progress = progress.Report;
                 opened.Transaction.Prepare(pause.Token);
@@ -231,11 +231,11 @@ public partial class RestorePreviewViewModel
             RestoreProgress = progress.TotalFiles == 0 ? 0 : 100.0 * progress.CompletedFiles / progress.TotalFiles;
             RestoreCounts = $"{progress.CompletedFiles} of {progress.TotalFiles} target files checked and complete for this stage";
             if (progress.State == RestoreTransactionState.Running && _pauseSignal?.IsCancellationRequested == false)
-                RestoreStatus = "Restoring bookmarks…";
-            if (progress.CategoryCompleted && review.Bookmarks.FirstOrDefault(row => row.SourceProfileId == progress.ProfileId) is { } row)
+                RestoreStatus = "Restoring selected data…";
+            if (progress.CategoryCompleted && review.Targets.FirstOrDefault(row => row.SourceProfileId == progress.ProfileId && row.Category == progress.Category) is { } row)
             {
                 var action = progress.State == RestoreTransactionState.RollingBack ? "Rollback complete" : "Restored";
-                RestoreReport += $"{TargetLabel(row)} / Bookmarks — {action}\n";
+                RestoreReport += $"{TargetLabel(row)} / {row.CategoryName} — {action}\n";
             }
         });
     }
@@ -252,7 +252,8 @@ public partial class RestorePreviewViewModel
         IsRollbackPromptVisible = IsRestorePaused && RecoveryAvailable;
         RestoreStatus = state switch
         {
-            RestoreTransactionState.Completed => "Bookmarks restored.",
+            RestoreTransactionState.Completed => string.Join(" and ",
+                _executionReview!.Targets.Select(target => target.CategoryName).Distinct()) + " restored.",
             RestoreTransactionState.Paused => "Restore paused.",
             RestoreTransactionState.RolledBack => "Rollback complete.",
             RestoreTransactionState.RecoveryIncomplete => "Rollback incomplete. Review the remaining targets and keep the safety backup.",
@@ -274,11 +275,11 @@ public partial class RestorePreviewViewModel
             RestoreProgress = 100;
             HasProgressTotal = true;
         }
-        RestoreReport = string.Join("\n", review.Bookmarks.Zip(transaction.EntryStates, (row, entry) =>
-            $"{TargetLabel(row)} / Bookmarks — {DescribeEntry(entry, state)}"));
+        RestoreReport = string.Join("\n", review.Targets.Zip(transaction.EntryStates, (row, entry) =>
+            $"{TargetLabel(row)} / {row.CategoryName} — {DescribeEntry(entry, state)}"));
     }
 
-    private static string TargetLabel(RestoreReviewedBookmark target) =>
+    private static string TargetLabel(RestoreReviewedTarget target) =>
         $"{target.Installation.Product} {target.Installation.Channel} {target.Installation.Version} / {target.Profile.ProfileName} ({target.Profile.ProfileDirectory})";
 
     private static string DescribeEntry(RestoreEntryState entry, RestoreTransactionState? state) => entry switch
@@ -296,14 +297,28 @@ public partial class RestorePreviewViewModel
             or InvalidOperationException or System.Security.Cryptography.CryptographicException
             or System.Text.Json.JsonException or NotSupportedException;
 
-    private static string RestoreFailureMessage(Exception error) => error is System.Security.Cryptography.CryptographicException
-        ? "Could not authenticate the source archive or safety backup."
-        : "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status.";
+    private static string RestoreFailureMessage(Exception error) => error switch
+    {
+        BackupOperationException { Code: "restore-settings-empty" } =>
+            "A selected profile has no stored Settings. Clear Settings for that profile and review again.",
+        BackupOperationException { Code: "restore-settings-protected" } =>
+            "A selected Settings value is stored in the destination's Secure Preferences. Choose another destination or clear Settings.",
+        BackupOperationException { Code: "restore-settings-missing" } =>
+            "A destination profile needs an existing Preferences file. Choose an initialized Brave profile or clear Settings.",
+        BackupOperationException { Code: "restore-settings-parent" or "restore-settings-value" } =>
+            "A destination Preferences path has an incompatible structure. Choose another profile or clear Settings.",
+        BackupOperationException { Code: "restore-settings-size" } =>
+            "The updated Preferences file exceeds the size limit. Choose another profile or clear Settings.",
+        System.Security.Cryptography.CryptographicException => "Could not authenticate the source archive or safety backup.",
+        _ => "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status."
+    };
 
     private static string RestoreFailureCode(Exception error) => error switch
     {
         System.Security.Cryptography.CryptographicException => "RESTORE_AUTHENTICATION_FAILED",
         UnauthorizedAccessException => "RESTORE_ACCESS_DENIED",
+        BackupOperationException { Code: "restore-settings-empty" or "restore-settings-protected"
+            or "restore-settings-missing" or "restore-settings-parent" or "restore-settings-value" or "restore-settings-size" } settings => settings.Code,
         InvalidDataException or System.Text.Json.JsonException or ArgumentException or NotSupportedException => "RESTORE_DATA_REJECTED",
         IOException => "RESTORE_CONTEXT_OR_IO_FAILED",
         _ => "RESTORE_OPERATION_FAILED"

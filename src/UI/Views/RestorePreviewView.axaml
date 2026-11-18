@@ -95,7 +95,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="Review restore" Classes="section" />
                     <SelectableTextBlock Text="{Binding ReviewSummary}" TextWrapping="Wrap" />
-                    <TextBlock Text="Confirm to verify a safety backup and replace the listed Bookmarks files." TextWrapping="Wrap" Classes="muted" />
+                    <TextBlock Text="Confirm to verify a safety backup and apply the listed changes." TextWrapping="Wrap" Classes="muted" />
                     <WrapPanel Orientation="Horizontal">
                         <Button Content="Cancel review" Command="{Binding CancelReviewCommand}" Margin="0,0,8,0" />
                         <Button Content="Confirm restore" Command="{Binding ConfirmRestoreCommand}" Classes="accent" />

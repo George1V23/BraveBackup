@@ -18,7 +18,7 @@ assertion closes the application with a nonzero exit code.
 
 Before the main window opens, the runner removes its discovery handler and replaces
 the default shell with injected synthetic installation/profile metadata. It copies
-checked-in SQLite/bookmark fixtures to a unique temporary directory and supplies a
+checked-in SQLite, Bookmarks and Preferences fixtures to a unique temporary directory and supplies a
 synthetic encryption key. It does not discover real installations, access a real
 password store, or invoke the OS keyring. The native file picker is replaced by a
 test callback. Temporary outputs contain synthetic credentials only and are retained
@@ -37,6 +37,8 @@ The runner drives actual selector bindings and dialog button handlers, checking:
 - Archive CSV operations also preserve all synthetic source bytes.
 - A deliberately corrupt synthetic password database prompts for raw preservation.
 - Explicit preservation creates a valid encrypted version-7 backup.
+- Mixed Bookmarks and Settings restore previews both destinations, requires confirmation,
+  saves recovery artifacts, and preserves unrelated preference values and profile files.
 
 It saves a rendered main-window image to
 [`screenshots/password-csv-section.png`](screenshots/password-csv-section.png).
@@ -49,6 +51,10 @@ The unencrypted archive warning is also captured in
 On 2026-11-17, the extended runner passed all 47 assertions using Linux/X11 software rendering
 at 1160 × 860. No Avalonia warning output was emitted. The section's destination,
 readiness, action and completion feedback were visible in the rendered image.
+
+The mixed Restore variant passed 59 assertions on Linux. Set
+`BRAVEBACKUP_SMOKE_SCREENSHOTS` to a scratch directory to keep the checked-in
+screenshots when rerunning the test.
 
 This validates native Avalonia layout, bindings and dialog interaction. It does not
 validate manual mouse/keyboard accessibility, other display scales/window sizes,
