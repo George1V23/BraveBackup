@@ -5,7 +5,8 @@ Status: sequence approved by the user. Phase 1 is implemented for review; see
 for review: [source selection, mapping and preflight](restore-phase2-planning.md).
 Phase 3 is in progress: [safety/journal contracts and synthetic transaction tests](restore-safety-v1.md).
 The internal Linux session now supports a [bookmarks restore backend](restore-bookmarks-backend.md)
-tested on synthetic profiles. Application execution and Windows recovery validation remain pending.
+tested on synthetic profiles, and a [write-free review](restore-bookmarks-review.md) shows the exact proposed paths.
+Application execution and Windows recovery validation remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.

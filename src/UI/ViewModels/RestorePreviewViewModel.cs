@@ -40,7 +40,11 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
 
     /// <summary>Creates an inspection-only model; an injected reader allows deterministic cancellation/race tests.</summary>
     public RestorePreviewViewModel(Func<string, string?, CancellationToken, BraveArchiveInspectionResult>? inspect = null)
-        => _inspect = inspect ?? BraveArchiveInspection.Read;
+    {
+        _inspect = inspect ?? BraveArchiveInspection.Read;
+        Planning.ReviewInputsChanged += InvalidateReview;
+        Safety.PropertyChanged += OnSafetySettingsChanged;
+    }
 
     /// <summary>Resolved display path; invalid input is left visible for correction without file access.</summary>
     public string FullSourcePath
@@ -50,7 +54,11 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     partial void OnSourcePathChanged(string value) { OnPropertyChanged(nameof(FullSourcePath)); Password = string.Empty; _ = InspectAsync(false); }
     partial void OnPasswordChanged(string value) => UnlockCommand.NotifyCanExecuteChanged();
     partial void OnNeedsUnlockChanged(bool value) => UnlockCommand.NotifyCanExecuteChanged();
-    partial void OnIsBusyChanged(bool value) => UnlockCommand.NotifyCanExecuteChanged();
+    partial void OnIsBusyChanged(bool value)
+    {
+        UnlockCommand.NotifyCanExecuteChanged();
+        ReviewRestoreCommand.NotifyCanExecuteChanged();
+    }
     private bool CanUnlock() => !_disposed && NeedsUnlock && !IsBusy && Password.Length != 0;
 
     /// <summary>Opens the native source picker without writing files; ignores results after context/lifetime changes.</summary>
@@ -100,10 +108,10 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories.Select(Category).ToArray())).ToArray()));
-            Planning.Load(manifest, result.SourcePath);
+            Planning.LoadInspected(result);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
             NeedsUnlock = false;
-            Status = "Backup validated. Preview only; restoration is not enabled in this phase.";
+            Status = "Backup validated. Select the archived profiles and destination profiles to review.";
         }
         catch (OperationCanceledException) { if (!_disposed && generation == _generation) Status = "Inspection cancelled."; }
         catch
@@ -137,5 +145,5 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; Leave(); _disposed = true; Planning.ReviewInputsChanged -= InvalidateReview; Safety.PropertyChanged -= OnSafetySettingsChanged; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
 }

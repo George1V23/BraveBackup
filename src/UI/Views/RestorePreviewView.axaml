@@ -56,6 +56,16 @@
             </ItemsControl>
             <views:RestorePlanningView DataContext="{Binding Planning}" />
             <views:RestoreSafetyOptionsView DataContext="{Binding Safety}" />
+            <Button Content="Review restore" Command="{Binding ReviewRestoreCommand}" HorizontalAlignment="Left" />
+            <TextBlock Text="{Binding ReviewError}" TextWrapping="Wrap" />
+            <Border Classes="card" IsVisible="{Binding HasReview}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Review restore" Classes="section" />
+                    <SelectableTextBlock Text="{Binding ReviewSummary}" TextWrapping="Wrap" />
+                    <TextBlock Text="Restore execution is pending. Reviewing creates no files." TextWrapping="Wrap" Classes="muted" />
+                    <Button Content="Cancel review" Command="{Binding CancelReviewCommand}" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -5,7 +5,7 @@
     <Border Classes="card" IsVisible="{Binding HasSource}">
         <StackPanel Spacing="12">
             <TextBlock Text="Restore sources and destinations" Classes="section" />
-            <TextBlock Text="Select backed-up profiles and map each to an existing detected profile. Selected categories will replace corresponding destination data; other categories stay unchanged. No merge or restoration is performed in this phase."
+            <TextBlock Text="Select backed-up profiles and map each to an existing detected profile. Select Bookmarks to propose replacing the corresponding destination file."
                        TextWrapping="Wrap" Classes="muted" />
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button Content="Select all profiles" Command="{Binding SelectAllProfilesCommand}" />

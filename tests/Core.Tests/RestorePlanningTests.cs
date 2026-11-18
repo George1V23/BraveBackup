@@ -74,7 +74,7 @@ public sealed class RestorePlanningTests : IDisposable
         var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).ToDictionary(p => p, File.ReadAllBytes);
         planning.ObserveBrowserState = _ => state; await planning.RecheckAsync();
         Assert.Contains(label, row.CheckResult); Assert.Contains(label, planning.PlanSummary);
-        Assert.Contains("restoration is unavailable", planning.Availability);
+        Assert.Contains("Restoration is unavailable", planning.Availability);
         foreach (var file in before) Assert.Equal(file.Value, File.ReadAllBytes(file.Key));
         Assert.Equal(before.Count, Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Length);
     }

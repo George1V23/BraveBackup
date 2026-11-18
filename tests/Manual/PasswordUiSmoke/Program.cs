@@ -171,7 +171,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 planning.ObserveBrowserState = _ => ProcessPresence.Stopped;
                 await planning.RecheckAsync();
                 Check(sourceChoice.CheckResult.StartsWith("Closed"), "Restore Recheck reports controlled closed-browser status");
-                Check(planning.Availability.Contains("restoration is unavailable"), "Restore planning cannot execute destination writes");
+                Check(!restore.ReviewRestoreCommand.CanExecute(null), "Restore planning cannot execute destination writes");
                 var restoreScroll = restoreView.GetVisualDescendants().OfType<ScrollViewer>().First();
                 restoreScroll.Offset = new Vector(0, restoreScroll.Extent.Height); await Task.Delay(200);
                 using (var planningBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))

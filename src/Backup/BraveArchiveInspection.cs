@@ -4,7 +4,11 @@ using BraveBackup.Platform;
 namespace BraveBackup.Core;
 
 /// <summary>Read-only inspection metadata. A null manifest means an encrypted source still needs unlocking.</summary>
-public sealed record BraveArchiveInspectionResult(string SourcePath, bool Encrypted, ArchiveManifest? Manifest);
+public sealed record BraveArchiveInspectionResult(string SourcePath, bool Encrypted, ArchiveManifest? Manifest)
+{
+    /// <summary>Digest of validated source bytes, used to bind later restore review to the inspected archive.</summary>
+    public string? SourceSha256 { get; init; }
+}
 
 /// <summary>Inspects existing archive contracts without extracting payloads or accessing destination profiles.</summary>
 public static class BraveArchiveInspection
@@ -29,7 +33,7 @@ public static class BraveArchiveInspection
         using (var current = SnapshotFileAccess.OpenRead(sourcePath))
             if (Hash(current, token) != before) throw new IOException("The source archive changed during inspection.");
         token.ThrowIfCancellationRequested();
-        return new(sourcePath, encrypted, manifest);
+        return new(sourcePath, encrypted, manifest) { SourceSha256 = before };
     }
 
     private static string Hash(Stream source, CancellationToken token)

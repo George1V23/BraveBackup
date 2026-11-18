@@ -17,7 +17,10 @@ public partial class RestoreSafetyOptionsViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _password = string.Empty;
     [ObservableProperty] private string _confirmation = string.Empty;
     public string FullFolder { get { try { return string.IsNullOrWhiteSpace(Folder) ? string.Empty : Path.GetFullPath(Folder); } catch { return Folder; } } }
-    public string Validation
+    public string Validation => ValidationError ??
+        "Safety settings entered. Restore execution and safety-backup creation are not enabled yet.";
+
+    internal string? ValidationError
     {
         get
         {
@@ -30,7 +33,7 @@ public partial class RestoreSafetyOptionsViewModel : ViewModelBase, IDisposable
             catch { return "The safety-backup folder is invalid, linked or inside recognized browser data."; }
             return Password.Length == 0 ? "Enter a separate safety-backup encryption password."
                 : Password != Confirmation ? "Safety-backup passwords do not match."
-                : "Safety settings entered. Restore execution and safety-backup creation are not enabled yet.";
+                : null;
         }
     }
     partial void OnFolderChanged(string value) { _generation++; OnPropertyChanged(nameof(FullFolder)); OnPropertyChanged(nameof(Validation)); }

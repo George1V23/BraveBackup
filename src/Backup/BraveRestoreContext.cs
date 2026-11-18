@@ -80,6 +80,13 @@ public sealed class BraveRestoreContext
             throw new IOException("The opened restore source archive changed.");
     }
 
+    /// <summary>Requires the current source to match the digest captured for review.</summary>
+    internal void VerifyReviewedDigest(string expected)
+    {
+        if (!string.Equals(_fingerprint, expected, StringComparison.Ordinal))
+            throw new IOException("The archive changed after inspection. Inspect and review it again.");
+    }
+
     /// <summary>Checks that the category planner and transaction froze the same source bytes.</summary>
     internal void VerifySameSource(BraveRestoreContext expected)
     {

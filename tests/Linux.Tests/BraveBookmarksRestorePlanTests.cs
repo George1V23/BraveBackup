@@ -73,6 +73,28 @@ public sealed class BraveBookmarksRestorePlanTests : IDisposable
         Assert.Empty(Directory.GetFiles(profile.ProfileDirectory));
     }
 
+    [Fact]
+    public async Task ReviewDigestAndOperationIdBindTheWriteFreeSession()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var (archive, manifest) = await CreateArchiveAsync(_snapshot);
+        var inspection = BraveArchiveInspection.Read(archive);
+        var (app, profile) = Profile("destination");
+        File.WriteAllBytes(profile.BookmarksPath, _snapshot);
+        var recovery = Directory.CreateDirectory(Path.Combine(_root, "recovery")).FullName;
+        var operation = Guid.NewGuid();
+        BookmarkRestoreMapping[] mappings = [new(manifest.Installations.Single().Profiles.Single().Id, app, profile)];
+        LinuxRestoreSession OpenReviewed(string digest) => BraveBookmarksRestorePlan.Open(archive,
+            manifest.ArchiveId, null, recovery, SafetyPassword, mappings, [], operation, digest, () => ProcessPresence.Stopped);
+
+        Assert.Throws<IOException>(() => OpenReviewed(new string('0', 64)));
+        using var session = OpenReviewed(Assert.IsType<string>(inspection.SourceSha256));
+        Assert.Equal(operation, session.Transaction.OperationId);
+        Assert.Equal(Path.Combine(recovery, operation.ToString("N") + ".safety.encrypted"), session.Artifacts.SafetyPath);
+        Assert.Empty(Directory.GetFiles(recovery));
+        Assert.Equal(_snapshot, File.ReadAllBytes(profile.BookmarksPath));
+    }
+
     private LinuxRestoreSession Open(string archive, ArchiveManifest manifest, string? password, BraveAppInfo app,
         BraveProfileInfo profile, string recovery, ProcessPresence presence = ProcessPresence.Stopped) =>
         BraveBookmarksRestorePlan.Open(archive, manifest.ArchiveId, password, recovery, SafetyPassword,

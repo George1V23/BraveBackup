@@ -14,7 +14,15 @@ internal static class BraveBookmarksRestorePlan
     /// <summary>Validates archive identity and prepares a write-free session for a caller-authorized bookmarks restore.</summary>
     internal static LinuxRestoreSession Open(string archivePath, Guid reviewedArchiveId, string? archivePassword,
         string recoveryDirectory, string safetyPassword, IReadOnlyList<BookmarkRestoreMapping> mappings,
-        IEnumerable<string> protectedDirectories, Func<ProcessPresence>? observe = null, CancellationToken token = default)
+        IEnumerable<string> protectedDirectories, Func<ProcessPresence>? observe = null, CancellationToken token = default) =>
+        Open(archivePath, reviewedArchiveId, archivePassword, recoveryDirectory, safetyPassword, mappings,
+            protectedDirectories, Guid.NewGuid(), null, observe, token);
+
+    /// <summary>Opens a plan bound to the digest and operation ID retained by final review.</summary>
+    internal static LinuxRestoreSession Open(string archivePath, Guid reviewedArchiveId, string? archivePassword,
+        string recoveryDirectory, string safetyPassword, IReadOnlyList<BookmarkRestoreMapping> mappings,
+        IEnumerable<string> protectedDirectories, Guid operationId, string? reviewedDigest,
+        Func<ProcessPresence>? observe = null, CancellationToken token = default)
     {
         if (!HostEnvironment.IsLinux) throw new PlatformNotSupportedException("Bookmarks restore requires Linux.");
         if (reviewedArchiveId == Guid.Empty || mappings.Count is < 1 or > 10_000)
@@ -32,6 +40,7 @@ internal static class BraveBookmarksRestorePlan
             throw new InvalidDataException("Choose a .bravebackup archive.");
         var sourceContext = BraveRestoreContext.Capture(path, selected.Select(mapping =>
             (mapping.Installation, mapping.Profile)).ToArray(), observe, token);
+        if (reviewedDigest is not null) sourceContext.VerifyReviewedDigest(reviewedDigest);
         var destinations = new List<LinuxRestoreDestination>();
         var baselines = new List<LinuxRestoreTargetLease>();
         try
@@ -90,7 +99,7 @@ internal static class BraveBookmarksRestorePlan
                 sourceContext.VerifyOpenedSource(source, token);
             }
 
-            var session = LinuxRestoreSession.Open(path, recoveryDirectory, destinations, safetyPassword,
+            var session = LinuxRestoreSession.Open(operationId, path, recoveryDirectory, destinations, safetyPassword,
                 protectedDirectories, observe, token);
             try
             {

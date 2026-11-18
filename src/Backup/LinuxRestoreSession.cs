@@ -25,6 +25,13 @@ internal sealed class LinuxRestoreSession : IDisposable
     internal static LinuxRestoreSession Open(string sourceArchive, string recoveryDirectory,
         IReadOnlyList<LinuxRestoreDestination> destinations, string safetyPassword,
         IEnumerable<string> protectedDirectories, Func<ProcessPresence>? observe = null,
+        CancellationToken token = default) =>
+        Open(Guid.NewGuid(), sourceArchive, recoveryDirectory, destinations, safetyPassword, protectedDirectories, observe, token);
+
+    /// <summary>Opens a session using the operation ID already shown in the review.</summary>
+    internal static LinuxRestoreSession Open(Guid operation, string sourceArchive, string recoveryDirectory,
+        IReadOnlyList<LinuxRestoreDestination> destinations, string safetyPassword,
+        IEnumerable<string> protectedDirectories, Func<ProcessPresence>? observe = null,
         CancellationToken token = default)
     {
         if (!HostEnvironment.IsLinux) throw new PlatformNotSupportedException("Linux restore storage is required.");
@@ -54,7 +61,6 @@ internal sealed class LinuxRestoreSession : IDisposable
                 throw new InvalidDataException("Restore file mappings must be unique.");
         }
 
-        var operation = Guid.NewGuid();
         var source = Path.GetFullPath(sourceArchive);
         var context = BraveRestoreContext.Capture(source, profiles, observe, token);
         var scope = new RestoreArtifactScope(operation, recoveryDirectory, source,
