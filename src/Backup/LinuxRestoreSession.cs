@@ -87,6 +87,9 @@ internal sealed class LinuxRestoreSession : IDisposable
         }
     }
 
+    /// <summary>Requires the transaction to use the same source bytes as its category planner.</summary>
+    internal void VerifySource(BraveRestoreContext expected) => _store.VerifySource(expected);
+
     /// <summary>Releases the coordinator and retained handles while preserving encrypted recovery files.</summary>
     public void Dispose()
     {
@@ -97,6 +100,8 @@ internal sealed class LinuxRestoreSession : IDisposable
     private sealed class Store(BraveRestoreContext context, RestoreArtifactLease artifacts) : IRestoreTransactionStore, IDisposable
     {
         public Dictionary<Guid, LinuxRestoreExpectedState> Targets { get; } = [];
+
+        internal void VerifySource(BraveRestoreContext expected) => context.VerifySameSource(expected);
 
         public void VerifyContext(CancellationToken token)
         {

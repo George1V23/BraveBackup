@@ -70,6 +70,27 @@ public sealed class BraveRestoreContext
     private static string Fingerprint(string source, CancellationToken token)
     {
         using var input = SnapshotFileAccess.OpenRead(source);
+        return Fingerprint(input, token);
+    }
+
+    /// <summary>Checks that an opened archive is the source frozen for this restore.</summary>
+    internal void VerifyOpenedSource(Stream input, CancellationToken token)
+    {
+        if (Fingerprint(input, token) != _fingerprint)
+            throw new IOException("The opened restore source archive changed.");
+    }
+
+    /// <summary>Checks that the category planner and transaction froze the same source bytes.</summary>
+    internal void VerifySameSource(BraveRestoreContext expected)
+    {
+        if (!string.Equals(_source, expected._source, HostEnvironment.PathComparison) || _fingerprint != expected._fingerprint)
+            throw new IOException("The restore source changed while preparing the transaction.");
+    }
+
+    private static string Fingerprint(Stream input, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        input.Position = 0;
         if (input.Length > ArchiveLimits.MaxBytes + 3L * 1024 * 1024) throw new InvalidDataException("Restore source exceeds its supported size.");
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256); var buffer = new byte[65536];
         try
