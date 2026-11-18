@@ -2,7 +2,7 @@ using BraveBackup.Platform;
 
 namespace BraveBackup.Core;
 
-/// <summary>Retains original Linux file/directory identity across a recovery operation. No target publication is implemented.</summary>
+/// <summary>Retains original Linux file/directory identity across a recovery operation. Target changes only happen through the explicit guarded <see cref="PublishFromRetained"/> call.</summary>
 public sealed class LinuxRestoreTargetLease : IDisposable
 {
     private readonly RecoveryDirectoryIdentity _directory;
@@ -45,6 +45,21 @@ public sealed class LinuxRestoreTargetLease : IDisposable
             !current.Metadata.Bytes.Span.SequenceEqual(_original.Metadata.Bytes.Span)) throw new IOException("Recovery target no longer matches its original state.");
         if (_file is not null) _directory.VerifyChildIdentity(_name, _file.SafeFileHandle);
         _directory.Verify();
+    }
+    /// <summary>Changes the target from this lease's retained state to <paramref name="image"/> (replace, create or delete).</summary>
+    /// <remarks>
+    /// Verifies retained state first and acts only on the retained file identity. The caller must authorize scope, enforce
+    /// closed-browser state and then adopt the result (see <see cref="LinuxRestoreExpectedState"/>). Existing files require valid metadata.
+    /// </remarks>
+    public void PublishFromRetained(RestoreFileImage image, CancellationToken token = default)
+    {
+        VerifyOriginal(token);
+        if (_file is not null)
+        {
+            if (image.Exists) _directory.ReplaceChildWithRecoveryFile(_name, image.Content.Bytes, image.Metadata.Bytes, _file.SafeFileHandle);
+            else _directory.DeleteChild(_name, _file.SafeFileHandle);
+        }
+        else if (image.Exists) _directory.PublishNewRecoveryFile(_name, image.Content.Bytes, image.Metadata.Bytes);
     }
     /// <summary>Releases native handles and original buffers without modifying targets or safety artifacts.</summary>
     public void Dispose()

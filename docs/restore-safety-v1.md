@@ -557,3 +557,28 @@ missing target without residue, deletion of only the retained original); the Lin
 if a swap-back itself fails the error says recovery artifacts need attention. These primitives are
 not yet connected to `RestoreTransaction` or expected-state tracking, and Windows parity remains
 pending. No restore command is enabled.
+
+## Linux transaction store adapter
+
+`LinuxRestoreTransactionStore` implements `IRestoreTransactionStore` for Linux. It combines
+`BraveRestoreContext` (source, path and stopped-browser checks), `RestoreArtifactLease` (owned
+encrypted safety/journal artifacts) and one `LinuxRestoreExpectedState` per target file.
+
+- Construction verifies the context and captures every target's original state; nothing is written.
+  Targets must be distinct single files directly inside authorized directories.
+- `ReadTarget` verifies the retained identity and contents, so an external edit or replacement
+  throws instead of being adopted. `WriteTargetAtomic` replaces, creates or deletes only from that
+  retained state (`LinuxRestoreExpectedState.Publish`, built on the guarded primitives above) and
+  adopts the result only after exact verification. Replacement images must carry valid Linux metadata.
+- `VerifyContext` checks context and artifact ownership only; per-target conflicts surface on read or
+  write, so rollback can still recover the other files.
+- A conflict found before the first write leaves the transaction `Prepared` (nothing started).
+
+Three synthetic tests pass: replace/create/delete then full rollback with metadata, an external edit
+before writing is never overwritten, and a running browser blocks execution and store creation.
+Full run: 995 Core, 48 Brave, 44 Linux (4 skipped), 14 Windows-labelled tests passed.
+
+Limits: `BraveRestoreContext.Verify` rereads the whole source archive on every call, which is costly for
+large archives. Directory-level changes (permissions, timestamps) and concurrent writers during the
+brief exchange window are not covered. The store is not wired to any UI or command, no real-format
+writer exists (bookmarks is Phase 4), and Windows parity remains pending.

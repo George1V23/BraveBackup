@@ -1,6 +1,6 @@
 namespace BraveBackup.Core;
 
-/// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Does not publish target changes.</summary>
+/// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Target changes occur only through the explicit <see cref="Publish"/> call.</summary>
 public sealed class LinuxRestoreExpectedState : IDisposable
 {
     private readonly string _directory;
@@ -35,6 +35,17 @@ public sealed class LinuxRestoreExpectedState : IDisposable
             var previous = _current; _current = candidate; previous.Dispose();
         }
         catch { candidate.Dispose(); throw; }
+    }
+    /// <summary>Returns an owned copy of the currently expected target state after verifying its identity and contents.</summary>
+    public RestoreFileImage ReadCurrent(CancellationToken token = default)
+    { VerifyCurrent(token); return _current.CopyOriginal(); }
+    /// <summary>Publishes <paramref name="image"/> over the verified expected state, then adopts it only after exact verification.</summary>
+    /// <remarks>Failure leaves the previous expectation in place, so a later check reports a partial or conflicting change instead of hiding it.</remarks>
+    public void Publish(RestoreFileImage image, CancellationToken token = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _current.PublishFromRetained(image, token);
+        AcceptPublished(image, token);
     }
     public void Dispose() { if (_disposed) return; _disposed = true; _current.Dispose(); _original.Dispose(); }
 }
