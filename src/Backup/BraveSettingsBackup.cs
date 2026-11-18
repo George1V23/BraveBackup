@@ -94,7 +94,11 @@ public static class BraveSettingsBackup
 
     /// <summary>Checks archive integrity and the Brave-specific settings allowlist without extracting files.</summary>
     public static ArchiveManifest ValidateArchive(Stream source, string? password = null,
-        CancellationToken token = default)
+        CancellationToken token = default) => ValidateArchive(source, password, token, null);
+
+    /// <summary>Validates the archive and supplies each verified Extensions inventory to an optional reader.</summary>
+    internal static ArchiveManifest ValidateArchive(Stream source, string? password, CancellationToken token,
+        Action<Guid, ExtensionSnapshotInventory>? readExtensions)
     {
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
@@ -107,8 +111,8 @@ public static class BraveSettingsBackup
         var content = decrypted ?? source;
         content.Position = 0;
         using var zip = new ZipArchive(content, ZipArchiveMode.Read, leaveOpen: true);
-        foreach (var category in manifest.Installations.SelectMany(item => item.Profiles)
-                     .SelectMany(item => item.Categories))
+        foreach (var (profileId, category) in manifest.Installations.SelectMany(item => item.Profiles)
+                     .SelectMany(profile => profile.Categories.Select(category => (profile.Id, category))))
         {
             token.ThrowIfCancellationRequested();
             if (category.Id == "tabmanagerplus")
@@ -125,7 +129,8 @@ public static class BraveSettingsBackup
 
             if (category.Id == "extensions")
             {
-                BraveExtensionBackup.ValidateCategory(zip, category, token);
+                var inventory = BraveExtensionBackup.ReadValidatedInventory(zip, category, token);
+                readExtensions?.Invoke(profileId, inventory);
                 continue;
             }
 

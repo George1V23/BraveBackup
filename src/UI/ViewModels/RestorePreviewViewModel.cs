@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.IO;
@@ -109,7 +110,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
             foreach (var installation in manifest.Installations)
                 Installations.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}",
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
-                        profile.Categories.Select(Category).ToArray())).ToArray()));
+                        profile.Categories
+                            .Select(category => Category(category, result.ExtensionInventories.GetValueOrDefault(profile.Id))).ToArray())).ToArray()));
             _sourceSecret = result.Encrypted ? secret : null;
             Planning.LoadInspected(result);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
@@ -129,14 +131,16 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private static RestoreCategoryPreview Category(ArchiveCategory category)
+    private static RestoreCategoryPreview Category(ArchiveCategory category, ArchivedExtensionInventory? extensions)
     {
         var representation = category.Id == "passwords" ? category.Files.Any(file => file.Role == "plaintext-password-csv")
             ? "CSV passwords; readable after extraction. Destination compatibility must be verified."
             : category.Files.Any(file => file.Role == "raw-password-index")
                 ? "Raw password files; portability and recoverability are not guaranteed."
                 : "Portable password payload; destination encryption/provider compatibility must be verified."
-            : "Included in backup. Restore compatibility is not established by this preview.";
+            : category.Id == "extensions" && extensions is not null
+                ? $"{extensions.Count} archived extension identities. Use Recheck after mapping a profile to compare packages."
+                : "Included in backup. Restore compatibility is not established by this preview.";
         return new(category.Id + " (category v" + category.Version + ")", representation);
     }
 

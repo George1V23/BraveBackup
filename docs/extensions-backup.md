@@ -5,7 +5,8 @@ Writes with Extensions and no Sessions retain v3. Adding Sessions now uses
 
 All five [scope choices](extensions-backup-proposal.md) were kept by the user and are
 implemented. Extensions can be selected alone or with Bookmarks and/or supported Settings.
-This captures files, not an installed/enabled extension configuration or a restore workflow.
+The archive captures raw files and inventory. Use [Extensions compatibility in Restore](restore-extensions.md)
+to compare archived packages and destination registration.
 
 ## Included files and inventory
 

@@ -53,8 +53,11 @@ public partial class RestoreCategoryChoice : ViewModelBase
         {
             "bookmarks" => "Bookmarks",
             "settings" => "Settings",
+            "extensions" => "Extensions",
             _ => category.Id + " (v" + category.Version + ")"
         };
+        if (Id == "extensions")
+            SupportReason = "Use Recheck to compare archived packages with the destination. Extension restore is unavailable.";
         _changed = changed;
     }
 
@@ -80,10 +83,15 @@ public partial class RestoreProfileChoice : ViewModelBase
         get { try { return SelectedProfile?.FullPath ?? "No destination selected."; } catch { return "Invalid destination path."; } }
     }
     public bool HasSupportedCategories => Categories.Any(category => category.IsSupported);
+
+    /// <summary>Whether the selected destination matches the inspected source product and browser version.</summary>
+    internal bool IsCompatibleDestination => _sourceInstallation is { } source &&
+        SelectedInstallation?.Info is { } target && BraveProfileRestorePlan.IsCompatible(source, target);
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private RestoreTargetInstallation? _selectedInstallation;
     [ObservableProperty] private RestoreTargetProfile? _selectedProfile;
     [ObservableProperty] private string _checkResult = "Not checked. Choose a destination and use Recheck.";
+    [ObservableProperty] private string _extensionCheckResult = string.Empty;
 
     public RestoreProfileChoice(ArchiveProfile source, IReadOnlyList<RestoreTargetInstallation> targets, Action changed)
     {
@@ -100,8 +108,7 @@ public partial class RestoreProfileChoice : ViewModelBase
     private void UpdateCategories()
     {
         if (_sourceInstallation is null) return;
-        var target = SelectedInstallation?.Info;
-        var supported = target is not null && BraveProfileRestorePlan.IsCompatible(_sourceInstallation, target);
+        var supported = IsCompatibleDestination;
         const string incompatible = "Choose a Linux destination with the same Brave product and version as the archive.";
         Categories.SingleOrDefault(category => category.Id == "bookmarks")?.SetCompatibility(supported, supported
             ? "Replaces the destination Bookmarks file. The restore engine checks the native snapshot before writing."
@@ -145,6 +152,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     private ArchiveManifest? _manifest;
     private string _sourcePath = string.Empty;
     private string? _sourceHash;
+    private IReadOnlyDictionary<Guid, ArchivedExtensionInventory> _extensions =
+        new Dictionary<Guid, ArchivedExtensionInventory>();
     internal event Action? ReviewInputsChanged;
 
     internal (string Path, Guid Id, string Hash)? ReviewedSource =>
@@ -193,22 +202,24 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     public void SetTargets(IEnumerable<RestoreTargetInstallation> targets)
     {
         _targets = targets.ToArray();
-        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash);
+        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash, _extensions);
     }
     /// <summary>Loads independent source choices; archive names never select a destination.</summary>
     public void Load(ArchiveManifest manifest, string sourcePath) => LoadCore(manifest, sourcePath, null);
 
     internal void LoadInspected(BraveArchiveInspectionResult inspection)
     {
-        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256);
+        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256, inspection.ExtensionInventories);
     }
 
-    private void LoadCore(ArchiveManifest manifest, string sourcePath, string? sourceHash)
+    private void LoadCore(ArchiveManifest manifest, string sourcePath, string? sourceHash,
+        IReadOnlyDictionary<Guid, ArchivedExtensionInventory>? extensions = null)
     {
         Reset();
         _manifest = manifest;
         _sourcePath = sourcePath;
         _sourceHash = sourceHash;
+        if (extensions is not null) _extensions = extensions;
         foreach (var installation in manifest.Installations)
         {
             var profiles = installation.Profiles.Select(profile =>
@@ -224,7 +235,11 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     private void Changed()
     {
         ++_revision; _checking?.Cancel(); IsChecking = false;
-        foreach (var profile in Profiles) profile.CheckResult = "Not checked. Use Recheck after changing the plan.";
+        foreach (var profile in Profiles)
+        {
+            profile.CheckResult = "Not checked. Use Recheck after changing the plan.";
+            profile.ExtensionCheckResult = string.Empty;
+        }
         Notify();
     }
     private void Notify()
@@ -247,32 +262,48 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         if (!CanRecheck()) return;
         _checking?.Cancel(); using var cancellation = new CancellationTokenSource(); _checking = cancellation;
         var revision = ++_revision; var source = _sourcePath; var observer = ObserveBrowserState;
-        var requests = Profiles.Where(p => p.IsSelected).Select(p => (Row: p, App: p.SelectedInstallation, Profile: p.SelectedProfile)).ToArray();
+        var targets = _targets;
+        var requests = Profiles.Where(profile => profile.IsSelected).Select(profile =>
+            (Row: profile, App: profile.SelectedInstallation, Profile: profile.SelectedProfile,
+                Extensions: _extensions.GetValueOrDefault(profile.SourceId), Compatible: profile.IsCompatibleDestination)).ToArray();
         IsChecking = true;
+        foreach (var request in requests) request.Row.ExtensionCheckResult = string.Empty;
         try
         {
             var results = await Task.Run(() => requests.Select(request =>
             {
-                cancellation.Token.ThrowIfCancellationRequested();
-                if (request.App is null || request.Profile is null) return "No destination selected.";
-                if (!_targets.Any(t => ReferenceEquals(t, request.App)) || !request.App.Profiles.Any(p => ReferenceEquals(p, request.Profile)))
-                    return "Invalid destination mapping.";
+                var token = cancellation.Token;
+                token.ThrowIfCancellationRequested();
+                if (request.App is null || request.Profile is null) return ("No destination selected.", string.Empty);
+                if (!targets.Any(target => ReferenceEquals(target, request.App)) ||
+                    !request.App.Profiles.Any(profile => ReferenceEquals(profile, request.Profile)))
+                    return ("Invalid destination mapping.", string.Empty);
                 try
                 {
-                    BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, cancellation.Token);
-                    var presence = observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], cancellation.Token);
-                    return presence switch
-                    {
-                        ProcessPresence.Stopped => "Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
-                        ProcessPresence.Running => "Running. Close Brave manually before restoration.",
-                        _ => "Unable to verify. Restoration must stay blocked."
-                    };
+                    var path = BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, token);
+                    ProcessPresence Observe() => observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], token);
+                    var presence = Observe();
+                    if (presence == ProcessPresence.Running)
+                        return ("Running. Close Brave manually before restoration.", string.Empty);
+                    if (presence != ProcessPresence.Stopped)
+                        return ("Unable to verify. Restoration must stay blocked.", string.Empty);
+
+                    var extensionResult = CompareExtensions(path, request.Extensions, request.Compatible, token);
+                    if (request.Extensions is not null && request.Compatible && Observe() != ProcessPresence.Stopped)
+                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", string.Empty);
+                    return ("Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
+                        extensionResult);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { return "Unable to verify target path, access or browser status. Restoration must stay blocked."; }
+                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", string.Empty); }
             }).ToArray(), cancellation.Token);
             if (_disposed || revision != _revision) return;
-            for (var index = 0; index < requests.Length; index++) requests[index].Row.CheckResult = results[index];
+            for (var index = 0; index < requests.Length; index++)
+            {
+                var (result, extensions) = results[index];
+                requests[index].Row.CheckResult = result;
+                requests[index].Row.ExtensionCheckResult = extensions;
+            }
             Notify();
         }
         catch (OperationCanceledException) { }
@@ -282,6 +313,41 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             if (!_disposed && revision == _revision) IsChecking = false;
         }
     }
+    private static string CompareExtensions(string profilePath, ArchivedExtensionInventory? archived, bool compatible,
+        CancellationToken token)
+    {
+        if (archived is null) return string.Empty;
+        if (archived.Count == 0) return "The archive contains no extension identities for this profile.";
+        if (!compatible) return "Extension comparison requires a Linux destination with the same recorded Brave product and version.";
+        if (archived.Entries is null) return "This archive exceeds the limit for extension comparison details.";
+        try
+        {
+            var checks = BraveExtensionRestoreAssessment.Check(profilePath, archived.Entries, token);
+            const int displayLimit = 50;
+            var matches = checks.Count(check => check.Match == ExtensionRegistrationMatch.PackageMatches);
+            var lines = checks.Take(displayLimit).Select(check =>
+                $"{check.Archive.Id}  ·  {DescribeRegistration(check)}  ·  Local {check.Archive.LocalStorage}, Sync {check.Archive.SyncStorage}");
+            var summary = $"Archived extensions with matching registered packages: {matches} of {checks.Length}. Local and Sync show archive contents.";
+            if (checks.Length > displayLimit) summary += $" Showing the first {displayLimit} identities.";
+            return summary + "\n" + string.Join("\n", lines);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return "Unable to read the destination's extension registration.";
+        }
+    }
+
+    private static string DescribeRegistration(ExtensionRegistrationCheck check) => check.Match switch
+    {
+        ExtensionRegistrationMatch.ArchiveHasNoPackage => "Archive contains storage only",
+        ExtensionRegistrationMatch.RegistrationMissing => "No destination registration",
+        ExtensionRegistrationMatch.UnsupportedRegistration => "Registration uses an unsupported location or format",
+        ExtensionRegistrationMatch.VersionNotArchived => $"Registered version {check.RegisteredVersion} is absent from the archive",
+        ExtensionRegistrationMatch.PackageDiffers => $"Registered version {check.RegisteredVersion} differs from the archived package",
+        ExtensionRegistrationMatch.PackageMatches => $"Registered version {check.RegisteredVersion} matches the archived package",
+        _ => "Registration or package could not be verified"
+    };
+
     /// <summary>Selects only archived source profiles, independently of all live backup selections.</summary>
     [RelayCommand] private void SelectAllProfiles() { foreach (var profile in Profiles) profile.IsSelected = true; }
     /// <summary>Clears archived source selection without modifying browser data.</summary>
@@ -290,7 +356,9 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     public void Reset()
     {
         ++_revision; _checking?.Cancel(); _checking = null; IsChecking = false;
-        Groups.Clear(); _manifest = null; _sourcePath = string.Empty; _sourceHash = null; Notify();
+        Groups.Clear(); _manifest = null; _sourcePath = string.Empty; _sourceHash = null;
+        _extensions = new Dictionary<Guid, ArchivedExtensionInventory>();
+        Notify();
     }
     public void Dispose() { if (_disposed) return; Reset(); _disposed = true; ObserveBrowserState = null; _targets = []; }
 }

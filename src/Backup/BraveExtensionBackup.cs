@@ -39,7 +39,12 @@ public static class BraveExtensionBackup
     }
 
     /// <summary>Checks exact extension IDs and archived manifest metadata after Core has checked all hashes.</summary>
-    public static void ValidateCategory(ZipArchive zip, ArchiveCategory category, CancellationToken token)
+    public static void ValidateCategory(ZipArchive zip, ArchiveCategory category, CancellationToken token) =>
+        ReadValidatedInventory(zip, category, token);
+
+    /// <summary>Returns inventory after checking Brave identities and each archived manifest.</summary>
+    internal static ExtensionSnapshotInventory ReadValidatedInventory(ZipArchive zip, ArchiveCategory category,
+        CancellationToken token)
     {
         var descriptor = category.Files.Single(file => file.Role == "extension-inventory");
         using var input = zip.GetEntry(descriptor.Path)!.Open();
@@ -66,11 +71,12 @@ public static class BraveExtensionBackup
                 }
             }
         }
+        return inventory;
     }
 
     internal static bool ValidId(string id) => id.Length == 32 && id.All(character => character is >= 'a' and <= 'p');
 
-    private static bool ValidVersion(string? value)
+    internal static bool ValidVersion(string? value)
     {
         if (value is null) return false;
         var parts = value.Split('.');

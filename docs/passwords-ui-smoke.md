@@ -39,6 +39,7 @@ The runner drives actual selector bindings and dialog button handlers, checking:
 - Explicit preservation creates a valid encrypted version-7 backup.
 - Mixed Bookmarks and Settings restore previews both destinations, requires confirmation,
   saves recovery artifacts, and preserves unrelated preference values and profile files.
+- Restore Recheck displays a registered Extensions package match and leaves the profile unchanged.
 
 It saves a rendered main-window image to
 [`screenshots/password-csv-section.png`](screenshots/password-csv-section.png).
