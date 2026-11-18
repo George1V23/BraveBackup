@@ -41,7 +41,25 @@ removal, never-used profile blocked without writes, running browser blocking cre
 password/unknown profile rejection, and unsupported snapshot rejection. Full run: 996 Core, 48 Brave, 51 Linux
 (4 skipped), 14 Windows-labelled (7 skipped).
 
+## Verification against a real Brave profile (2026-11-18, Linux)
+
+Method: only the real profile's `Bookmarks` file (read-only copy; 80 bookmarks, 10 folders, 52 KB, Brave 154) became the
+backup source of a scratch profile, and its older `Bookmarks.bak` (a different real version) the scratch destination's
+original state. `Preferences` in both scratch profiles was a stub `{}`: the real one can carry Sync state, and a copy could
+touch synced data when launched. A throwaway checker called the same code as the UI (`BraveArchiveBackup`,
+`BraveBookmarksRestoreSession`) with an encrypted archive.
+
+Results, all passed: the real process probe **refused** the restore while the user's Brave was running; with the observer
+injected as stopped (the scratch profile is a different directory) the restore completed, the destination was byte-identical to
+the backed-up file, the other profile file was unchanged, permissions stayed 0600, no staging files remained, and rollback
+restored the exact original bytes. After a second restore, a separate headless Brave 154 started on the scratch directory
+(sync, background networking and component updates disabled) and, through the DevTools protocol, reported **80 bookmarks and
+12 folders** (the file's 10 plus the bookmark bar and other-bookmarks roots; Brave hides the empty synced root). The file was
+unchanged after Brave loaded it. The live profile was never opened for writing; scratch data was deleted afterwards.
+
+Not covered: Windows, a profile with Brave Sync enabled, a destination Brave version different from the source, and
+Brave running on the destination (blocked by design).
+
 ## Remaining for Phase 4
 
-Your review of the implemented controls, real-Brave verification of a restored profile and Windows native
-validation are still outstanding.
+Your review of the implemented controls and Windows native validation are still outstanding.
