@@ -115,14 +115,76 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         }
     }
     /// <summary>Publishes a new recovery file with verified metadata; never replaces an existing child.</summary>
-    /// <remarks>Callers must authorize the target and enforce closed-browser state. Existing-target recovery is not implemented here.</remarks>
+    /// <remarks>Callers must authorize the target and enforce closed-browser state. Use <see cref="ReplaceChildWithRecoveryFile"/> for existing targets.</remarks>
     public void PublishNewRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata)
     {
         Verify(); CheckName(name);
-        var staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
+        using var output = StageRecoveryFile(content, metadata, out var staging);
+        try
+        {
+            if (RenameAt(_handle, staging, _handle, name, 1) != 0) throw new IOException("Recovery destination already exists or cannot be published.");
+            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
+            Verify();
+        }
+        finally { CleanupOwnedChild(staging, output.SafeFileHandle); }
+    }
+
+    /// <summary>Replaces a named child only if it is still the retained original file, applying verified content and metadata.</summary>
+    /// <remarks>
+    /// Uses an atomic exchange, then checks that the displaced file is the retained one; a mismatch is swapped back and rejected.
+    /// A concurrent writer may briefly observe the new file. Callers must authorize the target and enforce closed-browser state.
+    /// </remarks>
+    public void ReplaceChildWithRecoveryFile(string name, ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata, SafeFileHandle retainedExisting)
+    {
+        Verify(); CheckName(name);
+        using var output = StageRecoveryFile(content, metadata, out var staging);
+        try
+        {
+            if (RenameAt(_handle, staging, _handle, name, 2) != 0) throw new IOException("Recovery target is missing or cannot be exchanged.");
+            if (!MatchesChild(staging, retainedExisting))
+            {
+                // The displaced child was not the retained original; put it back and keep the staged file for cleanup.
+                if (RenameAt(_handle, staging, _handle, name, 2) != 0)
+                    throw new IOException("Recovery target changed and could not be restored; recovery artifacts require attention.");
+                throw new IOException("Recovery target identity changed before replacement.");
+            }
+            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
+            Verify();
+        }
+        finally
+        {
+            // After a successful exchange the staging name holds the retained original, which is intentionally discarded.
+            if (MatchesChild(staging, retainedExisting) && UnlinkAt(_handle, staging, 0) != 0)
+                throw new IOException("Recovery staging cleanup failed; recovery artifacts require attention.");
+            CleanupOwnedChild(staging, output.SafeFileHandle);
+        }
+    }
+
+    /// <summary>Removes a named child only if it is still the retained original file.</summary>
+    /// <remarks>The child is first renamed aside without replacement, verified, then unlinked; a mismatch is renamed back.</remarks>
+    public void DeleteChild(string name, SafeFileHandle retainedExisting)
+    {
+        Verify(); CheckName(name);
+        var aside = ".restore-" + Guid.NewGuid().ToString("N") + ".del";
+        if (RenameAt(_handle, name, _handle, aside, 1) != 0) throw new IOException("Recovery target is missing or cannot be removed.");
+        if (!MatchesChild(aside, retainedExisting))
+        {
+            if (RenameAt(_handle, aside, _handle, name, 1) != 0)
+                throw new IOException("Recovery target changed and could not be restored; recovery artifacts require attention.");
+            throw new IOException("Recovery target identity changed before deletion.");
+        }
+        if (UnlinkAt(_handle, aside, 0) != 0) throw new IOException("Recovery target removal failed; recovery artifacts require attention.");
+        Verify();
+    }
+
+    /// <summary>Creates a private staging file with exact content and verified metadata; the caller owns the returned stream.</summary>
+    private FileStream StageRecoveryFile(ReadOnlyMemory<byte> content, ReadOnlyMemory<byte> metadata, out string staging)
+    {
+        staging = ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
         var descriptor = OpenAt(_handle, staging, 2 | 0x40 | 0x80 | 0x20000 | 0x80000, 0x180);
         if (descriptor < 0) throw new IOException("Cannot create private recovery staging.");
-        using var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.ReadWrite);
+        var output = new FileStream(new SafeFileHandle((IntPtr)descriptor, true), FileAccess.ReadWrite);
+        var name = staging;
         try
         {
             output.Write(content.Span); output.Flush(true);
@@ -143,12 +205,10 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
             }
             finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
             Verify();
-            if (!MatchesChild(staging, output.SafeFileHandle)) throw new IOException("Recovery staging identity changed.");
-            if (RenameAt(_handle, staging, _handle, name, 1) != 0) throw new IOException("Recovery destination already exists or cannot be published.");
-            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Published recovery identity changed.");
-            Verify();
+            if (!MatchesChild(name, output.SafeFileHandle)) throw new IOException("Recovery staging identity changed.");
+            return output;
         }
-        finally { CleanupOwnedChild(staging, output.SafeFileHandle); }
+        catch { try { CleanupOwnedChild(name, output.SafeFileHandle); } finally { output.Dispose(); } throw; }
     }
 
     /// <summary>Removes an observed owned staging child; cleanup failure must remain visible to the recovery caller.</summary>

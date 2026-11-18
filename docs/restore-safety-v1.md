@@ -539,3 +539,21 @@ a changed process working directory. The focused expected-state and restore-cont
 pass after this change. Working-directory mutation was not exercised because it is global
 to concurrently running tests. Physical identity and publication protections remain separate;
 production replacement/deletion and UI execution remain pending.
+
+## Linux guarded replacement and deletion primitives
+
+`RecoveryDirectoryIdentity` gained `ReplaceChildWithRecoveryFile` and `DeleteChild`. Both act
+only on a child that is still the caller's retained original file handle:
+
+- Replacement stages content with verified metadata, swaps it in with `renameat2(RENAME_EXCHANGE)`,
+  then confirms the displaced file is the retained one. A mismatch is swapped back and rejected.
+- Deletion renames the child aside without replacement, verifies identity, then unlinks it; a
+  mismatch is renamed back and rejected.
+- `PublishNewRecoveryFile` now shares the same staging/verification helper.
+
+Four native synthetic tests pass (replacement with metadata, substituted target restored,
+missing target without residue, deletion of only the retained original); the Linux suite is at
+41 passed, 4 skipped. Limits: a concurrent writer may briefly see the new or displaced file, and
+if a swap-back itself fails the error says recovery artifacts need attention. These primitives are
+not yet connected to `RestoreTransaction` or expected-state tracking, and Windows parity remains
+pending. No restore command is enabled.

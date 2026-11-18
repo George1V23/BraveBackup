@@ -137,5 +137,59 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
         Assert.True(first.RefersToSameDirectory(alias));
         Assert.False(first.RefersToSameDirectory(different));
     }
+    [Fact]
+    public void ReplacementRequiresRetainedOriginalAndAppliesContentAndMetadata()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(_root, "target"); File.WriteAllText(path, "synthetic-original");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        using var retained = directory.OpenReadChild("target");
+        byte[] metadata = LinuxRecoveryMetadata.Capture(retained.SafeFileHandle);
+        directory.ReplaceChildWithRecoveryFile("target", "synthetic-new"u8.ToArray(), metadata, retained.SafeFileHandle);
+        Assert.Equal("synthetic-new", File.ReadAllText(path));
+        Assert.Single(Directory.GetFiles(_root));
+    }
+    [Fact]
+    public void ReplacementOfSubstitutedTargetIsRejectedAndSubstituteRestored()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(_root, "target"); File.WriteAllText(path, "synthetic-original");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        using var retained = directory.OpenReadChild("target");
+        byte[] metadata = LinuxRecoveryMetadata.Capture(retained.SafeFileHandle);
+        var substitute = Path.Combine(_root, "substitute"); File.WriteAllText(substitute, "synthetic-edit");
+        File.Move(substitute, path, true);
+        Assert.Throws<IOException>(() => directory.ReplaceChildWithRecoveryFile("target", "synthetic-new"u8.ToArray(), metadata, retained.SafeFileHandle));
+        Assert.Equal("synthetic-edit", File.ReadAllText(path));
+        Assert.Single(Directory.GetFiles(_root));
+    }
+    [Fact]
+    public void ReplacementOfMissingTargetIsRejectedWithoutResidue()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(_root, "target"); File.WriteAllText(path, "synthetic");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        using var retained = directory.OpenReadChild("target");
+        byte[] metadata = LinuxRecoveryMetadata.Capture(retained.SafeFileHandle);
+        File.Delete(path);
+        Assert.Throws<IOException>(() => directory.ReplaceChildWithRecoveryFile("target", "x"u8.ToArray(), metadata, retained.SafeFileHandle));
+        Assert.Empty(Directory.GetFiles(_root));
+    }
+    [Fact]
+    public void DeletionRemovesOnlyRetainedOriginal()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var path = Path.Combine(_root, "target"); File.WriteAllText(path, "synthetic");
+        using var directory = RecoveryDirectoryIdentity.Open(_root);
+        using var retained = directory.OpenReadChild("target");
+        var substitute = Path.Combine(_root, "substitute"); File.WriteAllText(substitute, "synthetic");
+        File.Move(substitute, path, true);
+        Assert.Throws<IOException>(() => directory.DeleteChild("target", retained.SafeFileHandle));
+        Assert.Equal("synthetic", File.ReadAllText(path));
+        Assert.Single(Directory.GetFiles(_root));
+        using var current = directory.OpenReadChild("target");
+        directory.DeleteChild("target", current.SafeFileHandle);
+        Assert.Empty(Directory.GetFiles(_root));
+    }
     public void Dispose() => Directory.Delete(_root, true);
 }
