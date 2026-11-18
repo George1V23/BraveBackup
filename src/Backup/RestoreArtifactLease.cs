@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 namespace BraveBackup.Core;
 
 /// <summary>Linux operation-lifetime recovery ownership. Does not modify profiles or implement a target writer.</summary>
-public sealed class RestoreArtifactLease : IDisposable
+public sealed class RestoreArtifactLease : IRestoreArtifacts, IDisposable
 {
     private readonly RestoreArtifactScope _scope;
     private readonly RecoveryDirectoryIdentity _directory;

@@ -4,7 +4,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace BraveBackup.Platform;
 
-/// <summary>Windows recovery metadata capture only. Application/publication is not enabled.</summary>
+/// <summary>Windows recovery metadata capture and handle-based application (native validation pending).</summary>
 public static class WindowsRecoveryMetadata
 {
     /// <summary>Captures handle-based owner/group/DACL and UTC timestamps into bounded opaque metadata.</summary>
@@ -34,6 +34,38 @@ public static class WindowsRecoveryMetadata
         descriptor.CopyTo(bytes, 36);
         Validate(bytes);
         return bytes;
+    }
+    /// <summary>Applies owner/group/DACL and creation/write times to a handle opened with write-attribute, WRITE_DAC and WRITE_OWNER access.</summary>
+    /// <remarks>
+    /// Fails closed: invalid framing, a rejected security change (for example owner changes without the needed privilege) or a readback
+    /// that differs in descriptor bytes or creation/write times throws. Last-access time is applied but not compared. SACL, streams and EAs are not handled.
+    /// </remarks>
+    public static void Apply(SafeFileHandle handle, ReadOnlySpan<byte> bytes)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        Validate(bytes);
+        var expected = bytes.ToArray();
+        var descriptor = Marshal.AllocHGlobal(expected.Length - 36);
+        try
+        {
+            Marshal.Copy(expected, 36, descriptor, expected.Length - 36);
+            if (!GetOwner(descriptor, out var owner, out _) || !GetGroup(descriptor, out var group, out _) ||
+                !GetDacl(descriptor, out var present, out var dacl, out _) || !DescriptorControl(descriptor, out var control, out _))
+                throw new IOException("Cannot read Windows recovery security descriptor.");
+            uint information = 0;
+            if (owner != IntPtr.Zero) information |= 1;
+            if (group != IntPtr.Zero) information |= 2;
+            if (present) information |= 4 | ((control & 0x1000) != 0 ? 0x80000000u : 0x20000000u);
+            if (information != 0 && SetSecurityInfo(handle, 1, information, owner, group, dacl, IntPtr.Zero) != 0)
+                throw new IOException("Cannot apply Windows recovery security descriptor.");
+        }
+        finally { Marshal.FreeHGlobal(descriptor); }
+        File.SetCreationTimeUtc(handle, new DateTime(BinaryPrimitives.ReadInt64LittleEndian(expected.AsSpan(8)), DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(handle, new DateTime(BinaryPrimitives.ReadInt64LittleEndian(expected.AsSpan(16)), DateTimeKind.Utc));
+        File.SetLastAccessTimeUtc(handle, new DateTime(BinaryPrimitives.ReadInt64LittleEndian(expected.AsSpan(24)), DateTimeKind.Utc));
+        var actual = Capture(handle);
+        if (!actual.AsSpan(8, 16).SequenceEqual(expected.AsSpan(8, 16)) || !actual.AsSpan(32).SequenceEqual(expected.AsSpan(32)))
+            throw new IOException("Windows recovery metadata readback did not match.");
     }
     /// <summary>Checks opaque metadata framing, timestamps and self-relative descriptor bounds without invoking Windows APIs.</summary>
     /// <remarks>Structural checks do not establish native ACL validity or authorization to apply it.</remarks>
@@ -91,6 +123,18 @@ public static class WindowsRecoveryMetadata
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern uint GetSecurityInfo(SafeFileHandle handle, int objectType, uint information,
         out IntPtr owner, out IntPtr group, out IntPtr dacl, out IntPtr sacl, out IntPtr descriptor);
+    [DllImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorOwner")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetOwner(IntPtr descriptor, out IntPtr owner, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+    [DllImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorGroup")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetGroup(IntPtr descriptor, out IntPtr group, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+    [DllImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorDacl")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDacl(IntPtr descriptor, [MarshalAs(UnmanagedType.Bool)] out bool present, out IntPtr dacl, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern uint SetSecurityInfo(SafeFileHandle handle, int objectType, uint information,
+        IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
     [DllImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorLength")]
     private static extern uint DescriptorLength(IntPtr descriptor);
     [DllImport("kernel32.dll")]

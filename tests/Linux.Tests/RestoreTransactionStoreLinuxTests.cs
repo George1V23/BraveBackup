@@ -4,11 +4,11 @@ using Xunit;
 namespace BraveBackup.Core.Tests;
 
 /// <summary>Runs the production Linux store through the transaction engine on synthetic directories only.</summary>
-public sealed class LinuxRestoreTransactionStoreTests : IDisposable
+public sealed class RestoreTransactionStoreLinuxTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "LinuxStore_" + Guid.NewGuid().ToString("N"));
     private readonly string _data, _profile, _recovery, _source;
-    public LinuxRestoreTransactionStoreTests()
+    public RestoreTransactionStoreLinuxTests()
     {
         _data = Path.Combine(_root, "browser"); _profile = Path.Combine(_data, "Default"); _recovery = Path.Combine(_root, "recovery");
         Directory.CreateDirectory(_profile); Directory.CreateDirectory(_recovery);
@@ -33,7 +33,7 @@ public sealed class LinuxRestoreTransactionStoreTests : IDisposable
         var metadata = Metadata(existing);
         var (context, lease, scope) = Open(); using var _ = lease;
         Guid a = Guid.NewGuid(), b = Guid.NewGuid(), c = Guid.NewGuid(), profile = Guid.NewGuid(), installation = Guid.NewGuid();
-        using var store = new LinuxRestoreTransactionStore(context, lease, new Dictionary<Guid, (string, string)>
+        using var store = RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)>
         { [a] = (_profile, "Bookmarks"), [b] = (_profile, "Created"), [c] = (_profile, "Removed") });
         using var replacement = new RestoreFileImage(true, "synthetic-new"u8, metadata);
         using var deletion = new RestoreFileImage(false, []);
@@ -60,7 +60,7 @@ public sealed class LinuxRestoreTransactionStoreTests : IDisposable
         var metadata = Metadata(existing);
         var (context, lease, _) = Open(); using var _ = lease;
         var id = Guid.NewGuid();
-        using var store = new LinuxRestoreTransactionStore(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") });
+        using var store = RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") });
         using var replacement = new RestoreFileImage(true, "synthetic-new"u8, metadata);
         using var transaction = new RestoreTransaction([new(id, Guid.NewGuid(), Guid.NewGuid(), "bookmarks", replacement)], store, "synthetic-password");
         transaction.Prepare();
@@ -78,14 +78,14 @@ public sealed class LinuxRestoreTransactionStoreTests : IDisposable
         var state = ProcessPresence.Stopped;
         var (context, lease, _) = Open(() => state); using var _ = lease;
         var id = Guid.NewGuid();
-        using var store = new LinuxRestoreTransactionStore(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") });
+        using var store = RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") });
         using var replacement = new RestoreFileImage(true, "synthetic-new"u8, Metadata(Path.Combine(_profile, "Bookmarks")));
         using var transaction = new RestoreTransaction([new(id, Guid.NewGuid(), Guid.NewGuid(), "bookmarks", replacement)], store, "synthetic-password");
         transaction.Prepare();
         state = ProcessPresence.Running;
         Assert.Throws<IOException>(() => transaction.Run());
         Assert.Equal("synthetic-original", File.ReadAllText(Path.Combine(_profile, "Bookmarks")));
-        Assert.Throws<IOException>(() => new LinuxRestoreTransactionStore(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") }));
+        Assert.Throws<IOException>(() => RestoreTransactionStore.Create(context, lease, new Dictionary<Guid, (string, string)> { [id] = (_profile, "Bookmarks") }));
     }
 
     public void Dispose() => Directory.Delete(_root, true);

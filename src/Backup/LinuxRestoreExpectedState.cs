@@ -1,7 +1,7 @@
 namespace BraveBackup.Core;
 
 /// <summary>Owned expected-state checkpoint, separate from immutable original safety state. Target changes occur only through the explicit <see cref="Publish"/> call.</summary>
-public sealed class LinuxRestoreExpectedState : IDisposable
+public sealed class LinuxRestoreExpectedState : IRestoreTargetState
 {
     private readonly string _directory;
     private readonly string _name;

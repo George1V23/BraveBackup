@@ -582,3 +582,33 @@ Limits: `BraveRestoreContext.Verify` rereads the whole source archive on every c
 large archives. Directory-level changes (permissions, timestamps) and concurrent writers during the
 brief exchange window are not covered. The store is not wired to any UI or command, no real-format
 writer exists (bookmarks is Phase 4), and Windows parity remains pending.
+
+## Windows target and artifact parity (compile-verified only, not natively validated)
+
+The Linux-only store became platform-neutral: `RestoreTransactionStore` (renamed from
+`LinuxRestoreTransactionStore`) works over two small interfaces, `IRestoreTargetState` (verified
+read, guarded publish) and `IRestoreArtifacts` (safety/journal storage and ownership check).
+`RestoreTransactionStore.Create` selects the Linux or Windows implementation; `LinuxRestoreExpectedState`
+and `RestoreArtifactLease` now implement the interfaces unchanged. Duplicate targets are compared
+case-insensitively on Windows.
+
+New Windows pieces:
+- `WindowsRecoveryFileTarget` retains ancestors and the original file (read/delete sharing only, so
+  cooperating processes cannot write to it). Deletion acts on the retained handle itself. Replacement
+  stages a verified file (content plus applied metadata), re-checks that the path still names the
+  retained file, then renames it over the target with POSIX-semantics `FileRenameInfoEx`.
+- `WindowsRecoveryMetadata.Apply` applies owner/group/DACL through `SetSecurityInfo` and the three
+  timestamps, then reads back and compares the descriptor and creation/write times; any rejection
+  (for example owner changes without privilege) fails closed.
+- `WindowsRestoreExpectedState` and `WindowsRestoreArtifacts` implement the interfaces. Metadata
+  comparison ignores last-access time.
+
+Limits: unlike Linux there is no atomic exchange, so a non-cooperating substitution between the
+identity check and the rename is only detected afterwards. Artifact publication is path-based with
+retained ancestors and has no exclusive-lock equivalent; tampering is caught by the coordinator's
+authentication and journal readback. SACLs, streams and EAs are not handled; read-only targets fail
+closed. **None of this has run on Windows**: the build succeeds and two Windows-only native tests
+(handle-based delete, full replace/create/delete/rollback) are skipped here (14 passed, 7 skipped in
+the Windows-labelled project). Treat Windows restore as unusable until those pass natively. A
+platform-neutral fake-based store test was added (996 Core tests pass; 44 Linux, 4 skipped). No
+restore command is enabled.
