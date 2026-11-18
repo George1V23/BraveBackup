@@ -18,6 +18,8 @@ public interface IRestoreTransactionStore
     void VerifyRecoveryContext(CancellationToken token) => VerifyContext(token);
     RestoreFileImage ReadTarget(Guid mutationId, CancellationToken token);
     void WriteTargetAtomic(Guid mutationId, RestoreFileImage image);
+    /// <summary>Publishes a rollback image, allowing a store to use rollback-specific checks at the write boundary.</summary>
+    void WriteRecoveryTargetAtomic(Guid mutationId, RestoreFileImage image) => WriteTargetAtomic(mutationId, image);
     void SaveSafety(ReadOnlyMemory<byte> encryptedBytes);
     byte[] ReadSafety();
     void SaveJournal(ReadOnlyMemory<byte> encryptedBytes);
@@ -75,15 +77,21 @@ public sealed class RestoreTransaction : IDisposable
     private long _revision;
     private int _pause;
     private bool _disposed;
-    public Guid OperationId { get; } = Guid.NewGuid();
+    public Guid OperationId { get; }
     public RestoreTransactionState State { get; private set; }
     public IReadOnlyList<RestoreEntryState> EntryStates => Array.AsReadOnly(_entries);
     public Action<RestoreTransactionProgress>? Progress { get; set; }
 
     /// <summary>Freezes identities/content in owned buffers. The safety password is separate from source archive handling.</summary>
     public RestoreTransaction(IReadOnlyList<RestoreMutation> mutations, IRestoreTransactionStore store, string safetyPassword)
+        : this(mutations, store, safetyPassword, Guid.NewGuid()) { }
+
+    /// <summary>Freezes a transaction using the same operation ID as its recovery artifact paths.</summary>
+    public RestoreTransaction(IReadOnlyList<RestoreMutation> mutations, IRestoreTransactionStore store,
+        string safetyPassword, Guid operationId)
     {
         ArgumentNullException.ThrowIfNull(store);
+        OperationId = operationId;
         if (string.IsNullOrEmpty(safetyPassword)) throw new ArgumentException("A safety encryption password is required.");
         RestoreSafetyFormat.ValidateIdentity(OperationId, mutations.Select(m => m.Id));
         _store = store; _password = safetyPassword; _entries = new RestoreEntryState[mutations.Count];
@@ -231,7 +239,7 @@ public sealed class RestoreTransaction : IDisposable
                         using (var afterJournal = _store.ReadTarget(mutation.Id, CancellationToken.None))
                             if (!Same(afterJournal, current))
                                 throw new IOException("Rollback target changed while recording recovery intent.");
-                        _store.WriteTargetAtomic(mutation.Id, original);
+                        _store.WriteRecoveryTargetAtomic(mutation.Id, original);
                         using var restored = _store.ReadTarget(mutation.Id, CancellationToken.None);
                         if (!Same(restored, original)) throw new IOException("Rollback publication verification failed.");
                     }

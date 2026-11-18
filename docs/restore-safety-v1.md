@@ -587,3 +587,24 @@ for a same-user process that ignores the lock. Recovery must report failures tha
 after publication as unresolved when the new target cannot be verified. The test harness
 supplies the mapping and context callback. Application-level authorization, lifecycle and
 Windows target publication still need integration before this path is used on profiles.
+
+## Linux session integration
+
+The internal `LinuxRestoreSession` binds explicit profile/file mappings to the coordinator,
+retained target checkpoints and the encrypted artifact lease. It rejects duplicate file
+mappings, bounds retained target images and excludes the authorized browser roots from
+the artifact location. The same operation ID names both artifacts and identifies their
+contents. Opening the session captures baselines without publishing target or artifact
+files. Prepare verifies the safety snapshot before the coordinator authorizes target writes.
+
+Forward publication checks the original source before writing. Rollback publication uses
+the recovery context and still checks target paths, browser state, and encrypted artifact
+ownership. Native synthetic tests cover restored bytes and metadata, removal of originally
+absent files, source loss while paused, a running browser blocking rollback, and rejection
+of duplicate mappings or a recovery directory inside browser data.
+
+This session is an internal integration point for a later category writer. Its caller must
+authenticate the source archive, derive compatible file mutations, and obtain explicit
+restore approval. The existing cooperative Linux locking limit still applies. The Restore
+UI continues to offer planning while category execution and native Windows validation
+remain pending.

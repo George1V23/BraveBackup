@@ -6,54 +6,111 @@ namespace BraveBackup.Core.Tests;
 /// <summary>Integrates native metadata, encrypted artifact ownership and rollback on synthetic files only.</summary>
 public sealed class RestoreMetadataTransactionTests
 {
-    [Fact]
-    public void RollbackRecoversBytesPermissionsTimeAndOriginalAbsence()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RollbackRecoversBytesPermissionsTimeAndOriginalAbsence(bool removeSourceWhilePaused)
     {
         if (!OperatingSystem.IsLinux()) return;
         var root = Path.Combine(Path.GetTempPath(), "MetadataTransaction_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            var target = Path.Combine(root, "target"); File.WriteAllText(target, "synthetic-original");
+            var data = Path.Combine(root, "browser");
+            var targetDirectory = Path.Combine(data, "Default");
+            Directory.CreateDirectory(targetDirectory);
+            var target = Path.Combine(targetDirectory, "target");
+            File.WriteAllText(target, "synthetic-original");
             File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.SetLastWriteTimeUtc(target, new DateTime(2025, 2, 3, 4, 5, 6, DateTimeKind.Utc));
             byte[] originalMetadata;
             using (var file = File.OpenRead(target)) originalMetadata = LinuxRecoveryMetadata.Capture(file.SafeFileHandle);
             var recovery = Path.Combine(root, "recovery"); Directory.CreateDirectory(recovery);
-            var scope = new RestoreArtifactScope(Guid.NewGuid(), recovery, Path.Combine(root, "source"), []);
-            using var lease = RestoreArtifactLease.Acquire(scope);
-            var first = Guid.NewGuid(); var second = Guid.NewGuid(); var profile = Guid.NewGuid(); var installation = Guid.NewGuid();
-            var absent = Path.Combine(root, "originally-absent");
+            var source = Path.Combine(root, "source.bravebackup");
+            File.WriteAllText(source, "synthetic-source");
+            var first = Guid.NewGuid();
+            var second = Guid.NewGuid();
+            var profile = Guid.NewGuid();
+            var installation = Guid.NewGuid();
+            var app = new BraveAppInfo(BraveAppChannel.Stable, "synthetic", "synthetic", data);
+            var destination = new BraveProfileInfo("Synthetic", targetDirectory, target);
+            var absent = Path.Combine(targetDirectory, "originally-absent");
             using var replacement = new RestoreFileImage(true, "synthetic-new"u8, originalMetadata);
-            using var existingState = new LinuxRestoreExpectedState(root, Path.GetFileName(target));
-            using var missingState = new LinuxRestoreExpectedState(root, Path.GetFileName(absent));
-            var store = new Store(lease, new() { [first] = existingState, [second] = missingState });
-            using var transaction = new RestoreTransaction([
-                new(first, installation, profile, "bookmarks", replacement),
-                new(second, installation, profile, "bookmarks", replacement)], store, "synthetic-password");
-            transaction.Prepare(); transaction.Run();
-            Assert.Equal(RestoreTransactionState.Completed, transaction.State);
-            Assert.Equal("synthetic-new", File.ReadAllText(target)); Assert.True(File.Exists(absent));
-            transaction.Rollback(true); Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
-            Assert.Equal("synthetic-original", File.ReadAllText(target)); Assert.False(File.Exists(absent));
+            var presence = ProcessPresence.Stopped;
+            using var session = LinuxRestoreSession.Open(source, recovery, [
+                new(new(first, installation, profile, "bookmarks", replacement), app, destination, Path.GetFileName(target)),
+                new(new(second, installation, profile, "bookmarks", replacement), app, destination, Path.GetFileName(absent))],
+                "synthetic-password", [], () => presence);
+            var transaction = session.Transaction;
+            var scope = session.Artifacts;
+            Assert.Empty(Directory.GetFiles(recovery));
+            Assert.Contains(transaction.OperationId.ToString("N"), Path.GetFileName(scope.SafetyPath));
+
+            transaction.Prepare();
+            var safety = File.ReadAllBytes(scope.SafetyPath);
+            if (removeSourceWhilePaused)
+                transaction.Progress = progress =>
+                {
+                    if (progress.State == RestoreTransactionState.Running) transaction.RequestPause();
+                };
+            transaction.Run();
+            Assert.Equal("synthetic-new", File.ReadAllText(target));
+            if (removeSourceWhilePaused)
+            {
+                Assert.Equal(RestoreTransactionState.Paused, transaction.State);
+                Assert.False(File.Exists(absent));
+                File.Delete(source);
+                Assert.ThrowsAny<IOException>(() => transaction.Run());
+
+                presence = ProcessPresence.Running;
+                Assert.Throws<IOException>(() => transaction.Rollback(true));
+                Assert.Equal(RestoreTransactionState.RecoveryIncomplete, transaction.State);
+                Assert.Equal("synthetic-new", File.ReadAllText(target));
+                presence = ProcessPresence.Stopped;
+            }
+            else
+            {
+                Assert.Equal(RestoreTransactionState.Completed, transaction.State);
+                Assert.True(File.Exists(absent));
+            }
+
+            transaction.Rollback(true);
+            Assert.Equal(RestoreTransactionState.RolledBack, transaction.State);
+            Assert.Equal("synthetic-original", File.ReadAllText(target));
+            Assert.False(File.Exists(absent));
             using var restored = File.OpenRead(target);
             Assert.Equal(originalMetadata, LinuxRecoveryMetadata.Capture(restored.SafeFileHandle));
+            Assert.Equal(safety, File.ReadAllBytes(scope.SafetyPath));
             Assert.True(File.Exists(scope.SafetyPath)); Assert.True(File.Exists(scope.JournalPath));
         }
         finally { Directory.Delete(root, true); }
     }
-
-    // Fixture-only mapping. Application wiring still needs to authorize profile destinations and check Brave state.
-    private sealed class Store(RestoreArtifactLease artifacts, Dictionary<Guid, LinuxRestoreExpectedState> targets)
-        : IRestoreTransactionStore
+    [Fact]
+    public void RejectsDuplicateTargetsAndRecoveryWithinBrowserDataBeforeWrites()
     {
-        public void VerifyContext(CancellationToken token) { token.ThrowIfCancellationRequested(); artifacts.Verify(); }
-        public RestoreFileImage ReadTarget(Guid id, CancellationToken token) => targets[id].ReadCurrent(token);
-        public void WriteTargetAtomic(Guid id, RestoreFileImage image) =>
-            targets[id].Publish(image, () => VerifyContext(CancellationToken.None));
-        public void SaveSafety(ReadOnlyMemory<byte> bytes) => artifacts.SaveSafety(bytes);
-        public byte[] ReadSafety() => artifacts.ReadSafety();
-        public void SaveJournal(ReadOnlyMemory<byte> bytes) => artifacts.SaveJournal(bytes);
-        public byte[] ReadJournal() => artifacts.ReadJournal();
+        if (!OperatingSystem.IsLinux()) return;
+        var root = Path.Combine(Path.GetTempPath(), "RestoreSessionScope_" + Guid.NewGuid().ToString("N"));
+        var data = Path.Combine(root, "browser");
+        var profile = Path.Combine(data, "Default");
+        Directory.CreateDirectory(profile);
+        try
+        {
+            var source = Path.Combine(root, "source.bravebackup");
+            File.WriteAllText(source, "synthetic-source");
+            var app = new BraveAppInfo(BraveAppChannel.Stable, "synthetic", "synthetic", data);
+            var destination = new BraveProfileInfo("Synthetic", profile, Path.Combine(profile, "Bookmarks"));
+            using var image = new RestoreFileImage(false, []);
+            var mutation = new RestoreMutation(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "bookmarks", image);
+            var mapping = new LinuxRestoreDestination(mutation, app, destination, "Bookmarks");
+            var duplicate = mapping with { Mutation = mutation with { Id = Guid.NewGuid() } };
+
+            Assert.Throws<InvalidDataException>(() => LinuxRestoreSession.Open(source, root,
+                [mapping, duplicate], "synthetic-password", [], () => ProcessPresence.Stopped));
+            Assert.Throws<InvalidOperationException>(() => LinuxRestoreSession.Open(source, data,
+                [mapping], "synthetic-password", [], () => ProcessPresence.Stopped));
+            Assert.Empty(Directory.GetFiles(data, "*", SearchOption.AllDirectories));
+            Assert.Equal(source, Assert.Single(Directory.GetFiles(root)));
+        }
+        finally { Directory.Delete(root, true); }
     }
 }
