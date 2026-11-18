@@ -6,7 +6,8 @@ namespace BraveBackup.Core;
 /// <summary>Validates archive-v8 explicit CSV categories in memory, without extraction or save-consent claims.</summary>
 internal static class CsvPasswordArchiveFormat
 {
-    internal static void ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
+    /// <summary>Returns the data-row count from the validated CSV.</summary>
+    internal static int ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
         ArchiveCategory category, CancellationToken token)
     {
         if (category.Files.Length != 1) throw Invalid();
@@ -27,7 +28,7 @@ internal static class CsvPasswordArchiveFormat
                 offset += count;
             }
             if (input.ReadByte() != -1 || Convert.ToHexStringLower(SHA256.HashData(bytes)) != file.Sha256) throw Invalid();
-            PasswordCsvValidation.Validate(bytes, token);
+            return PasswordCsvValidation.Validate(bytes, token);
         }
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }

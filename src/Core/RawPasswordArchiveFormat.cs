@@ -7,7 +7,8 @@ namespace BraveBackup.Core;
 /// <summary>Archive-v7 uninterpreted password-file preservation, without SQLite recovery or portability claims.</summary>
 internal static class RawPasswordArchiveFormat
 {
-    internal static void ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
+    /// <summary>Returns the number of missing main databases recorded in the validated raw-file index.</summary>
+    internal static int ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
         ArchiveCategory category, CancellationToken token)
     {
         if (category.Files.Length is < 2 or > 9) throw Invalid();
@@ -68,6 +69,7 @@ internal static class RawPasswordArchiveFormat
             var expectedMissing = new[] { "Login Data", "Login Data For Account" }.Where(store =>
                 !names.Contains(store) && names.Any(name => name.StartsWith(store + "-", StringComparison.Ordinal)));
             if (!actualMissing.SequenceEqual(expectedMissing)) throw Invalid();
+            return actualMissing.Length;
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
         { throw Invalid(); }

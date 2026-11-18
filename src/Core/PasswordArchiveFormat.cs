@@ -6,13 +6,20 @@ namespace BraveBackup.Core;
 /// <summary>Validates protected v6/v7 and explicit CSV v8 password categories without extracting files.</summary>
 internal static class PasswordArchiveFormat
 {
-    internal static void ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
-        ArchiveCategory category, CancellationToken token)
+    /// <summary>Authenticates and validates one representation, optionally deriving inventory before disposing secrets.</summary>
+    internal static ArchivedPasswordInventory? ValidateCategory(Dictionary<string, ZipArchiveEntry> entries, string prefix,
+        ArchiveCategory category, CancellationToken token, bool collectInventory)
     {
         if (category.Version == 3)
-        { CsvPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token); return; }
+        {
+            var rows = CsvPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token);
+            return collectInventory ? new ArchivedPasswordInventory.Csv(rows) : null;
+        }
         if (category.Version == 2 && category.Files.Any(file => file?.Role == "raw-password-index"))
-        { RawPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token); return; }
+        {
+            var missing = RawPasswordArchiveFormat.ValidateCategory(entries, prefix, category, token);
+            return collectInventory ? new ArchivedPasswordInventory.RawFiles(category.Files.Length - 1, missing) : null;
+        }
         if (category.Files.Length != 1) throw Invalid();
         var file = category.Files[0];
         var expected = prefix + "portable-v1.bin";
@@ -33,6 +40,10 @@ internal static class PasswordArchiveFormat
             }
             if (input.ReadByte() != -1 || Convert.ToHexStringLower(SHA256.HashData(bytes)) != file.Sha256) throw Invalid();
             using var document = PasswordPayloadFormat.Decode(bytes, token);
+            if (!collectInventory) return null;
+            var stores = document.Stores.Select(store => new ArchivedPasswordStore(store.Kind, store.Logins.Count,
+                store.Logins.Sum(login => login.Notes.Count), store.BlockedEntries, store.FederatedEntries)).ToArray();
+            return new ArchivedPasswordInventory.Portable(Array.AsReadOnly(stores));
         }
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }

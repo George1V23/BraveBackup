@@ -99,12 +99,13 @@ public static class BraveSettingsBackup
     /// <summary>Validates the archive and supplies verified category metadata to optional inspection readers.</summary>
     internal static ArchiveManifest ValidateArchive(Stream source, string? password, CancellationToken token,
         Action<Guid, ExtensionSnapshotInventory, ZipArchive>? readExtensions,
-        Action<Guid, PortableSession>? readSessions = null)
+        Action<Guid, PortableSession>? readSessions = null,
+        Action<Guid, ArchivedPasswordInventory>? readPasswords = null)
     {
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
             throw new InvalidDataException("Archive exceeds its supported size.");
-        var manifest = BackupArchive.Validate(source, password, token);
+        var manifest = BackupArchive.Validate(source, password, token, readPasswords);
         source.Position = 0;
         using var decrypted = ArchiveEncryption.IsEncrypted(source)
             ? ArchiveEncryption.OpenReader(source, password ?? string.Empty, token)

@@ -17,7 +17,9 @@ reconstruction and encrypted native restore remain pending.
 [Tab Manager Plus restore on Linux](tabmanagerplus-restore.md) supports explicit
 saved-window replacement in an eligible registered 7.0.0 destination store, with
 final review and encrypted rollback.
-Windows recovery validation and restart recovery remain pending.
+[Password restore source inspection](passwords-restore.md) shows validated
+portable, raw and CSV inventory. Password destination writes, Windows recovery
+validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.
@@ -124,8 +126,10 @@ and an individual user checkpoint for each:
    tested destination formats and explain persisted-state limitations.
 4. **TabManagerPlus:** implement tested restoration of supported saved windows within its
    extension project, preserving unrelated extension data.
-5. **Passwords:** separately evaluate protected portable payloads, explicitly preserved raw
-   files and CSV. Research destination encryption/key access and supported schema writes.
+5. **Passwords:** [source inspection and write-path research](passwords-restore.md)
+   distinguish protected portable payloads, explicitly preserved raw files and CSV.
+   Next, verify destination encryption/key access and supported schema writes on
+   disposable profiles.
    Never assume raw files work across machines/providers, install OS keys from a backup,
    silently omit unsupported records or stage plaintext without the required explicit choice
    and fresh confirmation. Keep unsupported forms disabled with a truthful reason.

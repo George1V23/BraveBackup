@@ -112,7 +112,8 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
                     installation.Profiles.Select(profile => new RestoreProfilePreview(profile.DisplayName, profile.DirectoryName,
                         profile.Categories
                             .Select(category => Category(category, result.ExtensionInventories.GetValueOrDefault(profile.Id),
-                                result.Sessions.GetValueOrDefault(profile.Id))).ToArray())).ToArray()));
+                                result.Sessions.GetValueOrDefault(profile.Id), result.Passwords.GetValueOrDefault(profile.Id)))
+                            .ToArray())).ToArray()));
             _sourceSecret = result.Encrypted ? secret : null;
             Planning.LoadInspected(result);
             Summary = $"Created (UTC): {manifest.CreatedUtc:O}\nApplication version: {manifest.ApplicationVersion}\nArchive format: {manifest.FormatVersion}\nProtection: {(result.Encrypted ? "Encrypted" : "Unencrypted")}";
@@ -133,8 +134,10 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     }
 
     private static RestoreCategoryPreview Category(ArchiveCategory category, ArchivedExtensionInventory? extensions,
-        ArchivedSessionInventory? sessions)
+        ArchivedSessionInventory? sessions, ArchivedPasswordInventory? passwords)
     {
+        if (category.Id == "passwords")
+            return new("Passwords", PasswordRestorePreview.Describe(category, passwords));
         if (category.Id == "sessions" && sessions is not null)
         {
             var scope = sessions.NativeSource is null ? "Portable contents only." : "Verified native SNSS v3 snapshot included.";
@@ -142,14 +145,9 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         }
         if (category.Id == "tabmanagerplus")
             return new("Tab Manager Plus", "Portable saved windows. Use Recheck after mapping a profile to verify the destination.");
-        var representation = category.Id == "passwords" ? category.Files.Any(file => file.Role == "plaintext-password-csv")
-            ? "CSV passwords; readable after extraction. Destination compatibility must be verified."
-            : category.Files.Any(file => file.Role == "raw-password-index")
-                ? "Raw password files; portability and recoverability are not guaranteed."
-                : "Portable password payload; destination encryption/provider compatibility must be verified."
-            : category.Id == "extensions" && extensions is not null
-                ? $"{extensions.Count} archived extension identities. Use Recheck after mapping a profile to compare packages."
-                : "Included in backup. Restore compatibility is not established by this preview.";
+        var representation = category.Id == "extensions" && extensions is not null
+            ? $"{extensions.Count} archived extension identities. Use Recheck after mapping a profile to compare packages."
+            : "Included in backup. Restore compatibility is not established by this preview.";
         return new(category.Id + " (category v" + category.Version + ")", representation);
     }
 

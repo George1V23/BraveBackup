@@ -53,11 +53,14 @@ public partial class RestoreCategoryChoice : ViewModelBase
         {
             "bookmarks" => "Bookmarks",
             "settings" => "Settings",
+            "passwords" => "Passwords",
             "extensions" => "Extensions",
             "sessions" => "Sessions",
             "tabmanagerplus" => "Tab Manager Plus",
             _ => category.Id + " (v" + category.Version + ")"
         };
+        if (Id == "passwords")
+            SupportReason = PasswordRestorePreview.Describe(category);
         if (Id == "extensions")
             SupportReason = "Use Recheck to find existing Local stores for matching registered extensions.";
         if (Id == "sessions")

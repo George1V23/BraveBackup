@@ -44,7 +44,13 @@ public static class BackupArchive
 
     /// <summary>Authenticates, checks structure and hashes all payloads without extracting files.</summary>
     /// <remarks>Caller owns the seekable source. Legacy bookmark JSON remains a distinct format.</remarks>
-    public static ArchiveManifest Validate(Stream source, string? password = null, CancellationToken token = default)
+    public static ArchiveManifest Validate(Stream source, string? password = null, CancellationToken token = default) =>
+        Validate(source, password, token, null);
+
+    /// <summary>Validates the archive and optionally reports value-free password inventory by source profile ID.</summary>
+    /// <remarks>Discard all reported metadata if validation fails. The callback receives no credential data or paths.</remarks>
+    public static ArchiveManifest Validate(Stream source, string? password, CancellationToken token,
+        Action<Guid, ArchivedPasswordInventory>? readPasswords)
     {
         token.ThrowIfCancellationRequested();
         if (source.Length > ArchiveLimits.MaxBytes + 3 * 1024 * 1024L)
@@ -112,8 +118,10 @@ public static class BackupArchive
                         throw new InvalidDataException("Unsupported or duplicate archive category.");
                     if (category.Id == "passwords")
                     {
-                        PasswordArchiveFormat.ValidateCategory(entries,
-                            $"installations/{installation.Id:D}/profiles/{profile.Id:D}/passwords/", category, token);
+                        var summary = PasswordArchiveFormat.ValidateCategory(entries,
+                            $"installations/{installation.Id:D}/profiles/{profile.Id:D}/passwords/", category,
+                            token, collectInventory: readPasswords is not null);
+                        if (summary is not null) readPasswords?.Invoke(profile.Id, summary);
                         continue;
                     }
 

@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using BraveBackup.Platform;
 using UI.ViewModels;
 using Xunit;
 
@@ -11,7 +12,7 @@ public sealed class RestorePreviewTests : IDisposable
     private const string Secret = "synthetic-unlock-key";
     private static string Fixtures => Path.Combine(AppContext.BaseDirectory, "Fixtures");
 
-    private string CreateArchive(int version = 8, bool encrypted = false, bool raw = false)
+    private string CreateArchive(int version = 8, bool encrypted = false, bool raw = false, bool missingMain = false)
     {
         Directory.CreateDirectory(_root); var path = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".bravebackup");
         if (version < 6)
@@ -25,10 +26,13 @@ public sealed class RestorePreviewTests : IDisposable
         using var plain = new MemoryStream();
         using (var zip = new ZipArchive(plain, ZipArchiveMode.Create, leaveOpen: true))
         {
+            var rawIndex = $$"""
+                {"schemaVersion":1,"captureKind":"raw-native-password-files","portableCaptureCompleted":false,"reasonCode":"passwords-database-invalid","missingMainDatabases":[{{(missingMain ? "\"Login Data\"" : string.Empty)}}]}
+                """;
             ArchiveFile[] files = raw ?
-            [BackupArchive.WriteFile(zip, prefix + "raw-index-v1.json", "raw-password-index",
-                "{\"schemaVersion\":1,\"captureKind\":\"raw-native-password-files\",\"portableCaptureCompleted\":false,\"reasonCode\":\"passwords-database-invalid\",\"missingMainDatabases\":[]}"u8.ToArray(), "balanced"),
-             BackupArchive.WriteFile(zip, prefix + "raw/Login Data", "native-password-file", "synthetic"u8.ToArray(), "balanced")] :
+            [BackupArchive.WriteFile(zip, prefix + "raw-index-v1.json", "raw-password-index", Encoding.UTF8.GetBytes(rawIndex), "balanced"),
+             BackupArchive.WriteFile(zip, prefix + (missingMain ? "raw/Login Data-wal" : "raw/Login Data"),
+                 "native-password-file", "synthetic"u8.ToArray(), "balanced")] :
             [BackupArchive.WriteFile(zip, prefix + (version == 8 ? "passwords.csv" : "portable-v1.bin"),
                 version == 8 ? "plaintext-password-csv" : "portable-passwords",
                 version == 8 ? "name,url,username,password,note\nSynthetic,https://example.test/,fixture-user,synthetic-secret,\n"u8.ToArray() :
@@ -66,21 +70,66 @@ public sealed class RestorePreviewTests : IDisposable
         Assert.False(vm.NeedsUnlock); Assert.Single(vm.Installations);
         Assert.Contains("synthetic-app", vm.Summary); Assert.Contains("format: 8", vm.Summary);
         var category = Assert.Single(Assert.Single(vm.Installations[0].Profiles).Categories);
-        Assert.Contains("CSV", category.Description); Assert.DoesNotContain("fixture-user", category.ToString());
+        Assert.Contains("1 CSV row", category.Description); Assert.DoesNotContain("fixture-user", category.ToString());
         Assert.DoesNotContain("synthetic-secret", vm.Summary + vm.Status + category.ToString()); Assert.Empty(vm.Password);
         vm.Leave(); Assert.Empty(vm.Installations); Assert.Empty(vm.Summary); Assert.Empty(vm.Password);
     }
 
     [Theory]
-    [InlineData(false)] [InlineData(true)]
-    public async Task PasswordRepresentationIsExplicit(bool raw)
+    [InlineData(6, false, false, "Portable password payload", "Profile store contains 1 saved login and 2 notes.")]
+    [InlineData(7, false, false, "Portable password payload", "Local account store contains 0 saved logins and 0 notes.")]
+    [InlineData(7, true, false, "Raw password files", "1 native file preserved.")]
+    [InlineData(7, true, true, "Raw password files", "1 main database missing.")]
+    [InlineData(8, false, false, "Password CSV", "1 CSV row.")]
+    public async Task PasswordInventoryReportsOnlyValidatedCountsAndKeepsRestoreDisabled(
+        int version, bool raw, bool missingMain, string representation, string expected)
     {
-        var path = CreateArchive(raw ? 7 : 6, raw: raw);
-        using var vm = new RestorePreviewViewModel(); vm.SourcePath = path; await Idle(vm);
-        vm.Password = Secret; await vm.UnlockAsync();
-        var description = vm.Installations[0].Profiles[0].Categories[0].Description;
-        Assert.Contains(raw ? "Raw password files" : "Portable password payload", description);
-        if (raw) Assert.Contains("not guaranteed", description);
+        var path = CreateArchive(version, raw: raw, missingMain: missingMain);
+        using var vm = new RestorePreviewViewModel();
+        vm.SourcePath = path;
+        await Idle(vm);
+        if (version < 8)
+        {
+            Assert.True(vm.NeedsUnlock);
+            Assert.Empty(vm.Installations);
+            vm.Password = Secret;
+            await vm.UnlockAsync();
+        }
+
+        var preview = Assert.Single(Assert.Single(Assert.Single(vm.Installations).Profiles).Categories);
+        Assert.Equal("Passwords", preview.Label);
+        Assert.Contains(representation, preview.Description);
+        Assert.Contains(expected, preview.Description);
+        Assert.Contains("Password restore is unavailable", preview.Description);
+        if (version is 6 or 7 && !raw)
+            Assert.Contains("Excluded 1 blocklisted entry and 2 federated entries", preview.Description);
+
+        var data = Path.Combine(_root, "target");
+        var directory = Directory.CreateDirectory(Path.Combine(data, "Default")).FullName;
+        var loginDatabase = Path.Combine(directory, "Login Data");
+        File.WriteAllText(loginDatabase, "synthetic destination sentinel");
+        vm.Planning.SetTargets([new(new(BraveAppChannel.Stable, "1.102.13", "synthetic", data),
+            [new(new("Default", directory, Path.Combine(directory, "Bookmarks")))])]);
+        vm.Planning.ObserveBrowserState = _ => ProcessPresence.Stopped;
+        var row = Assert.Single(Assert.Single(vm.Planning.Groups).Profiles);
+        row.IsSelected = true;
+        row.SelectedInstallation = Assert.Single(row.TargetInstallations);
+        row.SelectedProfile = Assert.Single(row.TargetProfiles);
+
+        await vm.Planning.RecheckAsync();
+        row.SelectAllSupportedCommand.Execute(null);
+
+        var choice = Assert.Single(row.Categories);
+        Assert.False(choice.IsSupported);
+        Assert.False(choice.IsSelected);
+        Assert.False(vm.ReviewRestoreCommand.CanExecute(null));
+        Assert.Contains(representation, choice.SupportReason);
+        Assert.Contains("Password restore is unavailable", choice.SupportReason);
+        var visible = preview.Description + choice.SupportReason + vm.Summary + vm.Status;
+        foreach (var value in new[] { "synthetic.invalid", "example.test", "fixture-user", "synthetic-secret", "synthetic note" })
+            Assert.DoesNotContain(value, visible);
+        Assert.Equal("synthetic destination sentinel", File.ReadAllText(loginDatabase));
+        Assert.Single(Directory.GetFiles(directory));
     }
 
     [Fact]
