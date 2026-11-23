@@ -90,6 +90,10 @@ public sealed class PasswordRestoreIntegrationTests : IDisposable
         File.WriteAllText(sidecar, "synthetic pending transaction");
         session.Transaction.Rollback(true);
         Assert.Equal(RestoreTransactionState.RecoveryIncomplete, session.Transaction.State);
+        var inspection = RestoreArtifactStorage.Inspect(session.Artifacts.SafetyPath, session.Artifacts.JournalPath, SafetyPassword);
+        Assert.Equal(session.Transaction.OperationId, inspection.OperationId);
+        Assert.Equal(RestoreTransactionState.RecoveryIncomplete, inspection.State);
+        Assert.Equal(RestoreEntryState.Applied, Assert.Single(inspection.Entries, entry => entry.Category == "passwords").State);
         Assert.False(original.AsSpan().SequenceEqual(File.ReadAllBytes(database)));
         foreach (var (preferences, bytes) in originalPreferences)
             Assert.Equal(bytes, File.ReadAllBytes(preferences));

@@ -60,6 +60,34 @@ supports persistence of Linux artifact publication. Power-loss recovery and auto
 restart recovery remain outside the current workflow. The journal records intent and
 results for diagnosis. Destination mappings and replacement payloads remain in memory.
 
+## Inspecting persisted artifacts after restart
+
+`RestoreArtifactStorage.Inspect` reads the selected safety backup and journal
+through the bounded regular-file reader. It authenticates both files with the
+safety password and verifies their operation identity and complete ordered
+mutation list. The result contains logical installation, profile, category
+and mutation IDs, original presence, and recorded write state. The method
+clears decoded buffers and does not return original bytes, opaque metadata
+or destination paths. Inspection does not publish files or change either
+artifact.
+
+The journal state describes the last supplied authenticated revision. V1
+contains no persistent proof that it is the newest revision or that it
+binds to the exact safety contents. It also has no destination mapping or
+expected post-write image fingerprints. In-flight and applied entries cannot
+be reconciled against current profile files with those two artifacts alone.
+
+A future restart recovery format needs to bind the exact safety snapshot to
+the operation and its destination mapping, and carry expected original and
+replacement fingerprints for each target. The recovery workflow must verify
+the selected operation, stopped-browser state, target and ancestor identities,
+and current image before any write. If current state matches neither image,
+it must report a conflict. The v1 reader remains useful for inspection and
+neither changes the backup archive version nor grants write access.
+
+Tests cover authenticated matching files, wrong passwords, tampering, wrong
+operation IDs, reordered entries, cancellation and unchanged artifact bytes.
+
 ## Implementation checkpoint
 
 The snapshot/journal codecs and initial Core transaction coordinator are present. Three

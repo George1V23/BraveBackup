@@ -56,6 +56,18 @@ public static class RestoreArtifactStorage
         }
         catch { CryptographicOperations.ZeroMemory(bytes); throw; }
     }
+    /// <summary>Reads only authenticated logical metadata from a selected safety backup and journal.</summary>
+    public static RestoreArtifactInspection Inspect(string safetyPath, string journalPath, string password,
+        CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        var safety = Read(safetyPath);
+        var journal = Read(journalPath);
+        using var safetyStream = new MemoryStream(safety, writable: false);
+        using var journalStream = new MemoryStream(journal, writable: false);
+        return RestoreArtifactInspection.Read(safetyStream, journalStream, password, token);
+    }
+
     /// <summary>Hashes bounded encrypted framing for observed replacement conflicts, without authenticating its contents.</summary>
     private static string Fingerprint(string path)
     {
