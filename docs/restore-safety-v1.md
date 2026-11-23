@@ -574,6 +574,30 @@ filesystem metadata, does not establish target file eligibility, and has no appl
 publication path. It is disconnected from restore execution pending native validation,
 metadata policy and production adapter integration.
 
+## Read-only Windows target file capture
+
+`WindowsRecoveryFileCapture.Read` retains the existing local drive directory
+chain and opens a single literal child through a native read-only handle.
+It rejects device aliases, reparse points, multiple hard links, pending
+deletion and unsupported file attributes. Windows share mode permits other
+readers. An open writer or delete-capable handle blocks this capture.
+The stream query must report only the unnamed data stream, including for an
+empty file. [CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew),
+[FILE_STREAM_INFO](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_stream_info).
+
+The capture reads at most 64 MiB and verifies the file's volume ID, file ID,
+length and supported metadata. It reopens the path under the retained
+ancestor chain before returning. Only a verified missing child yields an
+absent image. The caller owns the returned buffers and disposes them when
+finished. The metadata still covers the documented owner, group, DACL and
+timestamps. SACLs and extended attributes need further eligibility and
+recovery work before publication can be enabled.
+
+Filename and stream-framing tests run on Linux. Windows-only tests cover
+native contents and metadata, absence, sharing violations, hard links and
+alternate streams. Native results need a Windows run. This capture is
+separate from the Restore UI, journal publication and profile writes.
+
 ## Windows opaque metadata framing validation
 
 Capture now requires the native security descriptor to advertise self-relative form before

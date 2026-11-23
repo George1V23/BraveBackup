@@ -184,8 +184,10 @@ publishing any target.
 | [Tab Manager Plus](tabmanagerplus-restore.md) | Saved-window collection in an eligible registered 7.0.0 Local store | A simultaneous raw Local replacement of the same store is blocked. |
 | [Passwords](passwords-restore.md) | A single protected portable profile store into the tested v43 database with verified Secret Service v11 | Account stores, Sync, raw and CSV restoration and other providers remain unavailable. |
 
-The Windows app supports archive inspection. Windows profile writes and
-recovery still need an integrated adapter and native validation. Linux pause,
+The Windows app supports archive inspection. A
+[read-only native file capture](restore-safety-v1.md#read-only-windows-target-file-capture)
+now joins the Windows directory and metadata primitives. Windows profile
+writes and recovery still need native validation and a publication adapter. Linux pause,
 resume and rollback use the retained operation in the app. The v1 artifact
 reader supports [read-only inspection after restart](restore-safety-v1.md#inspecting-persisted-artifacts-after-restart).
 The [restart rollback evidence contract](restore-safety-v1.md#evidence-for-restart-rollback)
