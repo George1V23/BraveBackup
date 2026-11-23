@@ -94,12 +94,34 @@ accepts BLOB notes and rejects other SQLite storage classes. Regression tests
 cover native-style TEXT decryption, source preservation and malformed values.
 [Chromium password note storage](https://github.com/chromium/chromium/blob/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/components/password_manager/core/browser/password_store/password_notes_table.cc).
 
+## Linux provider selection
+
+The same probe now writes a fresh synthetic login and note through the
+supplied launcher under three isolated launch configurations. It inspects the
+new rows after Brave closes. Results for Chromium `154.0.8037.98` are below.
+
+| Launch configuration | Provider used for the new password and note |
+| --- | --- |
+| GNOME desktop selection, private Secret Service available, no password-store override | v11, verified against the private Secret Service key |
+| Same launcher and browser profile, with `--password-store=basic` | v10 |
+| Explicit `--password-store=gnome-libsecret`, fresh profile, session bus unavailable | v10 |
+
+BraveBackup discovery records the launcher path, version and expected user-data
+directory. Those fields cannot establish the effective writer. An existing
+v11 row describes a previous write. The probe shows that even an explicit
+libsecret flag can result in a different provider when service availability
+changes. Chromium also registers the Secret Portal provider with higher
+priority when the relevant features are enabled.
+[BraveBackup launcher discovery](../src/Backup/BraveAppDetector.cs),
+[Chromium Linux password storage](https://chromium.googlesource.com/chromium/src/+/319607cda8fc17d4033b74ec565728f3579e82ee/docs/linux/password_storage.md),
+[Chromium provider registration](https://github.com/chromium/chromium/blob/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/browser/browser_process_impl.cc).
+
 ## Next writer checkpoint
 
-Establish how BraveBackup can verify the effective write provider of a detected
-destination under its normal launcher configuration. The probe's explicit
-provider flag and private keyring establish compatibility for that combination.
-Production eligibility also needs to account for sidecar state, full schema
-validation, portable identity collisions, excluded credential classes and Sync
-state. The application still needs a staged writer wired to final review and
-the encrypted safety transaction. Passwords remains disabled in Restore.
+Build the staging component around explicit, operation-scoped provider
+evidence. It must also validate the entire destination schema, sidecar state,
+portable identity collisions, excluded credential classes and Sync state.
+Before enabling profile writes, establish that the provider evidence applies
+to the selected destination and is still valid when preparing the replacement.
+The writer still needs final review and integration with the encrypted safety
+transaction. Passwords remains disabled in Restore.

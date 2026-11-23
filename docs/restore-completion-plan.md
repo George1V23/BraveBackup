@@ -130,9 +130,10 @@ and an individual user checkpoint for each:
 5. **Passwords:** [source inspection and write-path research](passwords-restore.md)
    distinguish protected portable payloads, explicitly preserved raw files and CSV.
    The disposable Linux probe verified schema-43 profile-store replacement with
-   explicit Secret Service v11. Next, establish how to verify the effective write
-   provider of a detected destination and integrate a staged writer with final
-   review and encrypted recovery.
+   explicit Secret Service v11. Provider probes demonstrated that a launcher
+   override or unavailable service can change the tag used for new writes.
+   Next, build the staged writer around verified destination provider evidence
+   and integrate it with final review and encrypted recovery.
    Never assume raw files work across machines/providers, install OS keys from a backup,
    silently omit unsupported records or stage plaintext without the required explicit choice
    and fresh confirmation. Keep unsupported forms disabled with a truthful reason.

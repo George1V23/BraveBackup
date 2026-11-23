@@ -27,17 +27,19 @@ def require(condition, message):
 
 
 @contextlib.contextmanager
-def browser(binary, profile):
+def browser(binary, profile, *, password_store="gnome-libsecret", environment=None):
     # Chrome DevTools Protocol uses the child's descriptors 3 and 4.
     command = [
         "/bin/sh", "-c", 'exec 3<&0 4>&1 </dev/null >/dev/null; exec "$@"', "brave-probe",
         binary, "--headless", "--remote-debugging-pipe", "--no-first-run",
         "--disable-background-networking", "--disable-component-update",
-        "--disable-sync", "--disable-breakpad", "--password-store=gnome-libsecret",
-        "--host-resolver-rules=MAP * ~NOTFOUND", f"--user-data-dir={profile}", "about:blank",
+        "--disable-sync", "--disable-breakpad",
+        "--host-resolver-rules=MAP * ~NOTFOUND", f"--user-data-dir={profile}",
     ]
-    with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL) as process:
+    if password_store is not None:
+        command.append(f"--password-store={password_store}")
+    with subprocess.Popen([*command, "about:blank"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, env=environment) as process:
         buffered = bytearray()
         request_id = 0
 
@@ -221,6 +223,42 @@ def probe(binary, root):
     with browser(binary, profile) as (_, evaluate):
         require_saved_users(evaluate, [])
     print(f"PASS {version}: v43/40, Secret Service v11, staged replacement and empty-store reopen.")
+    verify_provider_selection(binary, root, key)
+
+
+def verify_provider_selection(binary, root, key):
+    environment = dict(os.environ, XDG_CURRENT_DESKTOP="GNOME")
+    unavailable_bus = dict(environment, DBUS_SESSION_BUS_ADDRESS=f"unix:path={root / 'absent-bus'}")
+    profile = root / "provider-selection"
+    fresh_profile = root / "provider-unavailable"
+    cases = (
+        ("desktop-selected", profile, None, environment, b"v11"),
+        ("overridden", profile, "basic", environment, b"v10"),
+        ("service-unavailable", fresh_profile, "gnome-libsecret", unavailable_bus, b"v10"),
+    )
+    for label, user_data, store, launch_environment, expected_tag in cases:
+        seed = {"url": "https://provider-selection.example.invalid/", "username": label,
+                "password": "provider fixture ✓", "note": "provider note ✓", "useAccountStore": False}
+        with browser(binary, user_data, password_store=store, environment=launch_environment) as (version, evaluate):
+            evaluate("chrome.passwordsPrivate.addPassword(" + json.dumps(seed) + ")")
+            check_entry(evaluate, label, seed["password"], seed["note"])
+
+        database = user_data / "Default" / "Login Data"
+        require_clean_sidecars(database)
+        with contextlib.closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as db:
+            row = db.execute("""
+                SELECT password_value, CAST(password_notes.value AS BLOB)
+                FROM logins JOIN password_notes ON password_notes.parent_id = logins.id
+                WHERE username_value = ?
+                """, (label,)).fetchone()
+            require(row and all(value.startswith(expected_tag) for value in row),
+                    f"Brave selected an unexpected provider for {label}.")
+            if expected_tag == b"v11":
+                for blob, value in zip(row, (seed["password"], seed["note"])):
+                    require(crypt(key, blob[3:], decrypt=True) == value.encode(),
+                            "The desktop-selected provider did not use the isolated key.")
+        print(f"PASS {version}: {label} saved synthetic values with {expected_tag.decode()}.")
+
 
 
 def digest(path):
