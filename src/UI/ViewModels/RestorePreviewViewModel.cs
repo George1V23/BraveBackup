@@ -44,6 +44,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     {
         _inspect = inspect ?? BraveArchiveInspection.Read;
         Planning.ReviewInputsChanged += InvalidateReview;
+        Planning.ReviewInputsChanged += NotifyRestartCommands;
         Safety.PropertyChanged += OnSafetySettingsChanged;
     }
 
@@ -59,6 +60,7 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
     {
         UnlockCommand.NotifyCanExecuteChanged();
         ReviewRestoreCommand.NotifyCanExecuteChanged();
+        NotifyRestartCommands();
     }
     private bool CanUnlock() => !_disposed && !IsRestoreActive && NeedsUnlock && !IsBusy && Password.Length != 0;
 
@@ -157,10 +159,11 @@ public partial class RestorePreviewViewModel : ViewModelBase, IDisposable
         if (IsRestoreActive) return;
         ClearRestoreSession();
         _sourceSecret = null;
+        ClearRestartReview();
         ++_generation; _inspection?.Cancel(); _inspection = null;
         Password = string.Empty; Summary = string.Empty; Installations.Clear(); Planning.Reset(); Safety.ClearSecrets(); NeedsUnlock = false; IsBusy = false;
         Status = "Choose a backup to inspect. No browser files will be changed.";
     }
     /// <summary>Releases callbacks and invalidates pending results; each request disposes its own cancellation source.</summary>
-    public void Dispose() { if (_disposed) return; CloseExecution(); Leave(); _disposed = true; Planning.ReviewInputsChanged -= InvalidateReview; Safety.PropertyChanged -= OnSafetySettingsChanged; Planning.Dispose(); Safety.Dispose(); PickSource = null; UnlockCommand.NotifyCanExecuteChanged(); }
+    public void Dispose() { if (_disposed) return; CloseExecution(); Leave(); _disposed = true; Planning.ReviewInputsChanged -= InvalidateReview; Planning.ReviewInputsChanged -= NotifyRestartCommands; Safety.PropertyChanged -= OnSafetySettingsChanged; Planning.Dispose(); Safety.Dispose(); PickSource = null; PickRestartRecord = null; ClearRestartReview(); UnlockCommand.NotifyCanExecuteChanged(); }
 }

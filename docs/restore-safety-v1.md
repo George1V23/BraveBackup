@@ -130,9 +130,8 @@ before any destination write:
 
 The first restart operation should support explicit rollback of verified
 targets. Forward resume additionally requires reproducible replacement
-bytes and source revalidation. Older v1 artifacts remain inspectable.
-This checkpoint introduces the fingerprint and decision rules without
-changing the persisted artifact formats.
+bytes and source revalidation. Older v1 artifacts remain inspectable. The fingerprint format applies to active and reopened recovery
+without changing source archive versions.
 
 ## Restart record and bound journal codecs
 
@@ -207,7 +206,41 @@ checks against concurrent mutation.
 files without accessing the profile. Tests cover blocked record publication,
 record changes before and during publication, reopening the same directory
 chain, and replacement of an ancestor while the leaf survives. The application
-still needs an explicit restart rollback entry point.
+uses the explicit restart rollback workflow below.
+
+## Roll back after restarting BraveBackup
+
+On Linux, open **Restore** and expand **Roll back a previous restore**. Close
+Brave and choose the operation's `.restart.encrypted` file. Keep its
+`.safety.encrypted` and `.journal.encrypted` files with the same operation ID
+in the same folder. Enter the safety-backup password and select **Review
+previous rollback**. The original backup archive is unnecessary.
+
+Review authenticates all three files and shows the exact target paths and
+their observed states. Destinations must match currently detected Brave
+profiles, the supported category paths, and the authenticated directory
+chain for the same system boot. A profile with incomplete directory evidence
+cannot be reopened. The review itself changes neither the profile nor the
+artifacts.
+
+**Confirm previous rollback** reopens the files and verifies that the review
+still matches. It locks the recovery directory, checks Brave's process state,
+and records rollback intent before publishing original images. Each target
+must match the expected image, and incompatible targets are preserved.
+A nonempty password SQLite sidecar blocks that target. Eligible targets can
+recover independently, and partial recovery is recorded in the bound journal.
+Reopen the review to retry an incomplete operation. The safety backup and
+restart record remain unchanged.
+
+This workflow supports app restart within the same Linux boot. Forward resume
+after restart, reboot recovery, and Windows profile recovery remain unavailable.
+V1 safety/journal pairs remain readable by the inspection backend.
+
+Synthetic tests exercise a fresh Restore view model, changed targets between
+review and confirmation, missing source archives, file and flat-directory
+rollback, older journal revisions and password sidecar conflicts. The native
+Avalonia smoke test exercises the review and confirm controls on disposable
+profiles.
 
 ## Implementation checkpoint
 

@@ -39,6 +39,9 @@ The runner drives actual selector bindings and dialog button handlers, checking:
 - Explicit preservation creates a valid encrypted version-7 backup.
 - A protected single-profile password archive displays the temporary-login
   control, and Recheck leaves an incompatible synthetic store unchanged.
+- Previous rollback reads the persisted artifacts after the live session is
+  released and the source archive is removed. The password remains masked
+  during review, and confirmation recovers the original files.
 - Mixed Bookmarks and Settings restore previews both destinations, requires confirmation,
   saves recovery artifacts, and preserves unrelated preference values and profile files.
 - Restore Recheck displays a registered Extensions package match. Review shows the exact

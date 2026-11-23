@@ -114,6 +114,74 @@ public sealed class RestoreExecutionTests : IDisposable
         Assert.Equal(setup.OriginalSecond, File.ReadAllBytes(setup.Targets[1].BookmarksPath));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NewViewModelCanReviewAndConfirmPersistedRollbackWithoutTheSourceArchive(bool changeAfterReview)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = await PrepareReview();
+        using (var directory = RecoveryDirectoryIdentity.Open(setup.Targets[0].ProfileDirectory))
+        {
+            if (!directory.CaptureRestartEvidence().StartsWith("linux-chain-v1:complete:", StringComparison.Ordinal))
+            {
+                setup.Shell.Dispose();
+                return;
+            }
+        }
+        var app = Assert.Single(setup.Shell.Installations).AppInfo;
+        var originalView = setup.Shell.RestorePreview;
+        var review = Assert.IsType<RestoreReview>(originalView.Review);
+        originalView.Planning.ObserveBrowserState = _ => ProcessPresence.Stopped;
+        try
+        {
+            await originalView.ConfirmRestoreCommand.ExecuteAsync(null);
+            Assert.Equal("Bookmarks restored.", originalView.RestoreStatus);
+        }
+        finally { setup.Shell.Dispose(); }
+
+        File.Delete(setup.Archive);
+        var beforeReview = File.ReadAllBytes(review.JournalPath);
+        using var reopened = new RestorePreviewViewModel();
+        reopened.Planning.SetTargets([new(app, setup.Targets.Select(profile => new RestoreTargetProfile(profile)).ToArray())]);
+        reopened.Planning.ObserveBrowserState = _ => ProcessPresence.Stopped;
+        reopened.RestartRecordPath = review.RestartRecordPath;
+        reopened.RestartSafetyPassword = "synthetic-safety-password";
+
+        Assert.False(reopened.ConfirmRestartRollbackCommand.CanExecute(null));
+        await reopened.ReviewRestartRollbackCommand.ExecuteAsync(null);
+        Assert.True(reopened.HasRestartReview, reopened.RestartReviewText);
+        Assert.Contains(setup.Targets[0].BookmarksPath, reopened.RestartReviewText);
+        Assert.Contains("Recover original", reopened.RestartReviewText);
+        Assert.Equal(beforeReview, File.ReadAllBytes(review.JournalPath));
+        Assert.Equal(setup.Native, File.ReadAllBytes(setup.Targets[0].BookmarksPath));
+
+        if (changeAfterReview)
+            File.WriteAllText(setup.Targets[0].BookmarksPath, "external change after recovery review");
+
+        await reopened.ConfirmRestartRollbackCommand.ExecuteAsync(null);
+
+        if (changeAfterReview)
+        {
+            Assert.StartsWith("Rollback stopped.", reopened.RestoreStatus);
+            Assert.Equal("external change after recovery review", File.ReadAllText(setup.Targets[0].BookmarksPath));
+            Assert.Equal(setup.Native, File.ReadAllBytes(setup.Targets[1].BookmarksPath));
+            Assert.Equal(beforeReview, File.ReadAllBytes(review.JournalPath));
+            Assert.Empty(reopened.RestartSafetyPassword);
+            return;
+        }
+        Assert.Equal("Rollback complete.", reopened.RestoreStatus);
+        Assert.Contains("Original state present", reopened.RestoreReport);
+        Assert.Equal(review.SafetyPath, reopened.PublishedSafetyPath);
+        Assert.Empty(reopened.RestartSafetyPassword);
+        Assert.False(reopened.HasRestartReview);
+        Assert.Equal(setup.OriginalFirst, File.ReadAllBytes(setup.Targets[0].BookmarksPath));
+        Assert.Equal(setup.OriginalSecond, File.ReadAllBytes(setup.Targets[1].BookmarksPath));
+        var inspection = RestoreArtifactStorage.InspectRestart(review.RestartRecordPath, review.SafetyPath,
+            review.JournalPath, "synthetic-safety-password");
+        Assert.Equal(RestoreTransactionState.RolledBack, inspection.Journal.State);
+    }
+
     private async Task<(ShellViewModel Shell, string Archive, string Recovery, BraveProfileInfo[] Targets,
         byte[] Native, byte[] OriginalFirst, byte[] OriginalSecond)> PrepareReview()
     {

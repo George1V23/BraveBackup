@@ -23,7 +23,9 @@ replacement under an explicitly selected Secret Service provider. The managed
 writer stages and verifies the replacement in memory, and the native probe
 reopens its output. Restore now connects that writer to final review and
 encrypted rollback for a verified Linux Secret Service v11 profile store.
-Windows recovery validation and restart recovery remain pending.
+Same-boot Linux rollback after an app restart is available for bound
+artifacts with complete directory evidence. Windows recovery validation and
+forward resume after restart remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.
@@ -191,8 +193,9 @@ defines exact image fingerprints and conflict decisions. The
 [restart record and bound journal codecs](restore-safety-v1.md#restart-record-and-bound-journal-codecs)
 authenticate destination evidence and bind it to the exact safety snapshot.
 Linux Restore publishes and verifies those artifacts before its first profile
-write and captures same-boot directory evidence. An explicit restart rollback
-workflow remains pending.
+write and captures same-boot directory evidence. The Restore tab provides
+[explicit rollback after restart](restore-safety-v1.md#roll-back-after-restarting-bravebackup).
+Forward resume after restart and recovery across system reboots remain pending.
 
 ## Later scope
 

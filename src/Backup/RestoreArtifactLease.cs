@@ -49,6 +49,35 @@ public sealed class RestoreArtifactLease : IDisposable
     /// <summary>Reads the published restart record for authenticated coordinator verification.</summary>
     public byte[] ReadRestartRecord() { lock (_gate) { Verify(); return Read(Path.GetFileName(_scope.RestartRecordPath)); } }
 
+    internal void AdoptVerifiedArtifacts(ReadOnlySpan<byte> record, ReadOnlySpan<byte> journal)
+    {
+        lock (_gate)
+        {
+            Verify();
+            if (_restartHash is not null || _journalHash is not null)
+                throw new InvalidOperationException("Recovery artifacts are already owned.");
+            _restartHash = Convert.ToHexStringLower(SHA256.HashData(record));
+            _journalHash = Convert.ToHexStringLower(SHA256.HashData(journal));
+            VerifyRestartRecord();
+            VerifyJournal();
+        }
+    }
+
+    internal void VerifyJournal()
+    {
+        lock (_gate)
+        {
+            Verify();
+            var previous = Read(Path.GetFileName(_scope.JournalPath));
+            try
+            {
+                if (Convert.ToHexStringLower(SHA256.HashData(previous)) != _journalHash)
+                    throw new IOException("Recovery journal changed outside its operation.");
+            }
+            finally { CryptographicOperations.ZeroMemory(previous); }
+        }
+    }
+
     /// <summary>Publishes a journal revision under the same operation-lifetime lock.</summary>
     public void SaveJournal(ReadOnlyMemory<byte> encrypted)
     {
@@ -56,16 +85,7 @@ public sealed class RestoreArtifactLease : IDisposable
         {
             Verify(); CheckFraming(encrypted);
             if (_restartHash is not null) VerifyRestartRecord();
-            if (_journalHash is not null)
-            {
-                var previous = Read(Path.GetFileName(_scope.JournalPath));
-                try
-                {
-                    if (Convert.ToHexStringLower(SHA256.HashData(previous)) != _journalHash)
-                        throw new IOException("Recovery journal changed outside its operation.");
-                }
-                finally { CryptographicOperations.ZeroMemory(previous); }
-            }
+            if (_journalHash is not null) VerifyJournal();
             _directory.PublishChild(Path.GetFileName(_scope.JournalPath), encrypted, _journalHash is not null);
             _journalHash = Convert.ToHexStringLower(SHA256.HashData(encrypted.Span));
             _directory.Flush();

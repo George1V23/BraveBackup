@@ -264,6 +264,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
 
     internal (string Path, Guid Id, string Hash)? ReviewedSource =>
         _manifest is { } manifest && _sourceHash is { } hash ? (_sourcePath, manifest.ArchiveId, hash) : null;
+    internal (BraveAppInfo Installation, BraveProfileInfo Profile)[] DetectedRecoveryProfiles =>
+        _targets.SelectMany(installation => installation.Profiles.Select(profile => (installation.Info, profile.Info))).ToArray();
     internal IEnumerable<string> KnownBrowserRoots => _targets.Select(target => target.Info.UserDataDirectory);
     internal RestoreProfileChoice[] SelectedProfiles => Profiles.Where(profile => profile.IsSelected).ToArray();
     internal bool ReadyForReview => ReviewedSource is not null && !IsChecking && MappingError is null &&

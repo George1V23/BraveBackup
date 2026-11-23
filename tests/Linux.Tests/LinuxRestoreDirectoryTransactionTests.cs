@@ -15,6 +15,78 @@ public sealed class LinuxRestoreDirectoryTransactionTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void RestartRollbackReopensPersistedDirectoryAndFileEvidence(bool changeFile)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = SetUp();
+        if (!RecoveryDirectoryIdentityTests.SupportsRestartEvidence(Path.GetDirectoryName(setup.Target)!)) return;
+        using var original = Capture(setup.Target);
+        using var replacement = Capture(setup.Replacement);
+        using var bookmarks = CaptureBookmarkFile(setup.Profile.ProfileDirectory);
+        RestoreArtifactScope artifacts;
+        using (var live = Open(setup, replacement, bookmarks))
+        {
+            artifacts = live.Artifacts;
+            live.Transaction.Prepare();
+            live.Transaction.Run();
+            Assert.Equal(RestoreTransactionState.Completed, live.Transaction.State);
+        }
+        File.Delete(setup.Source);
+        if (changeFile) File.WriteAllText(setup.Profile.BookmarksPath, "external bookmark edit");
+        var initialJournal = File.ReadAllBytes(artifacts.JournalPath);
+        var detected = new[] { (setup.App, setup.Profile) };
+        using var reopened = LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword, detected, () => setup.Presence);
+        var review = reopened.Review;
+        Assert.Equal(RestoreRollbackDecision.RestoreOriginal, review.Targets[0].Decision);
+        Assert.Equal(changeFile ? RestoreRollbackDecision.Conflict : RestoreRollbackDecision.RestoreOriginal, review.Targets[1].Decision);
+        Assert.Equal(initialJournal, File.ReadAllBytes(artifacts.JournalPath));
+        AssertImage(setup.Target, replacement);
+
+        var result = reopened.Rollback(review);
+
+        Assert.Equal(changeFile ? RestoreTransactionState.RecoveryIncomplete : RestoreTransactionState.RolledBack, result);
+        AssertImage(setup.Target, original);
+        Assert.Equal(changeFile ? "external bookmark edit" : "original-bookmarks", File.ReadAllText(setup.Profile.BookmarksPath));
+        AssertNoStaging(setup.Target);
+        var journal = RestoreArtifactStorage.InspectRestart(artifacts.RestartRecordPath, artifacts.SafetyPath,
+            artifacts.JournalPath, SafetyPassword).Journal;
+        Assert.Equal(result, journal.State);
+        Assert.Equal(RestoreEntryState.Recovered, journal.Entries[0].State);
+        Assert.Equal(changeFile ? RestoreEntryState.Applied : RestoreEntryState.Recovered, journal.Entries[1].State);
+    }
+
+    [Fact]
+    public void RestartRejectsUnknownProfileAndOlderJournalDoesNotAuthorizeAnyWrites()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var setup = SetUp();
+        if (!RecoveryDirectoryIdentityTests.SupportsRestartEvidence(Path.GetDirectoryName(setup.Target)!)) return;
+        using var replacement = Capture(setup.Replacement);
+        RestoreArtifactScope artifacts;
+        byte[] preparedJournal;
+        using (var live = Open(setup, replacement))
+        {
+            artifacts = live.Artifacts;
+            live.Transaction.Prepare();
+            preparedJournal = File.ReadAllBytes(artifacts.JournalPath);
+            live.Transaction.Run();
+        }
+        File.WriteAllBytes(artifacts.JournalPath, preparedJournal);
+        Assert.Throws<InvalidDataException>(() => LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword,
+            [], () => ProcessPresence.Stopped));
+        Assert.Throws<IOException>(() => LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword,
+            [(setup.App, setup.Profile)], () => ProcessPresence.Running));
+        using var reopened = LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword,
+            [(setup.App, setup.Profile)], () => ProcessPresence.Stopped);
+        Assert.Equal(RestoreRollbackDecision.Conflict, Assert.Single(reopened.Review.Targets).Decision);
+        Assert.Equal(RestoreTransactionState.RecoveryIncomplete, reopened.Rollback(reopened.Review));
+        AssertImage(setup.Target, replacement);
+        Assert.Equal(preparedJournal, File.ReadAllBytes(artifacts.JournalPath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void PausedWholeDirectoryRestoreRollsBackFromVerifiedSafetyAfterSourceRemoval(bool initiallyEmpty)
     {
         if (!OperatingSystem.IsLinux()) return;

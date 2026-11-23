@@ -38,6 +38,22 @@
               </StackPanel>
           </Border>
           <StackPanel Spacing="14" IsVisible="{Binding CanEditRestore}">
+            <Expander Header="Roll back a previous restore" IsVisible="{Binding SupportsRestartRollback}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Close Brave. Choose the encrypted restart record from the same system boot. Keep its safety backup and journal in the same folder." TextWrapping="Wrap" Classes="muted" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Text="{Binding RestartRecordPath}" PlaceholderText="Choose a .restart.encrypted file" />
+                        <Button Grid.Column="1" Content="Browse restart record…" Command="{Binding BrowseRestartRecordCommand}" Margin="8,0,0,0" />
+                    </Grid>
+                    <TextBox Text="{Binding RestartSafetyPassword}" PasswordChar="●" PlaceholderText="Safety-backup password" />
+                    <Button Content="Review previous rollback" Command="{Binding ReviewRestartRollbackCommand}" HorizontalAlignment="Left" />
+                    <SelectableTextBlock Text="{Binding RestartReviewText}" TextWrapping="Wrap" />
+                    <WrapPanel IsVisible="{Binding HasRestartReview}">
+                        <Button Content="Cancel rollback review" Command="{Binding CancelRestartReviewCommand}" Margin="0,0,8,0" />
+                        <Button Content="Confirm previous rollback" Command="{Binding ConfirmRestartRollbackCommand}" Classes="accent" />
+                    </WrapPanel>
+                </StackPanel>
+            </Expander>
             <Border Classes="card">
                 <StackPanel Spacing="10">
                     <TextBlock Text="Backup file" Classes="section" />

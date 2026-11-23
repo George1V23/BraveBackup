@@ -43,6 +43,7 @@ public partial class RestorePreviewViewModel
     {
         _restoreAvailable = available;
         ConfirmRestoreCommand.NotifyCanExecuteChanged();
+        NotifyRestartCommands();
     }
 
     partial void OnRestoreStatusChanged(string value) => OnPropertyChanged(nameof(HasRestoreOutcome));
@@ -68,6 +69,7 @@ public partial class RestorePreviewViewModel
         ResumeRestoreCommand.NotifyCanExecuteChanged();
         OfferRollbackCommand.NotifyCanExecuteChanged();
         ConfirmRollbackCommand.NotifyCanExecuteChanged();
+        NotifyRestartCommands();
     }
 
     private bool CanConfirmRestore() => !_disposed && _restoreAvailable && !IsRestoreActive && !IsBusy &&

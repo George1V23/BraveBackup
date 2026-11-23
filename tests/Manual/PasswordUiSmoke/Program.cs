@@ -260,6 +260,35 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                         "Settings restore applies the archived choice and preserves its unrelated neighbor");
                 foreach (var file in before.Where(file => file.Key != profile.BookmarksPath && file.Key != preferencesPath))
                     Check(file.Value.AsSpan().SequenceEqual(File.ReadAllBytes(file.Key)), "Mixed restore preserves unrelated profile files");
+                using (var directory = RecoveryDirectoryIdentity.Open(profileDirectory))
+                {
+                    if (directory.CaptureRestartEvidence().StartsWith("linux-chain-v1:complete:", StringComparison.Ordinal))
+                    {
+                        restore.Leave();
+                        File.Delete(restoreArchive);
+                        var restartPane = restoreView.GetVisualDescendants().OfType<Expander>()
+                            .Single(control => Equals(control.Header, "Roll back a previous restore"));
+                        restartPane.IsExpanded = true;
+                        restore.RestartRecordPath = reviewed.RestartRecordPath;
+                        restore.RestartSafetyPassword = "Synthetic-safety-password";
+                        await Task.Delay(100);
+                        Check(restartPane.GetVisualDescendants().OfType<TextBox>().Any(box => box.PasswordChar == '●'),
+                            "Previous rollback safety password is masked");
+                        Click(window, "Review previous rollback");
+                        await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestartReview, "Previous rollback review");
+                        Check(restore.RestartReviewText.Contains(preferencesPath) && restore.RestartReviewText.Contains(profile.BookmarksPath),
+                            "Previous rollback lists the exact persisted targets");
+                        Check(before[profile.BookmarksPath].AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath)),
+                            "Previous rollback review leaves the applied profile unchanged");
+                        Click(window, "Confirm previous rollback");
+                        await WaitUntil(() => !restore.IsRestoreActive && restore.HasRestoreOutcome, "Previous rollback confirmation");
+                        Check(restore.RestoreStatus == "Rollback complete." &&
+                            changedBookmarks.AsSpan().SequenceEqual(File.ReadAllBytes(profile.BookmarksPath)) &&
+                            File.ReadAllText(preferencesPath) == changedPreferences && restore.RestartSafetyPassword.Length == 0,
+                            "Previous rollback recovers original bytes with no source archive and clears the password");
+                        restartPane.IsExpanded = false;
+                    }
+                }
                 // Restore an archived Local store through the existing Restore controls.
                 const string extensionId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
                 var packagePath = Directory.CreateDirectory(Path.Combine(profileDirectory, "Extensions", extensionId, "1.0_0")).FullName;

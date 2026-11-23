@@ -6,15 +6,23 @@ namespace BraveBackup.Core;
 public sealed class RestoreArtifactScope
 {
     private readonly string[] _protectedRoots;
-    private readonly string _source;
+    private readonly string? _source;
     public string SafetyPath { get; }
     public string JournalPath { get; }
     public string RestartRecordPath { get; }
     public RestoreArtifactScope(Guid operationId, string directory, string sourceArchive, IEnumerable<string> protectedDirectories)
+        : this(operationId, directory, protectedDirectories, Path.GetFullPath(sourceArchive))
+    {
+    }
+
+    internal static RestoreArtifactScope ForRestart(Guid operationId, string directory, IEnumerable<string> protectedDirectories) =>
+        new(operationId, directory, protectedDirectories, null);
+
+    private RestoreArtifactScope(Guid operationId, string directory, IEnumerable<string> protectedDirectories, string? source)
     {
         if (operationId == Guid.Empty) throw new ArgumentException("A recovery operation identity is required.");
         _protectedRoots = protectedDirectories.Select(Path.GetFullPath).ToArray();
-        _source = Path.GetFullPath(sourceArchive);
+        _source = source;
         var folder = Path.GetFullPath(directory);
         if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("Choose an existing recovery folder.");
         SafetyPath = Path.Combine(folder, operationId.ToString("N") + ".safety.encrypted");

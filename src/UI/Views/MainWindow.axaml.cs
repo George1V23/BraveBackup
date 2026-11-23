@@ -29,6 +29,7 @@ public partial class MainWindow : Window
             ConfirmPasswordCsvArchiveSave = ConfirmPasswordCsvArchiveSaveAsync
         };
         ((ShellViewModel)DataContext).RestorePreview.PickSource = PickRestoreSourceAsync;
+        ((ShellViewModel)DataContext).RestorePreview.PickRestartRecord = PickRestartRecordAsync;
         ((ShellViewModel)DataContext).RestorePreview.Safety.PickFolder = PickRestoreSafetyFolderAsync;
         var csv = ((ShellViewModel)DataContext).PasswordCsvExport;
         csv.PickDestination = PickPasswordCsvPathAsync;
@@ -54,6 +55,19 @@ public partial class MainWindow : Window
         {
             Title = "Choose backup to inspect", AllowMultiple = false,
             FileTypeFilter = new[] { new FilePickerFileType("BraveBackup archive (*.bravebackup)") { Patterns = new[] { "*.bravebackup" } } }
+        });
+        return files.Count == 1 ? files[0].TryGetLocalPath() : null;
+    }
+
+    /// <summary>Selects the immutable record of a previous restore operation.</summary>
+    private async Task<string?> PickRestartRecordAsync()
+    {
+        if (!StorageProvider.CanOpen) throw new InvalidOperationException("A local open picker is unavailable.");
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Choose encrypted restart record",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("Encrypted restart record") { Patterns = new[] { "*.restart.encrypted" } } }
         });
         return files.Count == 1 ? files[0].TryGetLocalPath() : null;
     }

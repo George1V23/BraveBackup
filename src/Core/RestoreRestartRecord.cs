@@ -27,6 +27,17 @@ public sealed record RestoreRestartRecord(Guid OperationId, string SafetyFingerp
 /// <summary>Authenticated restart metadata. Destination access and write approval belong to the platform adapter.</summary>
 public sealed record RestoreRestartInspection(RestoreRestartRecord Record, RestoreArtifactInspection Journal);
 
+/// <summary>Owns the authenticated original images needed for an explicitly approved restart rollback.</summary>
+public sealed class VerifiedRestoreRestartArtifacts : IDisposable
+{
+    internal VerifiedRestoreRestartArtifacts(RestoreRestartInspection inspection, RestoreSafetySnapshot originals, string fingerprint)
+    { Inspection = inspection; Originals = originals; RecordFingerprint = fingerprint; }
+    public RestoreRestartInspection Inspection { get; }
+    public RestoreSafetySnapshot Originals { get; }
+    internal string RecordFingerprint { get; }
+    public void Dispose() => Originals.Dispose();
+}
+
 /// <summary>Encodes immutable restart evidence and verifies its relationship to both encrypted artifacts.</summary>
 public static class RestoreRestartRecordFormat
 {
@@ -142,34 +153,65 @@ public static class RestoreRestartRecordFormat
     public static RestoreRestartInspection Inspect(Stream record, Stream safety, Stream journal, string password,
         CancellationToken token = default)
     {
+        using var verified = Open(record, safety, journal, password, token);
+        return verified.Inspection;
+    }
+
+    /// <summary>Authenticates the three artifacts and returns owned original images for native recovery.</summary>
+    public static VerifiedRestoreRestartArtifacts Open(Stream record, Stream safety, Stream journal, string password,
+        CancellationToken token = default)
+    {
         using var recordPlaintext = RestoreArtifactInspection.ReadEncrypted(record, password, MaximumBytes, token);
         var plan = Decode(recordPlaintext, token);
         using var journalPlaintext = RestoreArtifactInspection.ReadEncrypted(journal, password, MaximumBoundJournalBytes, token);
         var journalBytes = journalPlaintext.Bytes.Span;
+        var recordHash = SHA256.HashData(recordPlaintext.Bytes.Span);
         if (journalBytes.Length <= BoundJournalHeaderSize || !journalBytes[..8].SequenceEqual("BBKJR002"u8) ||
-            !CryptographicOperations.FixedTimeEquals(SHA256.HashData(recordPlaintext.Bytes.Span), journalBytes[8..40]))
+            !CryptographicOperations.FixedTimeEquals(recordHash, journalBytes[8..40]))
             throw Invalid();
         var state = RestoreJournalFormat.Decode(journalBytes[BoundJournalHeaderSize..]);
         if (state.Operation != plan.OperationId || state.Entries.Length != plan.Targets.Count) throw Invalid();
 
         using var safetyPlaintext = RestoreArtifactInspection.ReadEncrypted(safety, password, RestoreSafetyFormat.MaximumBytes, token);
         if (Convert.ToHexStringLower(SHA256.HashData(safetyPlaintext.Bytes.Span)) != plan.SafetyFingerprint) throw Invalid();
-        using var snapshot = RestoreSafetyFormat.Decode(safetyPlaintext.Bytes.Span, token);
-        if (snapshot.OperationId != plan.OperationId || snapshot.Entries.Count != plan.Targets.Count) throw Invalid();
-        var entries = new RestoreArtifactEntry[plan.Targets.Count];
-        for (var index = 0; index < entries.Length; index++)
+        var snapshot = RestoreSafetyFormat.Decode(safetyPlaintext.Bytes.Span, token);
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var target = plan.Targets[index];
-            var original = snapshot.Entries[index];
-            var entry = state.Entries[index];
-            if (target.MutationId != entry.Id || target.MutationId != original.Id ||
-                target.OriginalFingerprint != RestoreRecoveryEvidence.Fingerprint(original.Original))
-                throw Invalid();
-            entries[index] = new(original.Id, original.InstallationId, original.ProfileId, original.Category,
-                original.Original.Exists, entry.State);
+            if (snapshot.OperationId != plan.OperationId || snapshot.Entries.Count != plan.Targets.Count) throw Invalid();
+            var entries = new RestoreArtifactEntry[plan.Targets.Count];
+            for (var index = 0; index < entries.Length; index++)
+            {
+                token.ThrowIfCancellationRequested();
+                var target = plan.Targets[index];
+                var original = snapshot.Entries[index];
+                var entry = state.Entries[index];
+                if (target.MutationId != entry.Id || target.MutationId != original.Id ||
+                    target.OriginalFingerprint != RestoreRecoveryEvidence.Fingerprint(original.Original))
+                    throw Invalid();
+                entries[index] = new(original.Id, original.InstallationId, original.ProfileId, original.Category,
+                    original.Original.Exists, entry.State);
+            }
+            var inspection = new RestoreRestartInspection(plan,
+                new(plan.OperationId, state.Revision, state.State, Array.AsReadOnly(entries)));
+            return new(inspection, snapshot, Convert.ToHexStringLower(recordHash));
         }
-        return new(plan, new(plan.OperationId, state.Revision, state.State, Array.AsReadOnly(entries)));
+        catch
+        {
+            snapshot.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Encodes a revision for an already authenticated restart record's exact fingerprint.</summary>
+    public static SensitiveBytes EncodeVerifiedJournal(VerifiedRestoreRestartArtifacts verified, long revision,
+        RestoreTransactionState state, IReadOnlyList<(Guid Id, RestoreEntryState State)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(verified);
+        var record = verified.Inspection.Record;
+        if (entries.Count != record.Targets.Count ||
+            !record.Targets.Select(target => target.MutationId).SequenceEqual(entries.Select(entry => entry.Id)))
+            throw Invalid();
+        return EncodeBoundJournal(Convert.FromHexString(verified.RecordFingerprint), record.OperationId, revision, state, entries);
     }
 
     private static void Validate(RestoreRestartRecord record, CancellationToken token)

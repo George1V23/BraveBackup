@@ -5,6 +5,12 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "RecoveryIdentity_" + Guid.NewGuid().ToString("N"));
     public RecoveryDirectoryIdentityTests() => Directory.CreateDirectory(_root);
+    internal static bool SupportsRestartEvidence(string path)
+    {
+        using var directory = RecoveryDirectoryIdentity.Open(path);
+        return directory.CaptureRestartEvidence().StartsWith("linux-chain-v1:complete:", StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RestartEvidenceDetectsReplacedAncestorEvenWhenLeafIdentitySurvives()
     {

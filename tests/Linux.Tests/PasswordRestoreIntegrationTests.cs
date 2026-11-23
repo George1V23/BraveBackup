@@ -219,6 +219,46 @@ public sealed class PasswordRestoreIntegrationTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(database));
     }
 
+    [Fact]
+    public void RestartRollbackWaitsForPasswordSidecarAndCanRetry()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var challenge = new PasswordRestoreChallenge();
+        var (app, profile, database) = Setup(challenge);
+        if (!RecoveryDirectoryIdentityTests.SupportsRestartEvidence(profile.ProfileDirectory)) return;
+        var archive = CreateArchive();
+        var recovery = Directory.CreateDirectory(Path.Combine(_root, "Recovery")).FullName;
+        var verified = BravePasswordRestoreTarget.Review(profile.ProfileDirectory, challenge, default, Lookup);
+        var original = File.ReadAllBytes(database);
+        RestoreArtifactScope artifacts;
+        using (var live = BraveProfileRestorePlan.Open(archive.Path, archive.Id, ArchivePassword, recovery, SafetyPassword,
+            [new(archive.ProfileId, app, profile, "passwords") { Passwords = verified }], [app.UserDataDirectory],
+            Guid.NewGuid(), null, () => ProcessPresence.Stopped, passwordKeyLookup: Lookup))
+        {
+            artifacts = live.Artifacts;
+            live.Transaction.Prepare();
+            live.Transaction.Run();
+        }
+        File.Delete(archive.Path);
+
+        var replacement = File.ReadAllBytes(database);
+        var sidecar = database + "-wal";
+        File.WriteAllText(sidecar, "synthetic pending transaction");
+        using (var blocked = LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword,
+            [(app, profile)], () => ProcessPresence.Stopped))
+        {
+            Assert.Equal(RestoreRollbackDecision.Conflict, Assert.Single(blocked.Review.Targets).Decision);
+            Assert.Equal(RestoreTransactionState.RecoveryIncomplete, blocked.Rollback(blocked.Review));
+            Assert.Equal(replacement, File.ReadAllBytes(database));
+        }
+
+        File.Delete(sidecar);
+        using var retried = LinuxRestartRollback.Open(artifacts.RestartRecordPath, SafetyPassword,
+            [(app, profile)], () => ProcessPresence.Stopped);
+        Assert.Equal(RestoreTransactionState.RolledBack, retried.Rollback(retried.Review));
+        Assert.Equal(original, File.ReadAllBytes(database));
+    }
+
     private (BraveAppInfo App, BraveProfileInfo Profile, string Database) Setup(PasswordRestoreChallenge challenge, bool v11 = true)
     {
         var data = Path.Combine(_root, "User Data");
