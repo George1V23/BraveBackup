@@ -36,6 +36,8 @@ internal sealed class LinuxRestoreDirectoryCheckpoint : ILinuxRestoreTarget
         catch { _parent.Dispose(); throw; }
     }
 
+    public string CaptureRestartDirectoryEvidence() => _parent.CaptureRestartEvidence();
+
     public long ImageBytes => _expected.Content.Bytes.Length + _expected.Metadata.Bytes.Length;
 
     /// <summary>Reads the current directory only if its identity, metadata, names and contents still match.</summary>

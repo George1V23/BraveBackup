@@ -94,6 +94,7 @@ public sealed class RestoreExecutionTests : IDisposable
         Assert.False(view.IsRestoreActive);
         Assert.Equal(safety, File.ReadAllBytes(review.SafetyPath));
         Assert.True(File.Exists(review.JournalPath));
+        Assert.True(File.Exists(review.RestartRecordPath));
     }
 
     [Fact]

@@ -61,6 +61,14 @@ public sealed class PasswordRestoreIntegrationTests : IDisposable
 
         session.Transaction.Prepare();
         Assert.True(session.Transaction.HasPublishedSafety);
+        var prepared = RestoreArtifactStorage.InspectRestart(session.Artifacts.RestartRecordPath, session.Artifacts.SafetyPath,
+            session.Artifacts.JournalPath, SafetyPassword);
+        Assert.Equal(RestoreTransactionState.Prepared, prepared.Journal.State);
+        Assert.All(prepared.Journal.Entries, entry => Assert.Equal(RestoreEntryState.Untouched, entry.State));
+        Assert.Equal(profile.ProfileDirectory, prepared.Record.Targets[0].ProfileDirectory);
+        Assert.Equal("Login Data", prepared.Record.Targets[0].RelativeTarget);
+        Assert.StartsWith("linux-chain-v1:", prepared.Record.Targets[0].DirectoryEvidence);
+        Assert.Single(Directory.GetFiles(recovery, "*.restart.encrypted"));
         using (var file = File.OpenRead(session.Artifacts.SafetyPath))
         using (var reader = ArchiveEncryption.OpenReader(file, SafetyPassword))
         using (var bytes = new MemoryStream())
@@ -90,7 +98,8 @@ public sealed class PasswordRestoreIntegrationTests : IDisposable
         File.WriteAllText(sidecar, "synthetic pending transaction");
         session.Transaction.Rollback(true);
         Assert.Equal(RestoreTransactionState.RecoveryIncomplete, session.Transaction.State);
-        var inspection = RestoreArtifactStorage.Inspect(session.Artifacts.SafetyPath, session.Artifacts.JournalPath, SafetyPassword);
+        var inspection = RestoreArtifactStorage.InspectRestart(session.Artifacts.RestartRecordPath, session.Artifacts.SafetyPath,
+            session.Artifacts.JournalPath, SafetyPassword).Journal;
         Assert.Equal(session.Transaction.OperationId, inspection.OperationId);
         Assert.Equal(RestoreTransactionState.RecoveryIncomplete, inspection.State);
         Assert.Equal(RestoreEntryState.Applied, Assert.Single(inspection.Entries, entry => entry.Category == "passwords").State);
@@ -149,6 +158,65 @@ public sealed class PasswordRestoreIntegrationTests : IDisposable
         Assert.Contains("changed after Recheck", error.Message);
         Assert.Empty(Directory.GetFiles(recovery));
         Assert.Equal(changed, File.ReadAllBytes(database));
+    }
+
+    [Theory]
+    [InlineData("prepare")]
+    [InlineData("preflight")]
+    [InlineData("publication")]
+    public void BlockedOrChangedRestartRecordPreventsProfileWrites(string phase)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var challenge = new PasswordRestoreChallenge();
+        var (app, profile, database) = Setup(challenge);
+        var archive = CreateArchive();
+        var recovery = Directory.CreateDirectory(Path.Combine(_root, "Recovery")).FullName;
+        var verified = BravePasswordRestoreTarget.Review(profile.ProfileDirectory, challenge, default, Lookup);
+        var original = File.ReadAllBytes(database);
+        var operation = Guid.NewGuid();
+        var recordPath = Path.Combine(recovery, operation.ToString("N") + ".restart.encrypted");
+        var intercepted = false;
+        ProcessPresence Observe()
+        {
+            if (phase == "publication" && !intercepted &&
+                Directory.EnumerateFiles(profile.ProfileDirectory, ".restore-*.tmp").Any())
+            {
+                intercepted = true;
+                File.AppendAllText(recordPath, "external change during publication");
+            }
+            return ProcessPresence.Stopped;
+        }
+
+        using var session = BraveProfileRestorePlan.Open(archive.Path, archive.Id, ArchivePassword, recovery, SafetyPassword,
+            [new(archive.ProfileId, app, profile, "passwords") { Passwords = verified }], [app.UserDataDirectory],
+            operation, null, Observe, passwordKeyLookup: Lookup);
+
+        if (phase == "prepare")
+        {
+            File.WriteAllText(session.Artifacts.RestartRecordPath, "existing file");
+            Assert.ThrowsAny<IOException>(() => session.Transaction.Prepare());
+            Assert.Equal(RestoreTransactionState.Failed, session.Transaction.State);
+            Assert.Equal("existing file", File.ReadAllText(session.Artifacts.RestartRecordPath));
+            Assert.False(File.Exists(session.Artifacts.JournalPath));
+        }
+        else if (phase == "preflight")
+        {
+            session.Transaction.Prepare();
+            File.AppendAllText(recordPath, "external change");
+            Assert.Throws<InvalidDataException>(() => session.Transaction.Run());
+            Assert.Equal(RestoreTransactionState.Prepared, session.Transaction.State);
+        }
+        else
+        {
+            session.Transaction.Prepare();
+            Assert.Throws<IOException>(() => session.Transaction.Run());
+            Assert.True(intercepted);
+            Assert.Equal(RestoreTransactionState.Failed, session.Transaction.State);
+            Assert.Empty(Directory.EnumerateFiles(profile.ProfileDirectory, ".restore-*.tmp"));
+        }
+
+        Assert.True(File.Exists(session.Artifacts.SafetyPath));
+        Assert.Equal(original, File.ReadAllBytes(database));
     }
 
     private (BraveAppInfo App, BraveProfileInfo Profile, string Database) Setup(PasswordRestoreChallenge challenge, bool v11 = true)

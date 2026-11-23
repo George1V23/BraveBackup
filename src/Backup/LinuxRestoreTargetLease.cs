@@ -32,6 +32,8 @@ public sealed class LinuxRestoreTargetLease : IDisposable
         }
         catch { original?.Dispose(); file?.Dispose(); directory.Dispose(); throw; }
     }
+    internal string CaptureRestartDirectoryEvidence() => _directory.CaptureRestartEvidence();
+
     /// <summary>Returns an independently owned copy of the original safety image.</summary>
     public RestoreFileImage CopyOriginal() { ObjectDisposedException.ThrowIf(_disposed, this); return _original.Clone(); }
     /// <summary>Rechecks retained identities and exact original bytes/metadata; never refreshes the original safety state.</summary>

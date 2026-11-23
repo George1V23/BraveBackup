@@ -118,12 +118,19 @@ public static class RestoreRestartRecordFormat
             !record.Targets.Select(target => target.MutationId).SequenceEqual(entries.Select(entry => entry.Id)))
             throw Invalid();
 
-        var journal = RestoreJournalFormat.Encode(record.OperationId, revision, state, entries);
+        return EncodeBoundJournal(SHA256.HashData(recordPlaintext.Bytes.Span), record.OperationId, revision, state, entries);
+    }
+
+    internal static SensitiveBytes EncodeBoundJournal(ReadOnlySpan<byte> recordFingerprint, Guid operation, long revision,
+        RestoreTransactionState state, IReadOnlyList<(Guid Id, RestoreEntryState State)> entries)
+    {
+        if (recordFingerprint.Length != 32) throw Invalid();
+        var journal = RestoreJournalFormat.Encode(operation, revision, state, entries);
         try
         {
             var bytes = new byte[BoundJournalHeaderSize + journal.Length];
             "BBKJR002"u8.CopyTo(bytes);
-            SHA256.HashData(recordPlaintext.Bytes.Span, bytes.AsSpan(8, 32));
+            recordFingerprint.CopyTo(bytes.AsSpan(8, 32));
             journal.CopyTo(bytes.AsSpan(BoundJournalHeaderSize));
             return new SensitiveBytes(bytes);
         }

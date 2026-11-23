@@ -25,6 +25,15 @@ public interface IRestoreTransactionStore
     void SaveJournal(ReadOnlyMemory<byte> encryptedBytes);
     byte[] ReadJournal();
 }
+/// <summary>Optional store support for durable, bound restart evidence.</summary>
+public interface IRestoreRestartRecordStore
+{
+    RestoreRestartTarget DescribeRestartTarget(Guid mutationId, string originalFingerprint, string replacementFingerprint,
+        CancellationToken token);
+    void SaveRestartRecord(ReadOnlyMemory<byte> encryptedBytes);
+    byte[] ReadRestartRecord();
+}
+
 /// <summary>Exact journal codec used inside the authenticated envelope; contains only logical IDs and states.</summary>
 public static class RestoreJournalFormat
 {
@@ -74,6 +83,7 @@ public sealed class RestoreTransaction : IDisposable
     private RestoreSafetySnapshot? _snapshot;
     private string? _password;
     private string? _safetyHash;
+    private byte[]? _restartRecordHash;
     private long _revision;
     private int _pause;
     private bool _disposed;
@@ -148,6 +158,8 @@ public sealed class RestoreTransaction : IDisposable
                 try
                 {
                     using var decodedBytes = Decrypt(readback, token);
+                    if (!decodedBytes.Bytes.Span.SequenceEqual(plain.Bytes.Span))
+                        throw new InvalidDataException("Safety verification failed.");
                     using var verified = RestoreSafetyFormat.Decode(decodedBytes.Bytes.Span, token);
                     if (verified.OperationId != OperationId || verified.Entries.Count != originals.Count) throw new InvalidDataException("Safety verification failed.");
                     for (var index = 0; index < originals.Count; index++)
@@ -158,7 +170,14 @@ public sealed class RestoreTransaction : IDisposable
                     }
                 }
                 finally { CryptographicOperations.ZeroMemory(readback); }
-                _store.VerifyContext(token); State = RestoreTransactionState.Prepared; Journal();
+                _store.VerifyContext(token);
+                if (_store is IRestoreRestartRecordStore restartStore)
+                {
+                    PrepareRestartRecord(restartStore, token);
+                    _store.VerifyContext(token);
+                }
+                State = RestoreTransactionState.Prepared;
+                Journal();
             }
             catch
             {
@@ -182,6 +201,7 @@ public sealed class RestoreTransaction : IDisposable
             if (_disposed || State is not (RestoreTransactionState.Prepared or RestoreTransactionState.Paused)) throw new InvalidOperationException("Restore cannot run in this state.");
             // A failed resume preflight keeps the operation paused and never refreshes originals.
             VerifySafety();
+            VerifyRestartRecord();
             _store.VerifyContext(CancellationToken.None);
             for (var index = 0; index < _mutations.Length; index++)
             {
@@ -230,7 +250,7 @@ public sealed class RestoreTransaction : IDisposable
             if (_disposed || _snapshot is null || State is not (RestoreTransactionState.Paused or RestoreTransactionState.Failed or RestoreTransactionState.Completed or RestoreTransactionState.RecoveryIncomplete))
                 throw new InvalidOperationException("Rollback cannot run in this state.");
             State = RestoreTransactionState.RollingBack;
-            try { VerifySafety(); _store.VerifyRecoveryContext(CancellationToken.None); Journal(); }
+            try { VerifySafety(); VerifyRestartRecord(); _store.VerifyRecoveryContext(CancellationToken.None); Journal(); }
             catch { State = RestoreTransactionState.RecoveryIncomplete; TryJournal(); throw; }
             var failed = false;
             for (var index = _mutations.Length - 1; index >= 0; index--)
@@ -288,28 +308,76 @@ public sealed class RestoreTransaction : IDisposable
             _entries.Count(e => e == wanted || recovered && e == RestoreEntryState.Untouched), _entries.Length,
             group.All(i => _entries[i] == wanted || recovered && _entries[i] == RestoreEntryState.Untouched)));
     }
-    private void Journal()
+    private void PrepareRestartRecord(IRestoreRestartRecordStore store, CancellationToken token)
     {
-        var plaintext = RestoreJournalFormat.Encode(OperationId, ++_revision, State,
-            _mutations.Select((m, index) => (m.Id, _entries[index])).ToArray());
+        var targets = new RestoreRestartTarget[_mutations.Length];
+        for (var index = 0; index < targets.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            var mutation = _mutations[index];
+            var original = RestoreRecoveryEvidence.Fingerprint(_snapshot!.Entries[index].Original);
+            var replacement = RestoreRecoveryEvidence.Fingerprint(mutation.Replacement);
+            var target = store.DescribeRestartTarget(mutation.Id, original, replacement, token);
+            if (target.MutationId != mutation.Id || target.OriginalFingerprint != original ||
+                target.ReplacementFingerprint != replacement)
+                throw new InvalidDataException("The restart destination does not match its reviewed mutation.");
+            targets[index] = target;
+        }
+
+        using var plaintext = RestoreRestartRecordFormat.Encode(new(OperationId, _safetyHash!, targets), token);
+        var encrypted = Encrypt(plaintext.Bytes.Span, token);
+        try { store.SaveRestartRecord(encrypted); }
+        finally { CryptographicOperations.ZeroMemory(encrypted); }
+
+        var recordHash = SHA256.HashData(plaintext.Bytes.Span);
+        VerifyRestartRecord(store, recordHash, token);
+        _restartRecordHash = recordHash;
+    }
+
+    private void VerifyRestartRecord()
+    {
+        if (_store is IRestoreRestartRecordStore store)
+        {
+            if (_restartRecordHash is null) throw new InvalidDataException("Verified restart evidence is missing.");
+            VerifyRestartRecord(store, _restartRecordHash, CancellationToken.None);
+        }
+    }
+
+    private void VerifyRestartRecord(IRestoreRestartRecordStore store, ReadOnlySpan<byte> expectedHash, CancellationToken token)
+    {
+        var readback = store.ReadRestartRecord();
         try
         {
-            var encrypted = Encrypt(plaintext, CancellationToken.None);
+            using var plaintext = Decrypt(readback, token);
+            if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(plaintext.Bytes.Span), expectedHash))
+                throw new InvalidDataException("The verified restart record changed.");
+        }
+        finally { CryptographicOperations.ZeroMemory(readback); }
+    }
+
+    private void Journal()
+    {
+        var entries = _mutations.Select((mutation, index) => (mutation.Id, _entries[index])).ToArray();
+        if (_store is IRestoreRestartRecordStore && _restartRecordHash is null)
+            throw new InvalidOperationException("The verified restart record must precede its journal.");
+        ++_revision;
+        using var plaintext = _restartRecordHash is { } hash
+            ? RestoreRestartRecordFormat.EncodeBoundJournal(hash, OperationId, _revision, State, entries)
+            : new SensitiveBytes(RestoreJournalFormat.Encode(OperationId, _revision, State, entries));
+        var encrypted = Encrypt(plaintext.Bytes.Span, CancellationToken.None);
+        try
+        {
+            _store.SaveJournal(encrypted);
+            var readback = _store.ReadJournal();
             try
             {
-                _store.SaveJournal(encrypted);
-                var readback = _store.ReadJournal();
-                try
-                {
-                    using var verified = Decrypt(readback, CancellationToken.None);
-                    if (!verified.Bytes.Span.SequenceEqual(plaintext)) throw new InvalidDataException("Journal verification failed.");
-                    RestoreJournalFormat.Decode(verified.Bytes.Span);
-                }
-                finally { CryptographicOperations.ZeroMemory(readback); }
+                using var verified = Decrypt(readback, CancellationToken.None);
+                if (!verified.Bytes.Span.SequenceEqual(plaintext.Bytes.Span))
+                    throw new InvalidDataException("Journal verification failed.");
             }
-            finally { CryptographicOperations.ZeroMemory(encrypted); }
+            finally { CryptographicOperations.ZeroMemory(readback); }
         }
-        finally { CryptographicOperations.ZeroMemory(plaintext); }
+        finally { CryptographicOperations.ZeroMemory(encrypted); }
     }
     private void TryJournal() { try { Journal(); } catch { } }
     private byte[] Encrypt(ReadOnlySpan<byte> bytes, CancellationToken token)
@@ -345,6 +413,7 @@ public sealed class RestoreTransaction : IDisposable
         {
             if (_disposed) return; _disposed = true; _password = null; Progress = null;
             _snapshot?.Dispose(); foreach (var mutation in _mutations) mutation.Replacement.Dispose();
+            if (_restartRecordHash is not null) CryptographicOperations.ZeroMemory(_restartRecordHash);
         }
     }
 }

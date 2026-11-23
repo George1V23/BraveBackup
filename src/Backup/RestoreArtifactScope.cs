@@ -9,6 +9,7 @@ public sealed class RestoreArtifactScope
     private readonly string _source;
     public string SafetyPath { get; }
     public string JournalPath { get; }
+    public string RestartRecordPath { get; }
     public RestoreArtifactScope(Guid operationId, string directory, string sourceArchive, IEnumerable<string> protectedDirectories)
     {
         if (operationId == Guid.Empty) throw new ArgumentException("A recovery operation identity is required.");
@@ -18,12 +19,13 @@ public sealed class RestoreArtifactScope
         if (!Directory.Exists(folder)) throw new DirectoryNotFoundException("Choose an existing recovery folder.");
         SafetyPath = Path.Combine(folder, operationId.ToString("N") + ".safety.encrypted");
         JournalPath = Path.Combine(folder, operationId.ToString("N") + ".journal.encrypted");
+        RestartRecordPath = Path.Combine(folder, operationId.ToString("N") + ".restart.encrypted");
         Validate();
     }
     /// <summary>Rechecks fixed output paths against frozen browser roots, source collisions and filesystem links.</summary>
     public void Validate()
     {
-        foreach (var path in new[] { SafetyPath, JournalPath })
+        foreach (var path in new[] { SafetyPath, JournalPath, RestartRecordPath })
         {
             ExportDestinationGuard.Validate(path, _protectedRoots);
             if (string.Equals(path, _source, HostEnvironment.PathComparison))

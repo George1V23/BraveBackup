@@ -68,6 +68,17 @@ public static class RestoreArtifactStorage
         return RestoreArtifactInspection.Read(safetyStream, journalStream, password, token);
     }
 
+    /// <summary>Authenticates the selected Linux restart record and its matching safety and journal files.</summary>
+    public static RestoreRestartInspection InspectRestart(string restartRecordPath, string safetyPath, string journalPath,
+        string password, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+        using var record = new MemoryStream(Read(restartRecordPath), writable: false);
+        using var safety = new MemoryStream(Read(safetyPath), writable: false);
+        using var journal = new MemoryStream(Read(journalPath), writable: false);
+        return RestoreRestartRecordFormat.Inspect(record, safety, journal, password, token);
+    }
+
     /// <summary>Hashes bounded encrypted framing for observed replacement conflicts, without authenticating its contents.</summary>
     private static string Fingerprint(string path)
     {

@@ -43,7 +43,8 @@ public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo In
 
 /// <summary>A write-free review of the exact archive, destinations and encrypted artifact paths.</summary>
 public sealed record RestoreReview(string ArchivePath, Guid ArchiveId, string SourceSha256, Guid OperationId,
-    string SafetyPath, string JournalPath, IReadOnlyList<RestoreReviewedTarget> Targets, string DestinationSummary);
+    string SafetyPath, string JournalPath, string RestartRecordPath,
+    IReadOnlyList<RestoreReviewedTarget> Targets, string DestinationSummary);
 
 public partial class RestorePreviewViewModel
 {
@@ -55,7 +56,8 @@ public partial class RestorePreviewViewModel
     public bool HasReview => Review is not null;
     public string ReviewSummary => Review is { } review
         ? $"Source backup\n{review.ArchivePath}\n\n{review.DestinationSummary}\n\n" +
-          $"Encrypted safety backup\n{review.SafetyPath}\n\nRecovery journal\n{review.JournalPath}"
+          $"Encrypted safety backup\n{review.SafetyPath}\n\nRecovery journal\n{review.JournalPath}\n\n" +
+          $"Encrypted restart record\n{review.RestartRecordPath}"
         : string.Empty;
 
     private bool CanReviewRestore() => !_disposed && !IsRestoreActive && !IsBusy && Planning.ReadyForReview && Safety.ValidationError is null;
@@ -139,7 +141,7 @@ public partial class RestorePreviewViewModel
                 description += "\n\nPasswords replaces saved logins in the listed local stores, including password notes. " +
                                "An empty store clears saved logins. Blocked and federated entries are kept. " +
                                "Rollback restores the original database, including the temporary login.";
-            Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath,
+            Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath, artifacts.RestartRecordPath,
                 Array.AsReadOnly(targets), description);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)

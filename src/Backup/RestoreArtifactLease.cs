@@ -11,6 +11,7 @@ public sealed class RestoreArtifactLease : IDisposable
     private readonly object _gate = new();
     private bool _disposed;
     private string? _journalHash;
+    private string? _restartHash;
     private RestoreArtifactLease(RestoreArtifactScope scope, RecoveryDirectoryIdentity directory)
     { _scope = scope; _directory = directory; }
     /// <summary>Acquires ownership without creating artifacts; unsupported hosts fail closed.</summary>
@@ -32,12 +33,29 @@ public sealed class RestoreArtifactLease : IDisposable
             _directory.Flush();
         }
     }
+    /// <summary>Publishes the immutable restart record without replacing any existing file.</summary>
+    public void SaveRestartRecord(ReadOnlyMemory<byte> encrypted)
+    {
+        lock (_gate)
+        {
+            Verify();
+            CheckFraming(encrypted);
+            _directory.PublishChild(Path.GetFileName(_scope.RestartRecordPath), encrypted, false);
+            _directory.Flush();
+            _restartHash = Convert.ToHexStringLower(SHA256.HashData(encrypted.Span));
+        }
+    }
+
+    /// <summary>Reads the published restart record for authenticated coordinator verification.</summary>
+    public byte[] ReadRestartRecord() { lock (_gate) { Verify(); return Read(Path.GetFileName(_scope.RestartRecordPath)); } }
+
     /// <summary>Publishes a journal revision under the same operation-lifetime lock.</summary>
     public void SaveJournal(ReadOnlyMemory<byte> encrypted)
     {
         lock (_gate)
         {
             Verify(); CheckFraming(encrypted);
+            if (_restartHash is not null) VerifyRestartRecord();
             if (_journalHash is not null)
             {
                 var previous = Read(Path.GetFileName(_scope.JournalPath));
@@ -57,6 +75,23 @@ public sealed class RestoreArtifactLease : IDisposable
     public byte[] ReadSafety() { lock (_gate) { Verify(); return Read(Path.GetFileName(_scope.SafetyPath)); } }
     /// <summary>Reads the owned journal artifact for coordinator authentication.</summary>
     public byte[] ReadJournal() { lock (_gate) { Verify(); return Read(Path.GetFileName(_scope.JournalPath)); } }
+    /// <summary>Checks the already authenticated record's ciphertext at a profile publication boundary.</summary>
+    internal void VerifyRestartRecord()
+    {
+        lock (_gate)
+        {
+            Verify();
+            if (_restartHash is null) throw new IOException("Verified restart record is missing.");
+            var record = Read(Path.GetFileName(_scope.RestartRecordPath));
+            try
+            {
+                if (Convert.ToHexStringLower(SHA256.HashData(record)) != _restartHash)
+                    throw new IOException("Restart record changed outside its operation.");
+            }
+            finally { CryptographicOperations.ZeroMemory(record); }
+        }
+    }
+
     /// <summary>Revalidates scope and retained directory identity without creating files.</summary>
     public void Verify()
     {

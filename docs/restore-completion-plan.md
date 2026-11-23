@@ -190,8 +190,9 @@ The [restart rollback evidence contract](restore-safety-v1.md#evidence-for-resta
 defines exact image fingerprints and conflict decisions. The
 [restart record and bound journal codecs](restore-safety-v1.md#restart-record-and-bound-journal-codecs)
 authenticate destination evidence and bind it to the exact safety snapshot.
-Publishing those artifacts from Restore and reopening a transaction after
-restart remain pending.
+Linux Restore publishes and verifies those artifacts before its first profile
+write and captures same-boot directory evidence. An explicit restart rollback
+workflow remains pending.
 
 ## Later scope
 

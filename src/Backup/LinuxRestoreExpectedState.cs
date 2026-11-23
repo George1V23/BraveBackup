@@ -14,6 +14,7 @@ public sealed class LinuxRestoreExpectedState : ILinuxRestoreTarget
         _current = LinuxRestoreTargetLease.Capture(_directory, name, token);
         try { _original = _current.CopyOriginal(); } catch { _current.Dispose(); throw; }
     }
+    string ILinuxRestoreTarget.CaptureRestartDirectoryEvidence() => _current.CaptureRestartDirectoryEvidence();
     long ILinuxRestoreTarget.ImageBytes => _original.Content.Bytes.Length + _original.Metadata.Bytes.Length;
 
     /// <summary>Returns the original recovery baseline; accepting applied state never replaces it.</summary>

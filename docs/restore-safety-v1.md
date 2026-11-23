@@ -172,10 +172,42 @@ that the journal is the newest revision. The recovery adapter must still
 reconcile every reported target against the current original and replacement
 fingerprints.
 
-These codecs are covered by synthetic round-trip and rejection tests.
-The active Restore transaction still emits v1 artifacts. Publishing the
-bound record before the first write, pinning directory identities and
-adding explicit restart rollback remain separate integration work.
+### Publication in Linux Restore
+
+Final review lists the safety backup, journal, and
+`<operation-id>.restart.encrypted` in the selected recovery folder. Preparing
+the transaction publishes and verifies the safety image first, publishes the
+restart record once under the same directory lease, authenticates its
+readback, then publishes the bound Prepared journal. Failure leaves any
+already-published artifacts available without changing the profile. The
+active transaction verifies the record before forward and rollback preflight.
+The Linux adapter compares its retained encrypted digest when saving journal
+revisions and again at profile publication boundaries. Stores without restart
+evidence still emit v1 journals.
+
+Linux evidence starts with `linux-chain-v1:complete:` or
+`linux-chain-v1:partial:` followed by a lowercase SHA-256 digest. The digest
+covers the ASCII domain `linux-directory-chain-v1`, the boot ID in .NET GUID
+byte order, then a 40-byte frame for each directory from the filesystem root
+through the target's parent. Each frame stores, in little-endian order, the
+32-bit availability mask for birth time and unique mount ID, 32-bit device major
+and minor numbers, 64-bit inode, 64-bit signed birth seconds, 32-bit birth
+nanoseconds and 64-bit mount ID. For a flat-directory target, the leaf is
+excluded because publication exchanges it. The no-link walk must end at the
+same retained parent. [Linux statx reference](https://man7.org/linux/man-pages/man2/statx.2.html).
+
+A reopened parent verifies only complete same-boot evidence. Profiles on
+filesystems without birth times or kernels without unique mount IDs can use
+in-process restore and rollback. Their records carry partial evidence, which cannot be used to
+verify an identity after restart. These identifiers detect observed
+directory replacement and do not replace retained handles or publication
+checks against concurrent mutation.
+
+`RestoreArtifactStorage.InspectRestart` authenticates the three selected
+files without accessing the profile. Tests cover blocked record publication,
+record changes before and during publication, reopening the same directory
+chain, and replacement of an ancestor while the leaf survives. The application
+still needs an explicit restart rollback entry point.
 
 ## Implementation checkpoint
 

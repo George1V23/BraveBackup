@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
 
 namespace BraveBackup.Platform;
@@ -51,6 +53,67 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
     {
         ArgumentNullException.ThrowIfNull(other); Verify(); other.Verify();
         return _identity == other._identity;
+    }
+
+    /// <summary>Fingerprints the retained directory's same-boot, no-link ancestor chain for restart recovery.</summary>
+    public string CaptureRestartEvidence()
+    {
+        Verify();
+        Guid bootId;
+        try { Guid.TryParse(File.ReadAllText("/proc/sys/kernel/random/boot_id"), out bootId); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { bootId = Guid.Empty; }
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData("linux-directory-chain-v1"u8);
+        hash.AppendData(bootId.ToByteArray());
+
+        var complete = bootId != Guid.Empty;
+        var current = OpenDirectory("/");
+        try
+        {
+            complete &= AppendRestartIdentity(hash, current);
+            foreach (var component in _path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var descriptor = OpenAt(current, component, 0x10000 | 0x20000 | 0x80000, 0);
+                if (descriptor < 0) throw new IOException("Cannot securely reopen a restart directory component.");
+                var next = new SafeFileHandle((IntPtr)descriptor, ownsHandle: true);
+                current.Dispose();
+                current = next;
+                complete &= AppendRestartIdentity(hash, current);
+            }
+            if (Identity(current) != _identity) throw new IOException("Restart directory changed during capture.");
+        }
+        finally { current.Dispose(); }
+
+        Verify();
+        return $"linux-chain-v1:{(complete ? "complete" : "partial")}:{Convert.ToHexStringLower(hash.GetHashAndReset())}";
+    }
+
+    /// <summary>Rejects a different chain, reboot, or insufficient native identity evidence.</summary>
+    public void VerifyRestartEvidence(string expected)
+    {
+        if (expected is null || !expected.StartsWith("linux-chain-v1:complete:", StringComparison.Ordinal) ||
+            CaptureRestartEvidence() != expected)
+            throw new IOException("The destination directory chain cannot be verified after restart.");
+    }
+
+    private static bool AppendRestartIdentity(IncrementalHash hash, SafeFileHandle handle)
+    {
+        const uint basic = 0x101; // STATX_TYPE | STATX_INO
+        const uint additional = 0x4800; // STATX_BTIME | STATX_MNT_ID_UNIQUE
+        if (Statx(handle, "", 0x1000, basic | additional, out var status) != 0 ||
+            (status.Mask & basic) != basic || (status.Mode & 0xF000) != 0x4000)
+            throw new IOException("Restart directory identity is unavailable.");
+
+        Span<byte> frame = stackalloc byte[40];
+        BinaryPrimitives.WriteUInt32LittleEndian(frame, status.Mask & additional);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame[4..], status.DeviceMajor);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame[8..], status.DeviceMinor);
+        BinaryPrimitives.WriteUInt64LittleEndian(frame[12..], status.Inode);
+        BinaryPrimitives.WriteInt64LittleEndian(frame[20..], status.BirthSeconds);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame[28..], status.BirthNanoseconds);
+        BinaryPrimitives.WriteUInt64LittleEndian(frame[32..], status.MountId);
+        hash.AppendData(frame);
+        return (status.Mask & additional) == additional;
     }
 
     /// <summary>Acquires a nonblocking Linux advisory lock for this retained directory until disposal.</summary>
@@ -356,8 +419,11 @@ public sealed class RecoveryDirectoryIdentity : IDisposable
         [FieldOffset(16)] public uint LinkCount;
         [FieldOffset(28)] public ushort Mode;
         [FieldOffset(32)] public ulong Inode;
+        [FieldOffset(80)] public long BirthSeconds;
+        [FieldOffset(88)] public uint BirthNanoseconds;
         [FieldOffset(136)] public uint DeviceMajor;
         [FieldOffset(140)] public uint DeviceMinor;
+        [FieldOffset(144)] public ulong MountId;
     }
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int NativeOpen([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags);

@@ -6,6 +6,32 @@ public sealed class RecoveryDirectoryIdentityTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "RecoveryIdentity_" + Guid.NewGuid().ToString("N"));
     public RecoveryDirectoryIdentityTests() => Directory.CreateDirectory(_root);
     [Fact]
+    public void RestartEvidenceDetectsReplacedAncestorEvenWhenLeafIdentitySurvives()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var parent = Path.Combine(_root, "parent");
+        var path = Directory.CreateDirectory(Path.Combine(parent, "target")).FullName;
+        string expected;
+        using (var first = RecoveryDirectoryIdentity.Open(path))
+            expected = first.CaptureRestartEvidence();
+        using (var reopened = RecoveryDirectoryIdentity.Open(path))
+        {
+            Assert.Equal(expected, reopened.CaptureRestartEvidence());
+            if (expected.StartsWith("linux-chain-v1:complete:", StringComparison.Ordinal))
+                reopened.VerifyRestartEvidence(expected);
+            else
+                Assert.Throws<IOException>(() => reopened.VerifyRestartEvidence(expected));
+        }
+
+        Directory.Move(parent, parent + "-original");
+        Directory.CreateDirectory(parent);
+        Directory.Move(Path.Combine(parent + "-original", "target"), path);
+        using var replaced = RecoveryDirectoryIdentity.Open(path);
+        Assert.NotEqual(expected, replaced.CaptureRestartEvidence());
+        Assert.Throws<IOException>(() => replaced.VerifyRestartEvidence(expected));
+    }
+
+    [Fact]
     public void SameNamedDirectoryReplacementIsDetected()
     {
         if (!OperatingSystem.IsLinux()) return;

@@ -17,6 +17,7 @@ internal sealed record LinuxRestoreDestination(
 internal interface ILinuxRestoreTarget : IDisposable
 {
     long ImageBytes { get; }
+    string CaptureRestartDirectoryEvidence();
     RestoreFileImage ReadCurrent(CancellationToken token);
     void Publish(RestoreFileImage image, Action verifyContext);
 }
@@ -92,7 +93,7 @@ internal sealed class LinuxRestoreSession : IDisposable
         var context = BraveRestoreContext.Capture(source, profiles, observe, token);
         var scope = new RestoreArtifactScope(operation, recoveryDirectory, source,
             protectedDirectories.Concat(profiles.Select(profile => profile.Installation.UserDataDirectory)));
-        var store = new Store(context, RestoreArtifactLease.Acquire(scope));
+        var store = new Store(context, RestoreArtifactLease.Acquire(scope), frozen.ToDictionary(target => target.Mutation.Id));
         RestoreTransaction? transaction = null;
         try
         {
@@ -152,7 +153,8 @@ internal sealed class LinuxRestoreSession : IDisposable
         _store.Dispose();
     }
 
-    private sealed class Store(BraveRestoreContext context, RestoreArtifactLease artifacts) : IRestoreTransactionStore, IDisposable
+    private sealed class Store(BraveRestoreContext context, RestoreArtifactLease artifacts,
+        IReadOnlyDictionary<Guid, LinuxRestoreDestination> destinations) : IRestoreTransactionStore, IRestoreRestartRecordStore, IDisposable
     {
         public Dictionary<Guid, ILinuxRestoreTarget> Targets { get; } = [];
         internal Dictionary<Guid, Action<CancellationToken>> ApplyGuards { get; } = [];
@@ -183,6 +185,7 @@ internal sealed class LinuxRestoreSession : IDisposable
             Targets[mutationId].Publish(image, () =>
             {
                 VerifyContext(CancellationToken.None);
+                artifacts.VerifyRestartRecord();
                 if (verify is not null)
                 {
                     verify(CancellationToken.None);
@@ -198,10 +201,26 @@ internal sealed class LinuxRestoreSession : IDisposable
             Targets[mutationId].Publish(image, () =>
             {
                 VerifyRecoveryContext(CancellationToken.None);
+                artifacts.VerifyRestartRecord();
                 verify?.Invoke(CancellationToken.None);
                 if (verify is not null) context.VerifyBrowserStopped(CancellationToken.None);
             });
         }
+
+        public RestoreRestartTarget DescribeRestartTarget(Guid mutationId, string originalFingerprint,
+            string replacementFingerprint, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var target = destinations[mutationId];
+            var directory = target.Profile.ProfileDirectory;
+            var relative = Path.GetRelativePath(directory, Path.Combine(TargetParent(target), target.FileName));
+            var kind = target.IsLocalExtensionDirectory ? RestoreRestartTargetKind.FlatDirectory : RestoreRestartTargetKind.File;
+            return new(mutationId, kind, target.Installation.UserDataDirectory, directory, relative,
+                Targets[mutationId].CaptureRestartDirectoryEvidence(), originalFingerprint, replacementFingerprint);
+        }
+
+        public void SaveRestartRecord(ReadOnlyMemory<byte> encryptedBytes) => artifacts.SaveRestartRecord(encryptedBytes);
+        public byte[] ReadRestartRecord() => artifacts.ReadRestartRecord();
 
         public void SaveSafety(ReadOnlyMemory<byte> encryptedBytes) => artifacts.SaveSafety(encryptedBytes);
         public byte[] ReadSafety() => artifacts.ReadSafety();
