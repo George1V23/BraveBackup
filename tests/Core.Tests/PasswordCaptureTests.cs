@@ -80,6 +80,23 @@ public sealed class PasswordCaptureTests : IDisposable
         Assert.Throws<ObjectDisposedException>(() => capture.VerifyUnchanged());
     }
 
+    [Fact]
+    public void CapturesNativeTextBackedNoteAsCiphertextWithoutChangingTheSource()
+    {
+        Prepare("linux");
+        Edit("UPDATE password_notes SET value = CAST(value AS TEXT)");
+        var database = Path.Combine(Profile, "Login Data");
+        var original = File.ReadAllBytes(database);
+
+        using var capture = Read("linux");
+
+        var row = Assert.Single(capture.Databases["Login Data"].Rows);
+        var note = Assert.Single(row.Notes);
+        Assert.Equal(Vectors.GetProperty("noteUtf8").GetString(), Encoding.UTF8.GetString(note.Value.Utf8.Span));
+        capture.VerifyUnchanged();
+        Assert.Equal(original, File.ReadAllBytes(database));
+    }
+
     [Theory]
     [InlineData("windows")]
     [InlineData("linux")]

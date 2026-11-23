@@ -131,7 +131,14 @@ public static class BravePasswordDatabase
             }
             using (var command = db.CreateCommand())
             {
-                command.CommandText = "SELECT id,parent_id,key,value,date_created,confidential FROM password_notes ORDER BY id LIMIT 100001";
+                // Chromium binds encrypted note bytes as TEXT and reads them back as bytes.
+                // Cast in SQLite before the managed provider can decode them as UTF-8.
+                command.CommandText = """
+                    SELECT id,parent_id,key,
+                           CASE WHEN typeof(value) IN ('text','blob') THEN CAST(value AS BLOB) END,
+                           date_created,confidential
+                    FROM password_notes ORDER BY id LIMIT 100001
+                    """;
                 using var reader = command.ExecuteReader();
                 var ids = new HashSet<long>();
                 var names = new HashSet<(long, string)>();

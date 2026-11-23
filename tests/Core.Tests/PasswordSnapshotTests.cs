@@ -189,6 +189,8 @@ public sealed class PasswordSnapshotTests : IDisposable
     [InlineData("UPDATE logins SET password_value='not-a-blob' WHERE id=1")]
     [InlineData("PRAGMA foreign_keys=OFF; UPDATE password_notes SET parent_id=999")]
     [InlineData("UPDATE password_notes SET confidential=2")]
+    [InlineData("UPDATE password_notes SET value=42")]
+    [InlineData("UPDATE password_notes SET value=NULL")]
     [InlineData("DROP TABLE password_notes")]
     [InlineData("ALTER TABLE logins RENAME TO original; CREATE VIEW logins AS SELECT * FROM original")]
     public void InvalidTypesOrUntestedSchemesAreNotSilentlySkipped(string sql)

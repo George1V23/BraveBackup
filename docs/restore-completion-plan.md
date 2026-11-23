@@ -18,8 +18,9 @@ reconstruction and encrypted native restore remain pending.
 saved-window replacement in an eligible registered 7.0.0 destination store, with
 final review and encrypted rollback.
 [Password restore source inspection](passwords-restore.md) shows validated
-portable, raw and CSV inventory. Password destination writes, Windows recovery
-validation and restart recovery remain pending.
+portable, raw and CSV inventory. A disposable Linux probe verified staged password
+replacement under an explicitly selected Secret Service provider. Application
+password writes, Windows recovery validation and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.
@@ -128,8 +129,10 @@ and an individual user checkpoint for each:
    extension project, preserving unrelated extension data.
 5. **Passwords:** [source inspection and write-path research](passwords-restore.md)
    distinguish protected portable payloads, explicitly preserved raw files and CSV.
-   Next, verify destination encryption/key access and supported schema writes on
-   disposable profiles.
+   The disposable Linux probe verified schema-43 profile-store replacement with
+   explicit Secret Service v11. Next, establish how to verify the effective write
+   provider of a detected destination and integrate a staged writer with final
+   review and encrypted recovery.
    Never assume raw files work across machines/providers, install OS keys from a backup,
    silently omit unsupported records or stage plaintext without the required explicit choice
    and fresh confirmation. Keep unsupported forms disabled with a truthful reason.

@@ -59,19 +59,47 @@ before BraveBackup saves plaintext CSV.
 [Brave Help Center](https://support.brave.app/hc/en-us/articles/360019782291-How-do-I-import-or-export-browsing-data),
 [Chromium CSV importer](https://chromium.googlesource.com/chromium/src/+/HEAD/components/password_manager/core/browser/import/password_importer.cc).
 
+## Disposable Linux writer compatibility probe
+
+The native probe passed with Chromium `154.0.8037.98` in Brave on Linux. It
+created an isolated D-Bus session, Secret Service keyring and temporary browser
+profile. The probe explicitly selected `--password-store=gnome-libsecret` and
+disabled Sync. It checked that Brave created a local `Login Data` database at
+schema 43, compatible version 40, and encrypted both the synthetic password
+and its note with the isolated v11 key.
+
+Run the probe on Linux with Python 3.11 or later, Brave, `dbus-run-session`,
+`gnome-keyring-daemon`, `secret-tool` and OpenSSL available.
+
+```sh
+python3 tests/Manual/PasswordRestoreProbe/probe.py /absolute/path/to/brave
+```
+
+The probe closes Brave before working on a copy of the database. It rejects
+nonempty WAL, shared-memory and rollback-journal sidecars. It confirms that
+collapsing two native form keys to one portable identity raises a SQLite
+uniqueness error. A successful staged replacement removes the fixture logins
+and their related note and insecure-credential rows, retains a blocked entry
+and an unrelated stats row, and passes SQLite integrity and foreign-key checks.
+Brave reopens the replacement and returns the inserted Unicode password and
+note, as well as a login with empty values. A second staged replacement
+verifies that an empty archived collection can clear the saved logins while
+retaining the blocked entry and stats row in this fixture. The probe publishes
+only into its disposable profile.
+
+The native run also confirmed that Brave stores password ciphertext as a
+SQLite BLOB and note ciphertext as TEXT. Capture now reads note TEXT as raw
+bytes inside SQLite, before the managed provider can decode it. It still
+accepts BLOB notes and rejects other SQLite storage classes. Regression tests
+cover native-style TEXT decryption, source preservation and malformed values.
+[Chromium password note storage](https://github.com/chromium/chromium/blob/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/components/password_manager/core/browser/password_store/password_notes_table.cc).
+
 ## Next writer checkpoint
 
-Start with an existing disposable Linux profile store that uses the researched
-schema and a verified destination provider. Use native Brave with synthetic data
-to verify that it can reopen the staged database and read the inserted login and
-notes. Include colliding logins, empty values, sidecars, related records, and
-unsupported stores in the fixtures. Establish how an explicitly empty archive
-store affects the supported rows while preserving excluded classes and unrelated
-tables. Leave account stores, active Sync, unknown protection providers and raw
-file replacement disabled until their effects can be demonstrated. Only then
-connect an eligible writer to final review and the encrypted safety transaction.
-
-Current coverage exercises encrypted portable v6 and v7, v7 raw capture with
-and without a main database, and v8 CSV in Restore. Tests use synthetic data to
-verify counts, unlock behavior, preview redaction and the disabled Passwords
-selection after Recheck. Destination write compatibility is pending.
+Establish how BraveBackup can verify the effective write provider of a detected
+destination under its normal launcher configuration. The probe's explicit
+provider flag and private keyring establish compatibility for that combination.
+Production eligibility also needs to account for sidecar state, full schema
+validation, portable identity collisions, excluded credential classes and Sync
+state. The application still needs a staged writer wired to final review and
+the encrypted safety transaction. Passwords remains disabled in Restore.
