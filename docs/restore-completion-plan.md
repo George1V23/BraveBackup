@@ -186,7 +186,9 @@ The Windows app supports archive inspection. Windows profile writes and
 recovery still need an integrated adapter and native validation. Linux pause,
 resume and rollback use the retained operation in the app. The v1 artifact
 reader supports [read-only inspection after restart](restore-safety-v1.md#inspecting-persisted-artifacts-after-restart).
-Resuming or rolling back a persisted operation after restart remains pending.
+The [restart rollback evidence contract](restore-safety-v1.md#evidence-for-restart-rollback)
+defines exact image fingerprints and conflict decisions. Persisting the
+destination evidence and reopening a transaction after restart remain pending.
 
 ## Later scope
 

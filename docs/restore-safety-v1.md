@@ -88,6 +88,52 @@ neither changes the backup archive version nor grants write access.
 Tests cover authenticated matching files, wrong passwords, tampering, wrong
 operation IDs, reordered entries, cancellation and unchanged artifact bytes.
 
+## Evidence for restart rollback
+
+`RestoreRecoveryEvidence` computes SHA-256 over the following frame. The
+fingerprint representation is 64 lowercase hexadecimal characters.
+
+| Field | Encoding |
+| --- | --- |
+| Domain | Eight ASCII bytes `BBKIMG01` |
+| Existence | One byte, 0 for absent and 1 for present |
+| Content length | 32-bit little-endian integer |
+| Adapter metadata length | 32-bit little-endian integer |
+| Payload | Content bytes followed by metadata bytes |
+
+An absent target and an existing empty target have different fingerprints.
+The two lengths separate content from metadata. For an `Intent` or `Applied`
+entry, a current image matching the original needs no write. A current image
+matching only the expected replacement is eligible for rollback after the
+adapter verifies context and the user confirms. Any other image is a
+conflict. For restart recovery, an `Untouched` or `Recovered` entry can
+be skipped only if its image still matches the original. Otherwise the
+observation conflicts with the recorded state, which may come from an older
+authenticated journal revision. The existing in-memory rollback uses exact
+byte comparisons for touched entries and retains its authoritative state
+for entries it can skip.
+
+A persisted recovery record will need to authenticate these fields together
+before any destination write:
+
+- Operation ID and an exact safety-snapshot fingerprint, plus the journal's
+  ordered mutation IDs. Journal revisions must remain bound to the same
+  record through recovery and retry.
+- For each mutation, the independently reviewed destination installation and
+  profile, the exact target name, the adapter type, and original and
+  replacement image fingerprints. The safety snapshot remains the source of
+  original bytes.
+- Platform evidence sufficient to reopen the same destination and its parent
+  chain. The adapter must check path boundaries, retained directory identity,
+  stopped-browser state and category prerequisites before publishing. A path
+  or image fingerprint alone cannot establish directory identity.
+
+The first restart operation should support explicit rollback of verified
+targets. Forward resume additionally requires reproducible replacement
+bytes and source revalidation. Older v1 artifacts remain inspectable.
+This checkpoint introduces the fingerprint and decision rules without
+changing the persisted artifact formats.
+
 ## Implementation checkpoint
 
 The snapshot/journal codecs and initial Core transaction coordinator are present. Three

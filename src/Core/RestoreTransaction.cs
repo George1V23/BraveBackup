@@ -241,9 +241,12 @@ public sealed class RestoreTransaction : IDisposable
                 {
                     _store.VerifyRecoveryContext(CancellationToken.None);
                     using var current = _store.ReadTarget(mutation.Id, CancellationToken.None);
-                    if (!Same(current, original))
+                    var matchesOriginal = Same(current, original);
+                    var decision = RestoreRecoveryEvidence.AssessTouched(_entries[index], matchesOriginal,
+                        !matchesOriginal && Same(current, mutation.Replacement));
+                    if (decision == RestoreRollbackDecision.Conflict) throw new IOException("Rollback target conflict.");
+                    if (decision == RestoreRollbackDecision.RestoreOriginal)
                     {
-                        if (!Same(current, mutation.Replacement)) throw new IOException("Rollback target conflict.");
                         // Recovery intent is already represented by the persisted touched entry and RollingBack state.
                         Journal();
                         _store.VerifyRecoveryContext(CancellationToken.None);
