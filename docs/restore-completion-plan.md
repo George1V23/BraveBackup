@@ -19,8 +19,10 @@ saved-window replacement in an eligible registered 7.0.0 destination store, with
 final review and encrypted rollback.
 [Password restore source inspection](passwords-restore.md) shows validated
 portable, raw and CSV inventory. A disposable Linux probe verified staged password
-replacement under an explicitly selected Secret Service provider. Application
-password writes, Windows recovery validation and restart recovery remain pending.
+replacement under an explicitly selected Secret Service provider. The managed
+writer stages and verifies the replacement in memory, and the native probe
+reopens its output. Application password writes, Windows recovery validation
+and restart recovery remain pending.
 The [fifteen reviewed decisions](restore-ui-review.md) define the required behavior.
 Each phase ends with working evidence, tests, documentation and a user review before
 starting the next phase. Existing backup/export functionality must remain operational.
@@ -132,8 +134,9 @@ and an individual user checkpoint for each:
    The disposable Linux probe verified schema-43 profile-store replacement with
    explicit Secret Service v11. Provider probes demonstrated that a launcher
    override or unavailable service can change the tag used for new writes.
-   Next, build the staged writer around verified destination provider evidence
-   and integrate it with final review and encrypted recovery.
+   The in-memory staging writer is implemented and tested. Next, establish
+   operation-scoped destination provider evidence and integrate that writer
+   with final review and encrypted recovery.
    Never assume raw files work across machines/providers, install OS keys from a backup,
    silently omit unsupported records or stage plaintext without the required explicit choice
    and fresh confirmation. Keep unsupported forms disabled with a truthful reason.

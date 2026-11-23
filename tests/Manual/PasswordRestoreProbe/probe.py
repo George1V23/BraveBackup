@@ -123,7 +123,7 @@ def check_entry(evaluate, username, password, note):
     }})()"""), "Brave did not return the expected synthetic profile login and note.")
 
 
-def probe(binary, root):
+def probe(binary, root, managed_stage):
     require(Path(os.readlink(f"/proc/{os.getppid()}/exe")).name == "dbus-run-session",
             "Expected a fresh private D-Bus session.")
     require(Path.home() == root and os.environ["XDG_RUNTIME_DIR"] == str(root / "runtime"),
@@ -190,14 +190,14 @@ def probe(binary, root):
             """, (seed["username"],))
 
         verify_form_collision(db, seed["username"])
-        delete_saved_logins(db)
-        require(db.execute("SELECT COUNT(*) FROM logins WHERE blacklisted_by_user = 1").fetchone() == (1,) and
-                db.execute("SELECT dismissal_count FROM stats").fetchall() == [(3,)],
-                "Replacement changed unrelated synthetic rows.")
-        write_login(db, key, origin, "restored", restored_password, restored_note, native[3])
-        write_login(db, key, origin, "restored-empty", "", "", native[3])
-        verify_database(db)
+        if managed_stage is None:
+            delete_saved_logins(db)
+            write_login(db, key, origin, "restored", restored_password, restored_note, native[3])
+            write_login(db, key, origin, "restored-empty", "", "", native[3])
 
+    if managed_stage is not None:
+        run_managed_stage(managed_stage, key, staged, "replace")
+    verify_replacement(staged, expected_logins=2)
     require_clean_sidecars(staged)
     require_clean_sidecars(database)
     require(digest(database) == original_hash, "Preparing the stage changed the original synthetic database.")
@@ -209,21 +209,40 @@ def probe(binary, root):
 
     require_clean_sidecars(database)
     shutil.copyfile(database, staged)
-    with contextlib.closing(sqlite3.connect(staged.as_uri() + "?mode=rw", uri=True)) as db, db:
-        db.execute("PRAGMA foreign_keys=ON")
-        delete_saved_logins(db)
-        require(db.execute("SELECT blacklisted_by_user FROM logins").fetchall() == [(1,)] and
-                db.execute("SELECT dismissal_count FROM stats").fetchall() == [(3,)],
-                "Empty replacement changed unrelated synthetic rows.")
-        verify_database(db)
-
+    if managed_stage is None:
+        with contextlib.closing(sqlite3.connect(staged.as_uri() + "?mode=rw", uri=True)) as db, db:
+            db.execute("PRAGMA foreign_keys=ON")
+            delete_saved_logins(db)
+    else:
+        run_managed_stage(managed_stage, key, staged, "empty")
+    verify_replacement(staged, expected_logins=0)
     require_clean_sidecars(staged)
     require_clean_sidecars(database)
     os.replace(staged, database)
     with browser(binary, profile) as (_, evaluate):
         require_saved_users(evaluate, [])
-    print(f"PASS {version}: v43/40, Secret Service v11, staged replacement and empty-store reopen.")
+    implementation = "managed writer" if managed_stage is not None else "SQLite fixture"
+    print(f"PASS {version}: v43/40, Secret Service v11, staged replacement and empty-store reopen ({implementation}).")
     verify_provider_selection(binary, root, key)
+
+
+def run_managed_stage(helper, key, staged, mode):
+    require_clean_sidecars(staged)
+    result = subprocess.run(["dotnet", str(helper), "--synthetic", mode],
+                            input=key + staged.read_bytes(), capture_output=True, timeout=15)
+    require(result.returncode == 0 and result.stdout.startswith(b"SQLite format 3\0"),
+            "The managed staging helper failed to produce a SQLite image.")
+    staged.write_bytes(result.stdout)
+
+
+def verify_replacement(staged, expected_logins):
+    with contextlib.closing(sqlite3.connect(staged.as_uri() + "?mode=ro", uri=True)) as db:
+        require(db.execute("SELECT blacklisted_by_user FROM logins ORDER BY blacklisted_by_user").fetchall() ==
+                [(0,)] * expected_logins + [(1,)] and
+                db.execute("SELECT dismissal_count FROM stats").fetchall() == [(3,)] and
+                not db.execute("SELECT 1 FROM insecure_credentials").fetchall(),
+                "Replacement changed unrelated rows or retained removed login data.")
+        verify_database(db)
 
 
 def verify_provider_selection(binary, root, key):
@@ -332,16 +351,21 @@ def require_saved_users(evaluate, users):
 
 
 def main():
-    if len(sys.argv) == 4 and sys.argv[1] == "--private-session":
-        probe(sys.argv[2], Path(sys.argv[3]))
+    if len(sys.argv) in (4, 5) and sys.argv[1] == "--private-session":
+        probe(sys.argv[2], Path(sys.argv[3]), Path(sys.argv[4]) if len(sys.argv) == 5 else None)
         return
 
-    require(len(sys.argv) == 2, "Usage: python3 probe.py /absolute/path/to/brave-binary")
+    require(len(sys.argv) in (2, 3),
+            "Usage: python3 probe.py /absolute/path/to/brave-binary [absolute/path/to/PasswordRestoreProbe.dll]")
     binary = Path(sys.argv[1])
     require(binary.is_absolute() and binary.is_file() and os.access(binary, os.X_OK),
             "Provide an absolute path to an executable Brave binary.")
     for tool in ("dbus-run-session", "gnome-keyring-daemon", "secret-tool", "openssl"):
         require(shutil.which(tool, path=os.defpath), f"Required system executable not found: {tool}.")
+    managed_stage = Path(sys.argv[2]) if len(sys.argv) == 3 else None
+    if managed_stage is not None:
+        require(managed_stage.is_absolute() and managed_stage.is_file() and shutil.which("dotnet", path=os.defpath),
+                "Provide the absolute path to the built managed probe and install dotnet on the system path.")
     with tempfile.TemporaryDirectory(prefix="brave-password-restore-") as temporary:
         root = Path(temporary)
         (root / "runtime").mkdir(mode=0o700)
@@ -350,6 +374,8 @@ def main():
                        "XDG_CACHE_HOME": str(root / "cache"), "XDG_STATE_HOME": str(root / "state")}
         command = ["dbus-run-session", "--", sys.executable, str(Path(__file__).resolve()),
                    "--private-session", str(binary), str(root)]
+        if managed_stage is not None:
+            command.append(str(managed_stage))
         with subprocess.Popen(command, env=environment, stderr=subprocess.DEVNULL,
                               start_new_session=True) as process:
             try:

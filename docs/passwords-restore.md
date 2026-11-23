@@ -116,12 +116,54 @@ priority when the relevant features are enabled.
 [Chromium Linux password storage](https://chromium.googlesource.com/chromium/src/+/319607cda8fc17d4033b74ec565728f3579e82ee/docs/linux/password_storage.md),
 [Chromium provider registration](https://github.com/chromium/chromium/blob/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/browser/browser_process_impl.cc).
 
-## Next writer checkpoint
+## Managed staging backend
 
-Build the staging component around explicit, operation-scoped provider
-evidence. It must also validate the entire destination schema, sidecar state,
-portable identity collisions, excluded credential classes and Sync state.
-Before enabling profile writes, establish that the provider evidence applies
-to the selected destination and is still valid when preparing the replacement.
-The writer still needs final review and integration with the encrypted safety
-transaction. Passwords remains disabled in Restore.
+`BravePasswordRestoreStage.Prepare` takes a stable destination image and a
+validated portable payload containing exactly one local profile store. The
+caller supplies an already verified destination Secret Service v11 key. The
+method uses bounded, private SQLite memory with an in-memory journal and returns
+an owned database image. It does not open a profile path, use a keyring, or
+publish files. [SQLite deserialize](https://www.sqlite.org/c3ref/deserialize.html),
+[SQLite serialize](https://www.sqlite.org/c3ref/serialize.html).
+
+The destination must match the schema definitions captured from Chromium
+`154.0.8037.98` in disposable Brave, with metadata versions 43 and 40 and empty
+password Sync metadata tables. The hash covers the exact SQLite object types,
+names and DDL in binary sort order, including the generated indexes. The
+schema-only fixture contains no browser data or credentials.
+[Native schema fixture](../tests/Core.Tests/Fixtures/Passwords/schema-v43-brave-154.sql).
+
+The writer accepts tested canonical ASCII HTTP(S) form origins with matching
+realms. A missing username maps to an empty username. The writer rejects
+projected key collisions, allocates new native IDs and uses the operation time
+as the login creation date because the portable format has no login timestamp.
+Notes retain their names, dates and confidentiality flags. Empty values use
+the native zero-byte representation. Blocked and federated destination rows
+and unrelated data are preserved. Notes and insecure-credential rows belonging
+to deleted logins follow the native foreign-key cascades. The committed
+image is checked for integrity and references and re-read to verify every
+inserted password and note against the portable values.
+
+Run the native test of the managed writer with the .NET 10 SDK and the Linux
+probe dependencies above.
+
+```sh
+dotnet build tests/Manual/PasswordRestoreProbe/PasswordRestoreProbe.csproj
+python3 tests/Manual/PasswordRestoreProbe/probe.py /absolute/path/to/brave \
+  "$PWD/tests/Manual/PasswordRestoreProbe/bin/Debug/net10.0/PasswordRestoreProbe.dll"
+```
+
+This test passes the synthetic key and database through private process pipes.
+The native browser reopens the managed replacement and a subsequent empty
+replacement in the disposable profile. The unit tests additionally verify
+foreign-key cascades, preservation of unrelated rows and rejection of
+unsupported schema, Sync metadata, account payloads and provider types.
+
+## Destination integration still required
+
+Before enabling profile writes, obtain operation-scoped provider evidence that
+applies to the selected destination, verify it again before preparing the
+replacement, and establish that the closed profile has a stable main database
+without pending sidecar contents or active password Sync. Final review and
+encrypted recovery must cover the exact destination file. Passwords remains
+disabled in Restore.
