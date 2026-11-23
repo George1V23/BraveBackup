@@ -12,6 +12,7 @@ internal sealed record BraveRestoreMapping(Guid SourceProfileId, BraveAppInfo In
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
     internal NativeSessionRestoreSelection? Session { get; init; }
     internal TabManagerPlusRestoreSelection? TabManagerPlus { get; init; }
+    internal PasswordRestoreSelection? Passwords { get; init; }
 }
 
 /// <summary>Builds a Linux restore session from supported categories in a reviewed archive.</summary>
@@ -29,6 +30,7 @@ internal static class BraveProfileRestorePlan
     {
         "bookmarks" => "Bookmarks",
         "settings" => BraveSettingsRestore.FileName,
+        "passwords" => BravePasswordRestoreTarget.FileName,
         _ => throw new InvalidDataException("The selected category does not support restore.")
     };
 
@@ -41,7 +43,8 @@ internal static class BraveProfileRestorePlan
     internal static LinuxRestoreSession Open(string archivePath, Guid reviewedArchiveId, string? archivePassword,
         string recoveryDirectory, string safetyPassword, IReadOnlyList<BraveRestoreMapping> mappings,
         IEnumerable<string> protectedDirectories, Guid operationId, string? reviewedDigest,
-        Func<ProcessPresence>? observe = null, CancellationToken token = default)
+        Func<ProcessPresence>? observe = null, CancellationToken token = default,
+        Func<string, CancellationToken, byte[]>? passwordKeyLookup = null)
     {
         if (!HostEnvironment.IsLinux) throw new PlatformNotSupportedException("Profile restore requires Linux.");
         if (reviewedArchiveId == Guid.Empty || mappings.Count is < 1 or > 10_000)
@@ -62,6 +65,7 @@ internal static class BraveProfileRestorePlan
             selected.Any(mapping => (mapping.Category == "extensions") != (mapping.Extension is not null) ||
                 (mapping.Category == "sessions") != (mapping.Session is not null) ||
                 (mapping.Category == "tabmanagerplus") != (mapping.TabManagerPlus is not null) ||
+                (mapping.Category == "passwords") != (mapping.Passwords is not null) ||
                 (mapping.Session is { } session && !BraveSessionBackup.ModernName(session.FileName, sessionOnly: true)) ||
                 (mapping.Extension is { } extension && !BraveExtensionBackup.ValidId(extension.Id))) ||
             selected.Select(mapping => (mapping.SourceProfileId, mapping.Category, mapping.Extension?.Id))
@@ -155,7 +159,13 @@ internal static class BraveProfileRestorePlan
                     var native = mapping.Session;
                     var fileName = native?.FileName ?? TargetFileName(mapping.Category);
                     var directory = mapping.Profile.ProfileDirectory;
-                    var role = bookmarks ? "native-source" : "portable-settings";
+                    var role = mapping.Category switch
+                    {
+                        "bookmarks" => "native-source",
+                        "passwords" when decrypted is not null => "portable-passwords",
+                        "passwords" => throw new InvalidDataException("Password restore requires a protected portable payload."),
+                        _ => "portable-settings"
+                    };
                     var descriptor = native is null
                         ? categoryData.Files.Single(file => file.Role == role)
                         : BraveNativeSessionRestore.ReviewedSourceFile(zip, categoryData, native, token);
@@ -168,6 +178,7 @@ internal static class BraveProfileRestorePlan
                         throw new InvalidDataException("Selected snapshots exceed the restore retention limit.");
 
                     var bytes = ReadSnapshot(zip, descriptor,
+                        mapping.Category == "passwords" ? PasswordPayloadFormat.MaximumBytes :
                         bookmarks || native is not null ? LinuxRestoreFileCapture.MaximumBytes : ArchiveLimits.MaxSettingsBytes, token);
                     try
                     {
@@ -177,12 +188,16 @@ internal static class BraveProfileRestorePlan
                         retainedOriginals += original.Content.Bytes.Length + original.Metadata.Bytes.Length;
                         if (retainedOriginals > RestoreSafetyFormat.MaximumBytes)
                             throw new InvalidDataException("Original files exceed the restore retention limit.");
-                        var image = BuildReplacement(mapping, original, bytes, token);
+                        var image = BuildReplacement(mapping, original, bytes, token, passwordKeyLookup);
                         destinations.Add(new(new RestoreMutation(Guid.NewGuid(), archived.installation.Id,
                             archived.profile.Id, mapping.Category, image), mapping.Installation, mapping.Profile, fileName)
                         {
-                            VerifyApplyContext = native is null ? null : cancellation =>
-                                BraveNativeSessionRestore.VerifyLatest(mapping.Profile.ProfileDirectory, native.FileName, cancellation)
+                            VerifyApplyContext = mapping.Passwords is not null
+                                ? cancellation => BravePasswordRestoreTarget.VerifyContext(mapping.Profile.ProfileDirectory, cancellation)
+                                : native is null ? null : cancellation =>
+                                    BraveNativeSessionRestore.VerifyLatest(mapping.Profile.ProfileDirectory, native.FileName, cancellation),
+                            VerifyRecoveryTarget = mapping.Passwords is null ? null : cancellation =>
+                                BravePasswordRestoreTarget.VerifySidecars(mapping.Profile.ProfileDirectory, cancellation)
                         });
                         retained += image.Content.Bytes.Length + image.Metadata.Bytes.Length;
                         if (retained > RestoreSafetyFormat.MaximumBytes)
@@ -212,7 +227,7 @@ internal static class BraveProfileRestorePlan
     }
 
     private static RestoreFileImage BuildReplacement(BraveRestoreMapping mapping, RestoreFileImage original,
-        byte[] payload, CancellationToken token)
+        byte[] payload, CancellationToken token, Func<string, CancellationToken, byte[]>? passwordKeyLookup)
     {
         if (mapping.Category == "bookmarks")
         {
@@ -227,6 +242,9 @@ internal static class BraveProfileRestorePlan
             BraveNativeSessionRestore.VerifyOriginal(original, session);
             return new RestoreFileImage(true, payload, original.Metadata.Bytes.Span);
         }
+
+        if (mapping.Passwords is { } passwords)
+            return BravePasswordRestoreTarget.Prepare(mapping.Profile.ProfileDirectory, original, payload, passwords, token, passwordKeyLookup);
 
         if (!original.Exists)
             throw new BackupOperationException("restore-settings-missing",

@@ -12,7 +12,7 @@ public sealed class RestorePreviewTests : IDisposable
     private const string Secret = "synthetic-unlock-key";
     private static string Fixtures => Path.Combine(AppContext.BaseDirectory, "Fixtures");
 
-    private string CreateArchive(int version = 8, bool encrypted = false, bool raw = false, bool missingMain = false)
+    private string CreateArchive(int version = 8, bool encrypted = false, bool raw = false, bool missingMain = false, byte[]? portable = null)
     {
         Directory.CreateDirectory(_root); var path = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".bravebackup");
         if (version < 6)
@@ -36,10 +36,10 @@ public sealed class RestorePreviewTests : IDisposable
             [BackupArchive.WriteFile(zip, prefix + (version == 8 ? "passwords.csv" : "portable-v1.bin"),
                 version == 8 ? "plaintext-password-csv" : "portable-passwords",
                 version == 8 ? "name,url,username,password,note\nSynthetic,https://example.test/,fixture-user,synthetic-secret,\n"u8.ToArray() :
-                    File.ReadAllBytes(Path.Combine(Fixtures, "PortablePasswords", "Payload.v1.synthetic.bin")), "balanced")];
+                    portable ?? File.ReadAllBytes(Path.Combine(Fixtures, "PortablePasswords", "Payload.v1.synthetic.bin")), "balanced")];
             var category = new ArchiveCategory("passwords", version - 5, files);
             BackupArchive.WriteManifest(zip, new("BraveBackupArchive", version, Guid.NewGuid(), DateTimeOffset.UtcNow, "synthetic-app",
-                ["passwords-v" + category.Version], "balanced", [new(installation, "Brave", "Stable", "1.102.13", [new(profile, "Synthetic profile", "Default", [category])])]));
+                ["passwords-v" + category.Version], "balanced", [new(installation, portable is null ? "Brave" : "Browser", "Stable", "1.102.13", [new(profile, "Synthetic profile", "Default", [category])])]));
         }
         using var output = File.Create(path);
         if (encrypted || version < 8) { using var writer = ArchiveEncryption.CreateWriter(output, Secret); writer.Write(plain.ToArray()); }
@@ -130,6 +130,48 @@ public sealed class RestorePreviewTests : IDisposable
             Assert.DoesNotContain(value, visible);
         Assert.Equal("synthetic destination sentinel", File.ReadAllText(loginDatabase));
         Assert.Single(Directory.GetFiles(directory));
+    }
+
+    [Fact]
+    public async Task TemporaryPasswordLoginRequiresCompatibleMappingAndIsClearedOnRemap()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        using var document = new PortablePasswordDocument([new(PortablePasswordStoreKind.Profile, 0, 0, [])]);
+        using var payload = PasswordPayloadFormat.Encode(document);
+        var path = CreateArchive(6, portable: payload.Bytes.ToArray());
+        var data = Path.Combine(_root, "target");
+        var first = Directory.CreateDirectory(Path.Combine(data, "Default")).FullName;
+        var second = Directory.CreateDirectory(Path.Combine(data, "Profile 1")).FullName;
+
+        using var vm = new RestorePreviewViewModel();
+        vm.SourcePath = path;
+        await Idle(vm);
+        vm.Password = Secret;
+        await vm.UnlockAsync();
+        vm.Planning.SetTargets([new(new(BraveAppChannel.Stable, "1.102.13", "synthetic", data),
+            [new(new("Default", first, Path.Combine(first, "Bookmarks"))),
+             new(new("Profile 1", second, Path.Combine(second, "Bookmarks")))])]);
+        vm.Planning.ObserveBrowserState = _ => ProcessPresence.Running;
+        var row = Assert.Single(Assert.Single(vm.Planning.Groups).Profiles);
+
+        Assert.False(row.CanVerifyPasswords);
+        row.IsSelected = true;
+        row.SelectedInstallation = Assert.Single(row.TargetInstallations);
+        row.SelectedProfile = row.TargetProfiles[0];
+        Assert.True(row.CanVerifyPasswords);
+        row.GeneratePasswordVerificationCommand.Execute(null);
+        var firstInstructions = row.PasswordVerificationInstructions;
+        Assert.Contains("bravebackup-restore.invalid", firstInstructions);
+        await vm.Planning.RecheckAsync();
+        Assert.Contains("Running", row.CheckResult);
+        Assert.False(Assert.Single(row.Categories).IsSupported);
+        Assert.Empty(Directory.GetFiles(first));
+
+        row.SelectedProfile = row.TargetProfiles[1];
+        Assert.Empty(row.PasswordVerificationInstructions);
+        row.GeneratePasswordVerificationCommand.Execute(null);
+        Assert.NotEqual(firstInstructions, row.PasswordVerificationInstructions);
+        Assert.Empty(Directory.GetFiles(second));
     }
 
     [Fact]

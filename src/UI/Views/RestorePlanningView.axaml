@@ -49,6 +49,12 @@
                                                 </ComboBox>
                                                 <SelectableTextBlock Text="{Binding DestinationPath}" TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding CheckResult}" TextWrapping="Wrap" Classes="muted" />
+                                                <StackPanel Spacing="6" IsVisible="{Binding CanVerifyPasswords}">
+                                                    <Button Content="{Binding PasswordVerificationButton}" Command="{Binding GeneratePasswordVerificationCommand}"
+                                                            HorizontalAlignment="Left" />
+                                                    <SelectableTextBlock Text="{Binding PasswordVerificationInstructions}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding PasswordCheckResult}" TextWrapping="Wrap" Classes="muted" />
+                                                </StackPanel>
                                                 <SelectableTextBlock Text="{Binding SessionCheckResult}" TextWrapping="Wrap"
                                                                      IsVisible="{Binding SessionCheckResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                                 <SelectableTextBlock Text="{Binding TabManagerPlusCheckResult}" TextWrapping="Wrap"

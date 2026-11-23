@@ -17,6 +17,7 @@ public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo In
     {
         "bookmarks" => "Bookmarks",
         "settings" => "Settings",
+        "passwords" => "Saved passwords",
         "sessions" => "Persisted Sessions",
         "tabmanagerplus" => "Tab Manager Plus saved windows",
         _ => "Extension local storage"
@@ -25,6 +26,7 @@ public sealed record RestoreReviewedTarget(Guid SourceProfileId, BraveAppInfo In
     internal ExtensionLocalRestoreSelection? Extension { get; init; }
     internal NativeSessionRestoreSelection? Session { get; init; }
     internal TabManagerPlusRestoreSelection? TabManagerPlus { get; init; }
+    internal PasswordRestoreSelection? Passwords { get; init; }
 
     /// <summary>Gets the exact file or directory that the confirmed restore can replace.</summary>
     public string DestinationPath => Category switch
@@ -101,7 +103,8 @@ public partial class RestorePreviewViewModel
                         : [new RestoreReviewedTarget(row.Profile.SourceId, installation, profile, category.Id)
                             {
                                 Session = category.Id == "sessions" ? row.Profile.SessionTarget : null,
-                                TabManagerPlus = category.Id == "tabmanagerplus" ? row.Profile.TabManagerPlusTarget : null
+                                TabManagerPlus = category.Id == "tabmanagerplus" ? row.Profile.TabManagerPlusTarget : null,
+                                Passwords = category.Id == "passwords" ? row.Profile.PasswordTarget : null
                             }]);
             }).ToArray();
 
@@ -114,6 +117,7 @@ public partial class RestorePreviewViewModel
                     {
                         "bookmarks" => $"Replace Bookmarks at {target.DestinationPath}",
                         "settings" => $"Apply stored Settings to {target.DestinationPath}",
+                        "passwords" => $"Replace saved logins in {target.DestinationPath}",
                         "sessions" => $"Replace the persisted Session file at {target.DestinationPath}",
                         "tabmanagerplus" => $"Replace Tab Manager Plus saved windows in {target.DestinationPath}",
                         _ => $"Replace Local store for extension {target.Extension!.Id} (version {target.Extension.Version}) at {target.DestinationPath}"
@@ -131,6 +135,10 @@ public partial class RestorePreviewViewModel
                 description += "\n\nSessions replaces the listed last-persisted window and tab snapshot. Brave's startup settings control whether those windows reopen.";
             if (targets.Any(target => target.TabManagerPlus is not null))
                 description += "\n\nTab Manager Plus replaces the entire saved-window collection and keeps other Local settings. An empty backup collection clears the saved windows.";
+            if (targets.Any(target => target.Passwords is not null))
+                description += "\n\nPasswords replaces saved logins in the listed local stores, including password notes. " +
+                               "An empty store clears saved logins. Blocked and federated entries are kept. " +
+                               "Rollback restores the original database, including the temporary login.";
             Review = new(source.Path, source.Id, source.Hash, operationId, artifacts.SafetyPath, artifacts.JournalPath,
                 Array.AsReadOnly(targets), description);
         }

@@ -147,8 +147,8 @@ public partial class BackupOptionsViewModel : ViewModelBase
 
     /// <summary>Gets an accurate description of the proposed archive protection and current limits.</summary>
     public string ProtectionDescription => EncryptBackup
-        ? "The entire archive, including profile names, will be encrypted. Keep the password safe; it cannot be recovered. Restore is not available yet."
-        : "Encryption is off. Anyone with file access can read this archive. Restore is not available yet.";
+        ? "The entire archive, including profile names, will be encrypted. Keep the password safe; it cannot be recovered."
+        : "Encryption is off. Anyone with file access can read this archive.";
 
     /// <summary>Gets the combined state, or sets all categories; assigning mixed state does nothing.</summary>
     public bool? AllCategoriesSelected

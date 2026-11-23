@@ -103,6 +103,13 @@ public partial class RestoreProfileChoice : ViewModelBase
     [ObservableProperty] private string _extensionCheckResult = string.Empty;
     [ObservableProperty] private string _sessionCheckResult = string.Empty;
     [ObservableProperty] private string _tabManagerPlusCheckResult = string.Empty;
+    [ObservableProperty] private string _passwordVerificationInstructions = string.Empty;
+    [ObservableProperty] private string _passwordCheckResult = string.Empty;
+    internal PasswordRestoreChallenge? PasswordChallenge { get; private set; }
+    internal PasswordRestoreSelection? PasswordTarget { get; private set; }
+    internal bool HasPortableProfilePasswords { get; set; }
+    public bool CanVerifyPasswords => HasPortableProfilePasswords && IsCompatibleDestination && SelectedProfile is not null;
+    public string PasswordVerificationButton => PasswordChallenge is null ? "Generate temporary login" : "Generate a new temporary login";
 
     internal IReadOnlyList<ExtensionLocalRestoreSelection> ExtensionTargets { get; private set; } = [];
     internal NativeSessionRestoreSelection? SessionTarget { get; private set; }
@@ -172,16 +179,58 @@ public partial class RestoreProfileChoice : ViewModelBase
         OnPropertyChanged(nameof(HasSupportedCategories));
     }
 
+    internal void ApplyPasswordCheck(string description, PasswordRestoreSelection? target)
+    {
+        PasswordCheckResult = description;
+        PasswordTarget = target;
+        if (HasPortableProfilePasswords && Categories.SingleOrDefault(choice => choice.Id == "passwords") is { } category)
+            category.SetCompatibility(target is not null, target is not null
+                ? "Replace saved logins in the verified local profile store."
+                : "Verify the destination with a temporary login to enable password restore.");
+        OnPropertyChanged(nameof(HasSupportedCategories));
+    }
+
+    /// <summary>Creates new synthetic verification values for the mapped destination only.</summary>
+    [RelayCommand]
+    private void GeneratePasswordVerification()
+    {
+        if (!CanVerifyPasswords) return;
+        var replacing = PasswordVerificationInstructions.Length != 0;
+        PasswordChallenge = new();
+        OnPropertyChanged(nameof(PasswordVerificationButton));
+        PasswordVerificationInstructions =
+            "Use a profile outside a Brave Sync chain. Open the mapped profile as usual and add this temporary login in Brave Password Manager. " +
+            "Close Brave completely, then choose Recheck. If you cancel, remove the temporary login in Brave.\n\n" +
+            (replacing ? "Remove the previous temporary login in Brave.\n\n" : string.Empty) +
+            $"Website  {PasswordRestoreChallenge.Site}\nUsername  {PasswordChallenge.Username}\nPassword  {PasswordChallenge.Password}";
+        _changed();
+    }
+
+    internal void ClearPasswordVerification(bool keepCleanupDetails)
+    {
+        var challenge = PasswordChallenge;
+        PasswordChallenge = null;
+        OnPropertyChanged(nameof(PasswordVerificationButton));
+        if (!keepCleanupDetails) PasswordVerificationInstructions = string.Empty;
+        else if (challenge is not null)
+            PasswordVerificationInstructions = "Remove the temporary login that rollback restored in Brave Password Manager.\n\n" +
+                $"Website  {PasswordRestoreChallenge.Site}\nUsername  {challenge.Username}";
+        ApplyPasswordCheck(string.Empty, null);
+    }
+
     partial void OnIsSelectedChanged(bool value) => _changed();
     partial void OnSelectedInstallationChanged(RestoreTargetInstallation? value)
     {
         SelectedProfile = null;
         UpdateCategories();
         OnPropertyChanged(nameof(TargetProfiles));
+        OnPropertyChanged(nameof(CanVerifyPasswords));
         _changed();
     }
     partial void OnSelectedProfileChanged(RestoreTargetProfile? value)
     {
+        ClearPasswordVerification(keepCleanupDetails: false);
+        OnPropertyChanged(nameof(CanVerifyPasswords));
         OnPropertyChanged(nameof(DestinationPath)); _changed();
     }
     /// <summary>Selects every category supported for the current destination.</summary>
@@ -209,6 +258,8 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         new Dictionary<Guid, ArchivedExtensionInventory>();
     private IReadOnlyDictionary<Guid, ArchivedSessionInventory> _sessions =
         new Dictionary<Guid, ArchivedSessionInventory>();
+    private IReadOnlyDictionary<Guid, ArchivedPasswordInventory> _passwords =
+        new Dictionary<Guid, ArchivedPasswordInventory>();
     internal event Action? ReviewInputsChanged;
 
     internal (string Path, Guid Id, string Hash)? ReviewedSource =>
@@ -262,19 +313,20 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
     public void SetTargets(IEnumerable<RestoreTargetInstallation> targets)
     {
         _targets = targets.ToArray();
-        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash, _extensions, _sessions);
+        if (_manifest is { } source) LoadCore(source, _sourcePath, _sourceHash, _extensions, _sessions, _passwords);
     }
     /// <summary>Loads independent source choices; archive names never select a destination.</summary>
     public void Load(ArchiveManifest manifest, string sourcePath) => LoadCore(manifest, sourcePath, null);
 
     internal void LoadInspected(BraveArchiveInspectionResult inspection)
     {
-        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256, inspection.ExtensionInventories, inspection.Sessions);
+        if (inspection.Manifest is { } manifest) LoadCore(manifest, inspection.SourcePath, inspection.SourceSha256, inspection.ExtensionInventories, inspection.Sessions, inspection.Passwords);
     }
 
     private void LoadCore(ArchiveManifest manifest, string sourcePath, string? sourceHash,
         IReadOnlyDictionary<Guid, ArchivedExtensionInventory>? extensions = null,
-        IReadOnlyDictionary<Guid, ArchivedSessionInventory>? sessions = null)
+        IReadOnlyDictionary<Guid, ArchivedSessionInventory>? sessions = null,
+        IReadOnlyDictionary<Guid, ArchivedPasswordInventory>? passwords = null)
     {
         Reset();
         _manifest = manifest;
@@ -282,18 +334,31 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         _sourceHash = sourceHash;
         if (extensions is not null) _extensions = extensions;
         if (sessions is not null) _sessions = sessions;
+        if (passwords is not null) _passwords = passwords;
         foreach (var installation in manifest.Installations)
         {
             var profiles = installation.Profiles.Select(profile =>
             {
-                var choice = new RestoreProfileChoice(profile, _targets, Changed, Notify);
+                var choice = new RestoreProfileChoice(profile, _targets, Changed, Notify)
+                {
+                    HasPortableProfilePasswords = _passwords.GetValueOrDefault(profile.Id) is
+                        ArchivedPasswordInventory.Portable { Stores: [{ Kind: PortablePasswordStoreKind.Profile }] }
+                };
                 if (sourceHash is not null) choice.SetSourceCompatibility(installation);
+                choice.ApplyPasswordCheck(string.Empty, null);
                 return choice;
             }).ToArray();
             Groups.Add(new($"{installation.Product} {installation.Channel} — {installation.BrowserVersion}", profiles));
         }
         Notify();
     }
+    internal void FinishPasswordVerification(IEnumerable<Guid> sources, bool restored)
+    {
+        var ids = sources.ToHashSet();
+        foreach (var row in Profiles.Where(profile => ids.Contains(profile.SourceId)))
+            row.ClearPasswordVerification(keepCleanupDetails: !restored);
+    }
+
     private void Changed()
     {
         ++_revision; _checking?.Cancel(); IsChecking = false;
@@ -303,6 +368,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             profile.ApplyExtensionCheck(string.Empty, []);
             profile.ApplySessionCheck(string.Empty, null);
             profile.ApplyTabManagerPlusCheck(string.Empty, null);
+            profile.ApplyPasswordCheck(string.Empty, null);
         }
         Notify();
     }
@@ -331,6 +397,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             (Row: profile, App: profile.SelectedInstallation, Profile: profile.SelectedProfile,
                 Extensions: _extensions.GetValueOrDefault(profile.SourceId), Sessions: _sessions.GetValueOrDefault(profile.SourceId),
                 HasTabManagerPlus: profile.Categories.Any(category => category.Id == "tabmanagerplus"),
+                PasswordChallenge: profile.PasswordChallenge,
                 Compatible: profile.IsCompatibleDestination)).ToArray();
         IsChecking = true;
         foreach (var request in requests)
@@ -338,6 +405,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             request.Row.ApplyExtensionCheck(string.Empty, []);
             request.Row.ApplySessionCheck(string.Empty, null);
             request.Row.ApplyTabManagerPlusCheck(string.Empty, null);
+            request.Row.ApplyPasswordCheck(string.Empty, null);
         }
         try
         {
@@ -345,40 +413,43 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             {
                 var token = cancellation.Token;
                 token.ThrowIfCancellationRequested();
-                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
+                if (request.App is null || request.Profile is null) return ("No destination selected.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty);
                 if (!targets.Any(target => ReferenceEquals(target, request.App)) ||
                     !request.App.Profiles.Any(profile => ReferenceEquals(profile, request.Profile)))
-                    return ("Invalid destination mapping.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
+                    return ("Invalid destination mapping.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty);
                 try
                 {
                     var path = BraveRestoreTargetGuard.Validate(request.App.Info, request.Profile.Info, source, token);
                     ProcessPresence Observe() => observer?.Invoke(request.App.Info) ?? ProcessPresenceProbe.Observe(["brave"], token);
                     var presence = Observe();
                     if (presence == ProcessPresence.Running)
-                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
+                        return ("Running. Close Brave manually before restoration.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty);
                     if (presence != ProcessPresence.Stopped)
-                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
+                        return ("Unable to verify. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty);
 
                     var extensionResult = CompareExtensions(path, request.Extensions, request.Compatible, token);
                     var sessionResult = CheckSessions(path, request.Sessions, request.Compatible, token);
                     var tabManagerPlus = CheckTabManagerPlus(path, request.HasTabManagerPlus, request.Compatible, token);
-                    if ((request.Extensions is not null || sessionResult.Target is not null || tabManagerPlus.Target is not null) &&
+                    var passwords = CheckPasswords(path, request.PasswordChallenge, request.Compatible, token);
+                    if ((request.Extensions is not null || sessionResult.Target is not null || tabManagerPlus.Target is not null ||
+                         request.PasswordChallenge is not null) &&
                         request.Compatible && Observe() != ProcessPresence.Stopped)
-                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty);
+                        return ("Unable to verify that Brave stayed closed. Run Recheck again.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty);
                     return ("Closed (no Brave process observed). Target directory is readable; write compatibility is not established.",
-                        extensionResult, sessionResult, tabManagerPlus);
+                        extensionResult, sessionResult, tabManagerPlus, passwords);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty); }
+                catch { return ("Unable to verify target path, access or browser status. Restoration must stay blocked.", ExtensionCheck.Empty, SessionCheck.Empty, TabManagerPlusCheck.Empty, PasswordCheck.Empty); }
             }).ToArray(), cancellation.Token);
             if (_disposed || revision != _revision) return;
             for (var index = 0; index < requests.Length; index++)
             {
-                var (result, extensions, sessions, tabManagerPlus) = results[index];
+                var (result, extensions, sessions, tabManagerPlus, passwords) = results[index];
                 requests[index].Row.CheckResult = result;
                 requests[index].Row.ApplyExtensionCheck(extensions.Description, extensions.Targets);
                 requests[index].Row.ApplySessionCheck(sessions.Description, sessions.Target);
                 requests[index].Row.ApplyTabManagerPlusCheck(tabManagerPlus.Description, tabManagerPlus.Target);
+                requests[index].Row.ApplyPasswordCheck(passwords.Description, passwords.Target);
             }
             Notify();
         }
@@ -389,6 +460,29 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
             if (!_disposed && revision == _revision) IsChecking = false;
         }
     }
+    private sealed record PasswordCheck(string Description, PasswordRestoreSelection? Target)
+    {
+        internal static PasswordCheck Empty { get; } = new(string.Empty, null);
+    }
+
+    private static PasswordCheck CheckPasswords(string path, PasswordRestoreChallenge? challenge, bool compatible, CancellationToken token)
+    {
+        if (challenge is null || !compatible) return PasswordCheck.Empty;
+        try
+        {
+            return new("Verified the destination Secret Service v11 provider.", BravePasswordRestoreTarget.Review(path, challenge, token));
+        }
+        catch (BackupOperationException error) when (error.Code is "restore-password-destination" or "passwords-key-unlock-failed" or "passwords-stage-unsupported")
+        {
+            return new(error.Message, null);
+        }
+        catch (Exception error) when (error is BackupOperationException or IOException or UnauthorizedAccessException
+            or InvalidDataException or System.Text.Json.JsonException)
+        {
+            return new("The destination password store or verification login could not be validated.", null);
+        }
+    }
+
     private sealed record TabManagerPlusCheck(string Description, TabManagerPlusRestoreSelection? Target)
     {
         internal static TabManagerPlusCheck Empty { get; } = new(string.Empty, null);
@@ -510,6 +604,7 @@ public partial class RestorePlanningViewModel : ViewModelBase, IDisposable
         Groups.Clear(); _manifest = null; _sourcePath = string.Empty; _sourceHash = null;
         _extensions = new Dictionary<Guid, ArchivedExtensionInventory>();
         _sessions = new Dictionary<Guid, ArchivedSessionInventory>();
+        _passwords = new Dictionary<Guid, ArchivedPasswordInventory>();
         Notify();
     }
     public void Dispose() { if (_disposed) return; Reset(); _disposed = true; ObserveBrowserState = null; _targets = []; }

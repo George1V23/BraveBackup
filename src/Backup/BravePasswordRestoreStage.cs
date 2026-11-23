@@ -39,6 +39,7 @@ public static class BravePasswordRestoreStage
                 // Validate structure, versions, existing row classes and owned note relationships.
                 using var original = BravePasswordDatabase.Read(image, token);
                 using var stage = SqliteMemoryImage.OpenWritableCopy(image, token);
+                ValidateStagingSettings(stage.Connection);
                 ValidateDestination(stage.Connection, token);
                 Replace(stage.Connection, logins, destinationKey, created.UtcDateTime.ToFileTimeUtc() / 10, token);
                 VerifyDatabase(stage.Connection, token);
@@ -93,14 +94,20 @@ public static class BravePasswordRestoreStage
         }
     }
 
-    private static void ValidateDestination(SqliteConnection db, CancellationToken token)
+    private static void ValidateStagingSettings(SqliteConnection db)
     {
         if (!Equals(Scalar(db, "PRAGMA encoding"), "UTF-8") ||
             !Equals(Scalar(db, "PRAGMA foreign_keys"), 1L) ||
             !Equals(Scalar(db, "PRAGMA journal_mode"), "memory") ||
             !Equals(Scalar(db, "PRAGMA secure_delete"), 1L))
             throw Unsupported("The destination could not be opened with the required SQLite staging settings.");
+    }
 
+    /// <summary>Checks schema, encoding, Sync metadata and integrity using fixed read-only queries.</summary>
+    internal static void ValidateDestination(SqliteConnection db, CancellationToken token)
+    {
+        if (!Equals(Scalar(db, "PRAGMA encoding"), "UTF-8"))
+            throw Unsupported("Password restore requires a UTF-8 destination database.");
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         using (var command = db.CreateCommand())
         {

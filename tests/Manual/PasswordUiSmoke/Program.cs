@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
 using Avalonia;
@@ -155,7 +156,7 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                 Check(restoreView.GetVisualDescendants().OfType<TextBox>().Any(box => box.PasswordChar == '●'), "Restore password field is masked");
                 restore.Password = "Synthetic-archive-key-4827"; await restore.UnlockAsync(); await Task.Delay(200);
                 Check(restore.Installations.Count == 1 && restore.Summary.Contains("format: 8"), "Restore renders validated archive inventory");
-                Check(restoreView.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("CSV passwords") == true), "Restore displays password representation without credential values");
+                Check(restoreView.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("Password CSV.") == true), "Restore displays password representation without credential values");
                 using (var restoreBitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96)))
                 {
                     restoreBitmap.Render(window);
@@ -376,6 +377,26 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
                     "Confirm restore writes the exact archived persisted Session snapshot");
                 Check(File.Exists(sessionReview.SafetyPath) && File.ReadAllText(closedTabs) == "synthetic closed-tabs marker",
                     "Sessions restore retains encrypted safety data and preserves closed tabs");
+                var portableArchive = Path.Combine(root, "output", "portable-passwords.bravebackup");
+                CreatePortablePasswordFixture(portableArchive, extensionPassword, app.Version);
+                restore.SourcePath = portableArchive;
+                await WaitUntil(() => restore.NeedsUnlock && !restore.IsBusy, "Portable password archive inspection");
+                restore.Password = extensionPassword;
+                await restore.UnlockAsync();
+                var passwordMapping = planning.Groups.Single().Profiles.Single();
+                passwordMapping.IsSelected = true;
+                passwordMapping.SelectedInstallation = passwordMapping.TargetInstallations.Single();
+                passwordMapping.SelectedProfile = passwordMapping.TargetProfiles.Single();
+                await Task.Delay(100);
+                Click(window, "Generate temporary login");
+                await Task.Delay(100);
+                Check(planningView.GetVisualDescendants().OfType<SelectableTextBlock>()
+                    .Any(text => text.Text?.Contains("https://bravebackup-restore.invalid/") == true),
+                    "Restore displays the generated temporary login for the mapped profile");
+                var beforePasswordCheck = File.ReadAllBytes(database);
+                await planning.RecheckAsync();
+                Check(!passwordMapping.Categories.Single().IsSupported && beforePasswordCheck.AsSpan().SequenceEqual(File.ReadAllBytes(database)),
+                    "Recheck refuses the incompatible synthetic password store without writing to the profile");
                 // Exercise raw fallback with a deliberately corrupt synthetic database and actual UI dispatcher.
                 File.WriteAllText(database, "synthetic corrupt password database");
                 shell.SelectedTabIndex = ShellViewModel.BackupTabIndex;
@@ -398,6 +419,28 @@ return AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont()
             catch (Exception error) { Console.Error.WriteLine(error); desktop.Shutdown(1); }
         });
     }).StartWithClassicDesktopLifetime([]);
+
+/// <summary>Creates a protected single-profile payload without opening an OS keyring.</summary>
+static void CreatePortablePasswordFixture(string path, string password, string version)
+{
+    var installation = Guid.NewGuid();
+    var profile = Guid.NewGuid();
+    using var document = new PortablePasswordDocument([new(PortablePasswordStoreKind.Profile, 0, 0, [])]);
+    using var payload = PasswordPayloadFormat.Encode(document);
+    using var plain = new MemoryStream();
+    using (var zip = new ZipArchive(plain, ZipArchiveMode.Create, leaveOpen: true))
+    {
+        var file = BackupArchive.WriteFile(zip, $"installations/{installation:D}/profiles/{profile:D}/passwords/portable-v1.bin",
+            "portable-passwords", payload.Bytes.ToArray(), "balanced");
+        BackupArchive.WriteManifest(zip, new("BraveBackupArchive", 6, Guid.NewGuid(), DateTimeOffset.UtcNow, "synthetic",
+            ["passwords-v1"], "balanced",
+            [new(installation, "Browser", "Stable", version,
+                [new(profile, "Synthetic password source", "Default", [new("passwords", 1, [file])])])]));
+    }
+    using var output = File.Create(path);
+    using var writer = ArchiveEncryption.CreateWriter(output, password);
+    writer.Write(plain.GetBuffer().AsSpan(0, (int)plain.Length));
+}
 
 /// <summary>Records a value-free assertion, failing the desktop run on mismatch.</summary>
 static void Check(bool condition, string label)

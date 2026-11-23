@@ -10,6 +10,7 @@ internal sealed record LinuxRestoreDestination(
     internal bool IsLocalExtensionDirectory { get; init; }
     internal string? RequiredOriginalDigest { get; init; }
     internal Action<CancellationToken>? VerifyApplyContext { get; init; }
+    internal Action<CancellationToken>? VerifyRecoveryTarget { get; init; }
 }
 
 /// <summary>Bound target adapter for an atomic file or whole-directory mutation.</summary>
@@ -77,6 +78,10 @@ internal sealed class LinuxRestoreSession : IDisposable
             if (target.Mutation.Category == "tabmanagerplus" &&
                 (!target.IsLocalExtensionDirectory || name != BraveTabManagerPlusRestore.ExtensionId))
                 throw new InvalidDataException("Tab Manager Plus restore requires its registered Local store.");
+            if (target.Mutation.Category == "passwords" &&
+                (target.IsLocalExtensionDirectory || name != BravePasswordRestoreTarget.FileName ||
+                 target.VerifyApplyContext is null || target.VerifyRecoveryTarget is null))
+                throw new InvalidDataException("Password restore requires a verified local profile store.");
             if (target.Mutation.Category == "sessions" && !BraveSessionBackup.ModernName(name, sessionOnly: true))
                 throw new InvalidDataException("A native Session restore requires a modern Session filename.");
             if (!paths.Add(Path.Combine(TargetParent(target), name)) || !ids.Add(target.Mutation.Id))
@@ -103,6 +108,8 @@ internal sealed class LinuxRestoreSession : IDisposable
                 store.Targets.Add(target.Mutation.Id, checkpoint);
                 if (target.VerifyApplyContext is { } verifyApply)
                     store.ApplyGuards.Add(target.Mutation.Id, verifyApply);
+                if (target.VerifyRecoveryTarget is { } verifyRecovery)
+                    store.RecoveryGuards.Add(target.Mutation.Id, verifyRecovery);
                 retained += checkpoint.ImageBytes;
                 if (retained > RestoreSafetyFormat.MaximumBytes)
                     throw new InvalidDataException("Restore originals exceed the supported retention limit.");
@@ -149,6 +156,7 @@ internal sealed class LinuxRestoreSession : IDisposable
     {
         public Dictionary<Guid, ILinuxRestoreTarget> Targets { get; } = [];
         internal Dictionary<Guid, Action<CancellationToken>> ApplyGuards { get; } = [];
+        internal Dictionary<Guid, Action<CancellationToken>> RecoveryGuards { get; } = [];
 
         internal void VerifySource(BraveRestoreContext expected) => context.VerifySameSource(expected);
 
@@ -183,8 +191,17 @@ internal sealed class LinuxRestoreSession : IDisposable
             });
         }
 
-        public void WriteRecoveryTargetAtomic(Guid mutationId, RestoreFileImage image) =>
-            Targets[mutationId].Publish(image, () => VerifyRecoveryContext(CancellationToken.None));
+        public void WriteRecoveryTargetAtomic(Guid mutationId, RestoreFileImage image)
+        {
+            var verify = RecoveryGuards.GetValueOrDefault(mutationId);
+            verify?.Invoke(CancellationToken.None);
+            Targets[mutationId].Publish(image, () =>
+            {
+                VerifyRecoveryContext(CancellationToken.None);
+                verify?.Invoke(CancellationToken.None);
+                if (verify is not null) context.VerifyBrowserStopped(CancellationToken.None);
+            });
+        }
 
         public void SaveSafety(ReadOnlyMemory<byte> encryptedBytes) => artifacts.SaveSafety(encryptedBytes);
         public byte[] ReadSafety() => artifacts.ReadSafety();

@@ -91,7 +91,7 @@ public partial class ShellViewModel
                         ? Options.PasswordValidation
                         : !string.IsNullOrEmpty(BackupDestinationValidation)
                             ? BackupDestinationValidation
-                            : "Ready to create a backup. Passwords, Extensions and TabManagerPlus require Brave closed. Restore is not available yet.";
+                            : "Ready to create a backup. Passwords, Extensions and TabManagerPlus require Brave closed.";
 
     /// <summary>Checks metadata and host consent availability only; never probes password sources.</summary>
     private string PasswordCsvArchiveValidation => !Options.PasswordsSelected || Options.ProtectPasswords ? string.Empty

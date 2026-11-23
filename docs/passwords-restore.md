@@ -15,8 +15,11 @@ pass. Its optional callback receives only counts, store kinds and the archived
 profile ID. Callers discard results if the archive fails validation.
 `BraveArchiveInspection.Read` exposes those results to Restore only after
 archive validation and source identity checks finish. The existing Passwords
-checkbox stays disabled and explains the limit of its representation. Mapping and
-Recheck need no password data from the destination.
+checkbox requires destination verification for a backup containing exactly one
+portable local profile store. Raw files, CSV and portable payloads containing an
+account store remain inspectable. Ordinary mapping and Recheck do not open the
+password database. Password verification starts only when you generate a
+temporary login.
 
 ## Destination write requirements
 
@@ -159,11 +162,39 @@ replacement in the disposable profile. The unit tests additionally verify
 foreign-key cascades, preservation of unrelated rows and rejection of
 unsupported schema, Sync metadata, account payloads and provider types.
 
-## Destination integration still required
+## Restore a verified local profile store
 
-Before enabling profile writes, obtain operation-scoped provider evidence that
-applies to the selected destination, verify it again before preparing the
-replacement, and establish that the closed profile has a stable main database
-without pending sidecar contents or active password Sync. Final review and
-encrypted recovery must cover the exact destination file. Passwords remains
-disabled in Restore.
+1. Unlock a protected backup containing one portable profile store. Select the
+   source and map it to an existing Linux profile outside a Brave Sync chain
+   with the same Brave product and recorded version.
+2. Select **Generate temporary login** in the destination mapping. Open the
+   mapped profile through your usual launcher and add the displayed website,
+   username and password in Brave Password Manager. The website uses the
+   reserved `.invalid` domain. The temporary login expires after 30 minutes.
+3. Close Brave completely and select **Recheck**. BraveBackup checks the closed
+   database schema and sidecars, rejects destinations with a configured Brave
+   Sync chain or password Sync metadata, and checks that the temporary login
+   was saved with Secret Service v11. Only then does it ask Secret Service to
+   unlock the existing Brave key. It verifies the temporary password using
+   that key. [Brave Sync preferences](https://github.com/brave/brave-core/blob/master/components/brave_sync/brave_sync_prefs.cc).
+4. Select **Passwords**, then review and confirm the replacement using a
+   separate safety-backup password. Confirmation checks the reviewed original
+   database and verifies the provider again before staging. The existing
+   transaction publishes and verifies the encrypted safety backup before
+   replacing the exact `Login Data` file.
+
+The original database in the safety backup includes the temporary login.
+Successful replacement removes it with the other saved logins. If you cancel
+or roll back, remove the temporary login in Brave. Remove the previous
+temporary login before using a newly generated one. Remapping invalidates
+the verification. BraveBackup never creates the temporary login itself.
+
+A nonempty SQLite sidecar blocks publication and rollback. A changed database
+after Recheck requires a fresh check and review. Reports contain the category,
+target and outcome without saved credential values. The tested writer is
+limited to the pinned schema and Linux Secret Service v11. Account stores, raw
+files, CSV, other providers and Windows remain outside this restore path.
+
+Integration tests cover the protected archive planner, verified encrypted
+safety data, forward replacement, guarded rollback to exact original bytes,
+and rejection of wrong-profile logins, v10, Sync and pending sidecars.

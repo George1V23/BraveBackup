@@ -108,7 +108,8 @@ public partial class RestorePreviewViewModel
                         mapping.Installation, mapping.Profile, mapping.Category) {
                             Extension = mapping.Extension,
                             Session = mapping.Session,
-                            TabManagerPlus = mapping.TabManagerPlus
+                            TabManagerPlus = mapping.TabManagerPlus,
+                            Passwords = mapping.Passwords
                         }).ToArray(),
                     roots, review.OperationId, review.SourceSha256, observe, pause.Token);
                 opened.Transaction.Progress = progress.Report;
@@ -276,6 +277,9 @@ public partial class RestorePreviewViewModel
         };
         if (state == RestoreTransactionState.RecoveryIncomplete) RestoreErrorCode = "RESTORE_RECOVERY_INCOMPLETE";
         if (_executionReview is not { } review || transaction is null) return;
+        if (state is RestoreTransactionState.Completed or RestoreTransactionState.RolledBack)
+            Planning.FinishPasswordVerification(review.Targets.Where(target => target.Passwords is not null)
+                .Select(target => target.SourceProfileId), restored: state == RestoreTransactionState.Completed);
         var applied = transaction.EntryStates.Count(entry => entry == RestoreEntryState.Applied);
         var recovered = transaction.EntryStates.Count(entry => entry == RestoreEntryState.Recovered);
         RestoreCounts = $"{transaction.EntryStates.Count} targets · {applied} restored · {recovered} recovered";
@@ -335,6 +339,8 @@ public partial class RestorePreviewViewModel
             "The destination Session file changed or became unsupported. Recheck the profile and review again.",
         BackupOperationException { Code: "restore-tabmanagerplus-target" } =>
             "The Tab Manager Plus package or Local store changed. Recheck the profile and review again.",
+        BackupOperationException { Code: "restore-password-destination" or "passwords-stage-unsupported" or "passwords-key-unlock-failed" } passwords =>
+            passwords.Message,
         System.Security.Cryptography.CryptographicException => "Could not authenticate the source archive or safety backup.",
         _ => "Restore could not finish. Check the archive, destination compatibility, safety folder and Brave's status."
     };
@@ -350,6 +356,8 @@ public partial class RestorePreviewViewModel
         BackupOperationException { Code: "restore-session-source" or "restore-session-target" or "restore-session-missing"
             or "restore-session-encrypted" or "restore-session-destination-format" } session => session.Code,
         BackupOperationException { Code: "restore-tabmanagerplus-target" } tabManagerPlus => tabManagerPlus.Code,
+        BackupOperationException { Code: "restore-password-destination" or "passwords-stage-unsupported" or "passwords-key-unlock-failed" } passwords =>
+            passwords.Code,
         InvalidDataException or System.Text.Json.JsonException or ArgumentException or NotSupportedException => "RESTORE_DATA_REJECTED",
         IOException => "RESTORE_CONTEXT_OR_IO_FAILED",
         _ => "RESTORE_OPERATION_FAILED"

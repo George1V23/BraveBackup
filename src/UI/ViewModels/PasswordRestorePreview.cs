@@ -22,7 +22,10 @@ internal static class PasswordRestorePreview
             ArchivedPasswordInventory.Csv csv => $" {Count(csv.Rows, "CSV row", "CSV rows")}.",
             _ => string.Empty
         };
-        return $"{representation}.{contents} Password restore is unavailable. {limitation}";
+        var availability = inventory is ArchivedPasswordInventory.Portable { Stores: [{ Kind: PortablePasswordStoreKind.Profile }] }
+            ? "Password restore requires a verified Linux destination."
+            : "Password restore is unavailable.";
+        return $"{representation}.{contents} {availability} {limitation}";
     }
 
     private static string Store(ArchivedPasswordStore store)

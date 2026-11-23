@@ -37,6 +37,8 @@ The runner drives actual selector bindings and dialog button handlers, checking:
 - Archive CSV operations also preserve all synthetic source bytes.
 - A deliberately corrupt synthetic password database prompts for raw preservation.
 - Explicit preservation creates a valid encrypted version-7 backup.
+- A protected single-profile password archive displays the temporary-login
+  control, and Recheck leaves an incompatible synthetic store unchanged.
 - Mixed Bookmarks and Settings restore previews both destinations, requires confirmation,
   saves recovery artifacts, and preserves unrelated preference values and profile files.
 - Restore Recheck displays a registered Extensions package match. Review shows the exact

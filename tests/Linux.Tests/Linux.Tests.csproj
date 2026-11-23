@@ -20,4 +20,9 @@
     <ProjectReference Include="../../src/Backup/Backup.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="../Core.Tests/Fixtures/Passwords/schema-v43-brave-154.sql" Link="Fixtures/schema-v43-brave-154.sql"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
