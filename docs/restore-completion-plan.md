@@ -159,6 +159,34 @@ Review evidence: full regression suite plus native UI smoke checks and a concise
 matrix with remaining limitations. No real credential/profile modifications are needed for
 automated validation.
 
+The Linux integration suite exercises one protected archive with Passwords and
+Settings on one profile and Settings alone on a second profile. A nonempty
+SQLite sidecar causes password rollback to remain incomplete while both
+Preferences files recover to their original bytes. A retry after the sidecar
+is gone recovers the original password database from the same encrypted
+safety backup.
+
+### Restore compatibility
+
+The current writers require a closed Linux Brave installation, an existing
+destination profile, and matching recorded Brave product and version. Review
+lists the exact targets. The app verifies the encrypted safety backup before
+publishing any target.
+
+| Category | Supported replacement | Remaining limitation |
+| --- | --- | --- |
+| [Bookmarks](restore-bookmarks-execution.md) | Supported native bookmark snapshot | Profile selection and replacement are explicit. |
+| [Settings](restore-settings.md) | Allowlisted bookmark bar, Home and startup values in existing Preferences | Protected preferences and other settings are outside the writer's scope. |
+| [Extensions](restore-extensions.md) | Existing Local store for a matching registered package | Extension installation, Sync and other storage areas remain unavailable. |
+| [Sessions](restore-sessions.md) | Verified plaintext native SNSS v3, on supported 64-bit little-endian hosts | Portable reconstruction and encrypted native sessions remain unavailable. |
+| [Tab Manager Plus](tabmanagerplus-restore.md) | Saved-window collection in an eligible registered 7.0.0 Local store | A simultaneous raw Local replacement of the same store is blocked. |
+| [Passwords](passwords-restore.md) | A single protected portable profile store into the tested v43 database with verified Secret Service v11 | Account stores, Sync, raw and CSV restoration and other providers remain unavailable. |
+
+The Windows app supports archive inspection. Windows profile writes and
+recovery still need an integrated adapter and native validation. Linux pause,
+resume and rollback use the retained operation in the app. Reopening a
+persisted operation after an app restart remains pending.
+
 ## Later scope
 
 Import, Backups management and other unreviewed pages keep their separate reviews.
