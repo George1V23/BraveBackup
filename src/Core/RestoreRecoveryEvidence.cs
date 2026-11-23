@@ -62,7 +62,7 @@ public static class RestoreRecoveryEvidence
         return matchesReplacement ? RestoreRollbackDecision.RestoreOriginal : RestoreRollbackDecision.Conflict;
     }
 
-    private static void ValidateFingerprint(string fingerprint)
+    internal static void ValidateFingerprint(string fingerprint)
     {
         if (fingerprint is null || fingerprint.Length != 64 ||
             fingerprint.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))

@@ -134,6 +134,49 @@ bytes and source revalidation. Older v1 artifacts remain inspectable.
 This checkpoint introduces the fingerprint and decision rules without
 changing the persisted artifact formats.
 
+## Restart record and bound journal codecs
+
+The restart record is a separate application-owned artifact. It and the bound
+journal use the authenticated BBKENC1 envelope with the safety password. The
+safety snapshot remains BBKSF001. Source backup formats 1–8 and the v1 recovery
+inspection path remain compatible.
+
+The restart record plaintext starts with eight ASCII bytes `BBKRP001`, the
+operation GUID, the raw 32-byte SHA-256 of the exact safety plaintext, and a
+32-bit little-endian entry count from 1 through 10,000. Each entry contains
+the following fields in order.
+
+1. Mutation GUID and one-byte adapter kind, 1 for a file and 2 for a flat
+   directory.
+2. Installation data root, profile directory, profile-relative target and
+   opaque directory identity evidence. Each is strict UTF-8 with a 32-bit
+   little-endian length, between 1 and 4,096 bytes for paths and 1 and 8,192
+   bytes for directory evidence. Relative names use slash-separated
+   components. Empty, current-directory and parent-directory components are
+   rejected.
+3. Raw 32-byte original and replacement image fingerprints. GUIDs use the
+   same byte order as the v1 safety snapshot.
+
+The plaintext is limited to 16 MiB. Duplicate mutation IDs, duplicate
+profile/target strings, unsupported kinds and trailing bytes are rejected.
+Path syntax and identity must also be validated by the native adapter,
+including aliasing and the meaning of its opaque directory evidence.
+
+The bound journal plaintext is eight ASCII bytes `BBKJR002`, the raw
+32-byte SHA-256 of the exact restart record plaintext and the full v1
+journal body including its `BBKJR001` header. Each revision must name the
+same ordered targets. Inspection authenticates the three envelopes,
+validates both exact hash bindings, and rechecks the operation ID, target
+order and original image fingerprints. Authentication does not establish
+that the journal is the newest revision. The recovery adapter must still
+reconcile every reported target against the current original and replacement
+fingerprints.
+
+These codecs are covered by synthetic round-trip and rejection tests.
+The active Restore transaction still emits v1 artifacts. Publishing the
+bound record before the first write, pinning directory identities and
+adding explicit restart rollback remain separate integration work.
+
 ## Implementation checkpoint
 
 The snapshot/journal codecs and initial Core transaction coordinator are present. Three

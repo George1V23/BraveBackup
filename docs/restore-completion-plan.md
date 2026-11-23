@@ -187,8 +187,11 @@ recovery still need an integrated adapter and native validation. Linux pause,
 resume and rollback use the retained operation in the app. The v1 artifact
 reader supports [read-only inspection after restart](restore-safety-v1.md#inspecting-persisted-artifacts-after-restart).
 The [restart rollback evidence contract](restore-safety-v1.md#evidence-for-restart-rollback)
-defines exact image fingerprints and conflict decisions. Persisting the
-destination evidence and reopening a transaction after restart remain pending.
+defines exact image fingerprints and conflict decisions. The
+[restart record and bound journal codecs](restore-safety-v1.md#restart-record-and-bound-journal-codecs)
+authenticate destination evidence and bind it to the exact safety snapshot.
+Publishing those artifacts from Restore and reopening a transaction after
+restart remain pending.
 
 ## Later scope
 

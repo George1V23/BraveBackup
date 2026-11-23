@@ -39,7 +39,7 @@ public sealed record RestoreArtifactInspection(Guid OperationId, long Revision, 
         return new(state.Operation, state.Revision, state.State, Array.AsReadOnly(entries));
     }
 
-    private static SensitiveBytes ReadEncrypted(Stream stream, string password, int limit, CancellationToken token)
+    internal static SensitiveBytes ReadEncrypted(Stream stream, string password, int limit, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (!stream.CanSeek || !stream.CanRead || stream.Length > limit + 4096L)
